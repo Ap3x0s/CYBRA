@@ -1,0 +1,21 @@
+# CYBRA runtime and local state
+var/
+var-test/
+.venv/
+node_modules/
+frontend/dist/
+backend/static/
+.tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+cookies.txt
+
+# Existing suite artifacts
+reports/
+test-runs/
+validation-final/
+.env
+*private-headers.json
+jira/.env
