@@ -1,0 +1,36 @@
+{
+  "bipia": {
+    "revision": "a004b69ec0dd446e0afd461d98cb5e96e120a5d0",
+    "url": "https://github.com/microsoft/BIPIA"
+  },
+  "harmbench": {
+    "revision": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+    "url": "https://github.com/centerforaisafety/HarmBench"
+  },
+  "agentdojo": {
+    "revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "url": "https://github.com/ethz-spylab/agentdojo"
+  },
+  "pyrit": {
+    "revision": "c0bcdcadba340ecd9e4ce05047874de80fd480d6",
+    "url": "https://github.com/microsoft/PyRIT"
+  },
+  "jailbreakbench": {
+    "revision": "23dbdf6b19650521604456229bc1d9c4156c85c1",
+    "url": "https://github.com/JailbreakBench/jailbreakbench"
+  },
+  "jbb_dataset": {
+    "repo": "JailbreakBench/JBB-Behaviors",
+    "revision": "886acc352a31533ffbcf4ef22c744658688086fc"
+  },
+  "garak": {
+    "repo": "NVIDIA/garak",
+    "revision": "93aa9cdec309ec4170559676f1826ea2a679920c",
+    "version": "0.17.0",
+    "url": "https://github.com/NVIDIA/garak"
+  },
+  "promptfoo": {
+    "package": "promptfoo",
+    "version": "0.123.0"
+  }
+}
