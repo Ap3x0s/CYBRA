@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cybra-backend"
+version = "0.1.0"
+description = "CYBRA: LLM security benchmark runner with a web console"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "sqlalchemy>=2.0",
+    "pyyaml>=6",
+    "argon2-cffi>=23",
+    "cryptography>=42",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.4"]
+
+[project.scripts]
+cybra = "cybra.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cybra*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# E/F: pycodestyle and pyflakes errors. I: import order. B: bugbear.
+# UP is deliberately off: the project supports Python 3.10 and quoted forward
+# references in the Protocol definitions are intentional.
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's dependency injection is expressed as a call in the default value;
+# B008 flags every route signature, which is the framework's normal style.
+"backend/cybra/api.py" = ["B008"]
+"backend/cybra/security.py" = ["B008"]
+"scan/__init__.py" = ["E402"]
+
