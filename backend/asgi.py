@@ -1,0 +1,1 @@
+﻿from cybra.main import app  # noqa: F401
