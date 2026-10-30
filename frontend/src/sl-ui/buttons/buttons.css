@@ -1,0 +1,54 @@
+@font-face{font-family:'Instrument Sans';src:url('./instrument-sans-variable.woff2') format('woff2');font-weight:400 700;font-display:swap}.sl-component{width:100%;max-width:320px;min-width:0;color:#222;font:14px/1.45 'Instrument Sans',sans-serif;font-synthesis:none;-webkit-font-smoothing:antialiased;}.everyday-component{--action-surface:#303030;--action-hover:#3b3b3b;--action-text:#f6f6f6;--action-muted:#696969;--action-edge:#d3d3d3;--action-focus:#4b4b4b;--action-feedback:#505050;--action-ease:cubic-bezier(.22,1,.36,1);width:320px;max-width:100%;min-width:0;display:flex;flex-direction:column;align-items:center;gap:20px}
+.everyday-component,.everyday-component *{box-sizing:border-box}
+.everyday-component .everyday-button{position:relative;appearance:none;border:0;border-radius:14px;background:transparent;color:var(--action-text);padding:0;max-width:100%;min-height:54px;font:550 15px/1.2 'Instrument Sans',sans-serif;letter-spacing:-.015em;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.everyday-component .button-surface{display:flex;position:relative;align-items:center;justify-content:center;gap:12px;min-height:54px;padding:14px 22px;border-radius:inherit;background:var(--action-surface);box-shadow:inset 0 1px #ffffff12,0 2px 3px #00000018;transition:transform 340ms var(--action-ease),background-color 220ms ease,box-shadow 280ms ease;isolation:isolate}
+.everyday-component .button-surface:before{content:none}
+.everyday-component .button-labels{display:grid;min-width:0;white-space:nowrap}
+.everyday-component .button-labels>span{grid-area:1/1;transition:opacity 180ms ease,transform 300ms var(--action-ease)}
+.everyday-component .alternate-label{opacity:0;transform:translateY(5px)}
+.everyday-component[data-active=true] .normal-label{opacity:0;transform:translateY(-5px)}
+.everyday-component[data-active=true] .alternate-label{opacity:1;transform:translateY(0)}
+.everyday-component .button-icon{width:23px;height:23px;flex:0 0 23px;display:block;overflow:visible;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.everyday-component .button-icon path{vector-effect:non-scaling-stroke;transition:none}
+.everyday-component .button-icon [data-part=front]{transition:fill 220ms ease}
+.everyday-component[data-phase=pending] .button-labels{opacity:.65}
+.everyday-component .button-labels{transition:opacity 160ms ease}
+.everyday-component .button-status{font-size:12px;line-height:1.5;min-height:54px;margin:0;max-width:32ch;text-align:center;color:var(--action-muted);overflow-wrap:anywhere}
+.everyday-component .everyday-button:focus-visible{outline:2px solid var(--action-focus);outline-offset:4px}
+.everyday-component .everyday-button[aria-disabled=true]{cursor:default}
+.everyday-component .example-sample{width:100%;min-height:110px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px;color:var(--action-muted);font-size:12px}
+.everyday-component .more-example{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-content:center;min-height:110px}
+.everyday-component .more-example .sample-chip{justify-content:center;padding-inline:3px;font-size:11px}
+.everyday-component .sample-context{font-size:13px}
+.everyday-component .sample-chip{display:inline-flex;align-items:center;padding:5px 9px;border:1px solid var(--action-edge);border-radius:7px;background:#e8e8e8;color:#555}
+.everyday-component .selection-chip{transition:background-color 260ms ease,color 260ms ease,border-color 260ms ease;padding-left:24px;position:relative}
+.everyday-component .selection-chip:before{content:'';position:absolute;left:9px;width:5px;height:8px;border-right:1.5px solid;border-bottom:1.5px solid;transform:rotate(45deg) scale(.5);opacity:0;transition:transform 300ms var(--action-ease),opacity 180ms ease}
+.everyday-component .selection-chip[data-selected=true]{background:#505050;border-color:#505050;color:#f6f6f6}
+.everyday-component .selection-chip[data-selected=true]:before{opacity:1;transform:rotate(45deg) scale(1)}
+.everyday-component .scroll-example{display:block;height:110px;min-height:0;overflow-y:auto;scrollbar-width:none;mask-image:linear-gradient(transparent,#000 12%,#000 88%,transparent)}
+.everyday-component .scroll-example::-webkit-scrollbar{display:none}
+.everyday-component .scroll-example p{height:54px;margin:0;padding:16px;text-align:center;border-bottom:1px solid #ddd}
+.everyday-component .scroll-example:focus-visible{outline:2px solid var(--action-focus);outline-offset:2px;mask-image:none}
+.everyday-component .settings-example{flex-direction:column;gap:10px}
+.everyday-component .settings-example>div{display:flex;align-items:center;width:min(230px,100%);gap:16px}
+.everyday-component .settings-example span{width:66px}
+.everyday-component .settings-example i{display:block;flex:1;height:5px;border-radius:3px;background:#ddd;overflow:hidden}
+.everyday-component .settings-example i i{background:#777;transition:width 400ms var(--action-ease)}
+.everyday-component .redo-sample{opacity:.45;text-decoration:line-through;transition:opacity 260ms ease}
+.everyday-component [data-restored=true] .redo-sample{opacity:1;text-decoration:none;color:#333}
+.everyday-component .fold-example{display:block}
+.everyday-component .fold-example>div{padding:8px 0;border-bottom:1px solid #d3d3d3}
+.everyday-component .fold-example strong{font-size:12px;font-weight:550;color:#555}
+.everyday-component .sample-fold{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows 380ms var(--action-ease),opacity 260ms ease}
+.everyday-component .sample-fold>div{overflow:hidden;min-height:0}
+.everyday-component [data-expanded=true] .sample-fold{grid-template-rows:1fr;opacity:1}
+.everyday-component .arriving{animation:sl-everyday-arrive 380ms var(--action-ease) both;animation-delay:var(--arrival-delay,0ms)}
+@keyframes sl-everyday-arrive{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(hover:hover){.everyday-component .everyday-button:not([aria-disabled=true]):hover .button-surface{background:var(--action-hover);transform:translateY(-2px);box-shadow:inset 0 1px #ffffff18,0 8px 16px -12px #0008}}
+@media(hover:hover){.everyday-component .everyday-button:not([aria-disabled=true]):hover [data-part=front]{fill:var(--action-hover)}}
+.everyday-component .everyday-button:not([aria-disabled=true]):active .button-surface{transform:translateY(1px) scale(.98);transition-duration:100ms}
+@media(max-width:280px){.everyday-component .button-surface{padding-inline:14px;gap:9px}.everyday-component .everyday-button{font-size:13px}}
+@media(prefers-reduced-motion:reduce){.everyday-component *,.everyday-component *:before{transition:none!important;animation:none!important;scroll-behavior:auto!important}.everyday-component .everyday-button .button-surface{transform:none!important}}
+@media(forced-colors:active){.everyday-component .button-surface{border:1px solid ButtonText}.everyday-component .button-surface:before{display:none}.everyday-component .everyday-button:focus-visible{outline-color:Highlight}}
+
+.everyday-component .settings-example{min-height:0;padding:14px;border:1px solid var(--action-edge);border-radius:10px;gap:12px;align-items:stretch}.everyday-component .settings-example>div{width:100%;gap:12px}.everyday-component .settings-example span{width:64px;flex:0 0 64px}.everyday-component .settings-example i{min-width:0}
