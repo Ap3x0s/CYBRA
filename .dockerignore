@@ -1,0 +1,17 @@
+# Keep the build context small and prevent local state from leaking into images.
+.git
+.github
+.venv
+var
+var-test
+reports
+test-runs
+validation-final
+node_modules
+backend/static
+.tools
+__pycache__
+*.pyc
+.pytest_cache
+docs/media
+jira
