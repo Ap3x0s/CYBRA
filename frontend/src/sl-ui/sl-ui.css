@@ -1,0 +1,37 @@
+/* SL UI Library — vendored component styles.
+ *
+ * Source: https://github.com/SLtowl/sl-ui-library (MIT, Instrument Sans under OFL).
+ * Only the packages this app actually uses are imported; the rest were dropped
+ * so the bundle does not carry 390 unused components.
+ *
+ * The library ships a light surface palette, so the dark theme is applied by
+ * overriding its custom properties rather than by rewriting its rules. */
+@import './textinput/buttons.css';
+
+/* The vendored sheets reference ./instrument-sans-variable.woff2 relative to
+   their own directory, but only one copy exists in buttons/. Point every
+   lookup at that copy so the font is bundled instead of 404ing at runtime. */
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('./buttons/instrument-sans-variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+/* Library tokens re-pointed at the CYBRA palette. The library reads
+   --field-* for inputs and --dd-* for data-display cards. */
+.sl-field {
+  --field-ink: var(--ink-800, #111418);
+  --field-hover: var(--ink-600, #1c2128);
+  --field-active: var(--ink-500, #242b33);
+  --field-text: var(--text, #e8edf3);
+  --field-muted: var(--muted, #8f9aa8);
+  --field-focus: var(--accent-deep, #34d399);
+  width: 100%;
+}
+
+/* The library hard-codes a 300px width for its demo; in a form column that
+   leaves an awkward gap, so the control is allowed to fill its container. */
+.sl-field .sl-field__control { height: 52px; }
+.sl-field .sl-field__label { color: var(--muted, #8f9aa8); }
+.sl-field .sl-field__helper { color: var(--muted-dim, #646f7d); font-size: 11px; }
