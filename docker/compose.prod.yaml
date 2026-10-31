@@ -1,0 +1,33 @@
+# Production-профиль: тот же образ, но с отдельным каталогом прогонов.
+#
+# Зачем вообще compose, если хватает docker run: нужен предсказуемый рестарт,
+# явный volume и возможность позже вынести scan в отдельный контейнер, не
+# переписывая образ.
+
+services:
+  cybra:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: cybra/cybra:latest
+    container_name: cybra
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Сгенерируйте один раз: python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+      CYBRA_SECRET_KEY: ${CYBRA_SECRET_KEY:?set CYBRA_SECRET_KEY in .env}
+      CYBRA_COOKIE_SECURE: "0"          # включите 1 за HTTPS-прокси
+      CYBRA_ENGINE: subprocess
+      CYBRA_SESSION_TTL_HOURS: "12"
+    volumes:
+      - cybra-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  cybra-data:
