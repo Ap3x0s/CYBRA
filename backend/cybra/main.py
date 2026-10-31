@@ -5,6 +5,7 @@ in production. During development Vite proxies /api to this server.
 """
 from __future__ import annotations
 
+import mimetypes
 import secrets
 import sys
 from contextlib import asynccontextmanager
@@ -20,6 +21,21 @@ from .config import settings
 from .db import SessionLocal, init_db
 from .models import User
 from .security import hash_password
+
+# Windows resolves .js from the registry, which frequently reports text/plain.
+# Browsers then refuse the ES module ("strict MIME type checking"). Pinning the
+# types here makes the bundle work regardless of the host OS.
+for _suffix, _type in (
+    ('.js', 'text/javascript'),
+    ('.mjs', 'text/javascript'),
+    ('.css', 'text/css'),
+    ('.json', 'application/json'),
+    ('.svg', 'image/svg+xml'),
+    ('.woff2', 'font/woff2'),
+    ('.woff', 'font/woff'),
+    ('.map', 'application/json'),
+):
+    mimetypes.add_type(_type, _suffix)
 
 STATIC_DIR = Path(__file__).resolve().parents[1] / 'static'
 
