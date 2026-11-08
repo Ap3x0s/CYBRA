@@ -76,9 +76,7 @@ export default function Topbar({ query, onQuery }) {
           >
             <X size={13} weight="bold" />
           </button>
-        ) : (
-          <span className="kbd" title="Фокус на поиске">⌘K</span>
-        )}
+        ) : null}
       </div>
 
       <div className="topbar-actions">
