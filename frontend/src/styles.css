@@ -173,7 +173,8 @@ button { font-family: inherit; }
 
 /* ---------------------------------------------------------------- cards */
 .card {
-  background: var(--ink-700);
+  background: rgba(18, 21, 27, 0.84);
+  backdrop-filter: blur(2px);
   border: 1px solid var(--edge-soft);
   border-radius: var(--radius-lg);
   padding: 18px;
@@ -431,7 +432,10 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .kpi {
   position: relative; overflow: hidden;
   display: flex; flex-direction: column;
-  background: linear-gradient(160deg, var(--ink-750), var(--ink-700));
+  /* Slightly translucent so the animated backdrop reads through the surface:
+     a fully opaque card would hide it, and 76% of the screen is card. */
+  background: linear-gradient(160deg, rgba(16, 19, 24, 0.82), rgba(18, 21, 27, 0.88));
+  backdrop-filter: blur(2px);
   border: 1px solid var(--edge-soft);
   border-radius: var(--radius-lg);
   padding: 16px 18px 18px;
