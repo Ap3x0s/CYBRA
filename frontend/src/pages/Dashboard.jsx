@@ -4,8 +4,8 @@ import { ErrorBox, Loading, Meter, StatusPill, formatRelative, pct } from '../co
 import { useApi } from '../hooks'
 import { useAuth } from '../auth'
 import {
-  ChartLineUp, Database, FileText, Lightning, ListChecks, Play, ShieldCheck,
-  ShieldWarning, Stack, Target, Warning,
+  ArrowsLeftRight, BracketsCurly, Bug, ChartLineUp, Cpu, Database, FileText,
+  Flask, Gauge, Play, Scales, ShieldCheck, Stack, TestTube, Warning,
 } from '../icons'
 
 /** Aggregate numbers across recent runs. Deliberately not a single "safety score":
@@ -105,30 +105,33 @@ export default function Dashboard() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер'
 
+  // Each icon has to say what the number measures, and not fall back on the
+  // generic "brain / sparkle" vocabulary of AI products.
   const KPI = [
     {
-      label: 'Прогонов', value: list.length, hint: 'в истории', Icon: ListChecks,
-      // The run count only ever grows by one; plotting it would draw a diagonal
-      // that means nothing. No sparkline here.
+      label: 'Прогонов', value: list.length, hint: 'в истории',
+      // A flask: a prepared experiment that was executed.
+      Icon: Flask,
       series: [], delta: null,
     },
     {
       label: 'Проверок', value: stats.checks, hint: `${stats.fails} с провалом`,
-      // A two-point series is not a trend; the sparkline returns null below,
-      // and the delta under the number already carries the useful signal.
-      Icon: ShieldCheck, series: checkSeries,
+      // A gauge: individual measurements, not a kit of parts. TestTube read
+      // as a pencil at 14px, which said nothing about evaluations.
+      Icon: Gauge, series: checkSeries,
       delta: stats.checks ? pct(stats.fails / stats.checks) : null,
       deltaLabel: 'провалов',
     },
     {
       label: 'Моделей', value: stats.models, hint: 'проверялось',
-      Icon: Stack, series: [], delta: null,
+      // A chip: the model behind the API endpoint. Circuitry collapsed into an
+      // unreadable square at icon size.
+      Icon: Cpu, series: [], delta: null,
     },
     {
       label: 'Шагов с находками', value: stats.findings, hint: 'модель × инструмент',
-      // Counts of findings per run are not a trend: two runs give two points,
-      // which draws a line that implies a trajectory the data does not have.
-      Icon: ShieldWarning, series: [], delta: null,
+      // A bug mark: what a finding actually is.
+      Icon: Bug, series: [], delta: null,
     },
   ]
 
@@ -243,10 +246,12 @@ export default function Dashboard() {
           </div>
           <div className="quick-list" style={{ flex: 1, justifyContent: 'center' }}>
             {[
+              // Each icon mirrors the destination, so the list is scannable
+              // without reading the labels.
               { to: '/runs/new', Icon: Play, title: 'Запустить прогон', sub: 'выбрать модели и наборы' },
-              { to: '/models', Icon: Target, title: 'Сравнить модели', sub: 'эндпоинты и группы' },
-              { to: '/datasets', Icon: Database, title: 'Править датасеты', sub: 'кейсы и версии' },
-              { to: '/runs', Icon: FileText, title: 'История прогонов', sub: 'все результаты' },
+              { to: '/models', Icon: ArrowsLeftRight, title: 'Сравнить модели', sub: 'эндпоинты и группы' },
+              { to: '/datasets', Icon: BracketsCurly, title: 'Править датасеты', sub: 'кейсы и версии' },
+              { to: '/runs', Icon: ChartLineUp, title: 'История прогонов', sub: 'все результаты' },
             ].map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
