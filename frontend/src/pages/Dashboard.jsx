@@ -53,34 +53,6 @@ function toolAverages(runs) {
     .slice(0, 5)
 }
 
-/** A tiny sparkline drawn from the run history, so a KPI shows direction.
- *  Returns null when there is nothing meaningful to plot: a straight diagonal
- *  from an index counter says nothing and only adds noise. */
-function Spark({ values, width = 130, height = 30 }) {
-  if (!values || values.length < 2) return null
-  const max = Math.max(...values, 1)
-  const min = Math.min(...values, 0)
-  const span = max - min || 1
-  const step = width / (values.length - 1)
-  const points = values
-    .map((value, index) => `${index * step},${height - ((value - min) / span) * (height - 6) - 3}`)
-    .join(' ')
-  return (
-    <svg className="kpi-spark" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
-         aria-hidden="true">
-      <polyline
-        points={points}
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  )
-}
-
 export default function Dashboard() {
   const { user } = useAuth()
   const runs = useApi(() => api.runs(20))
@@ -95,12 +67,6 @@ export default function Dashboard() {
   const missing = (caps.data || []).filter((item) => !item.available)
   const bars = toolAverages(list)
 
-  // Oldest-first series for the sparklines.
-  const chronology = [...list].reverse()
-  const checkSeries = chronology.map((run) =>
-    (run.steps || []).reduce((sum, step) => sum + ((step.counts || {}).PASS || 0) +
-      ((step.counts || {}).FAIL || 0), 0),
-  )
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер'
@@ -112,26 +78,23 @@ export default function Dashboard() {
       label: 'Прогонов', value: list.length, hint: 'в истории',
       // A flask: a prepared experiment that was executed.
       Icon: Flask,
-      series: [], delta: null,
     },
     {
       label: 'Проверок', value: stats.checks, hint: `${stats.fails} с провалом`,
-      // A gauge: individual measurements, not a kit of parts. TestTube read
-      // as a pencil at 14px, which said nothing about evaluations.
-      Icon: Gauge, series: checkSeries,
+      // A gauge: individual measurements, not a kit of parts.
+      Icon: Gauge,
       delta: stats.checks ? pct(stats.fails / stats.checks) : null,
       deltaLabel: 'провалов',
     },
     {
       label: 'Моделей', value: stats.models, hint: 'проверялось',
-      // A chip: the model behind the API endpoint. Circuitry collapsed into an
-      // unreadable square at icon size.
-      Icon: Cpu, series: [], delta: null,
+      // A chip: the model behind the API endpoint.
+      Icon: Cpu,
     },
     {
       label: 'Шагов с находками', value: stats.findings, hint: 'модель × инструмент',
       // A bug mark: what a finding actually is.
-      Icon: Bug, series: [], delta: null,
+      Icon: Bug,
     },
   ]
 
@@ -166,11 +129,11 @@ export default function Dashboard() {
       ) : null}
 
       <div className="grid grid-4 stagger" style={{ marginBottom: 18 }}>
-        {KPI.map(({ label, value, hint, Icon, series, delta, deltaLabel }) => (
+        {KPI.map(({ label, value, hint, Icon, delta, deltaLabel }) => (
           <div className="kpi" key={label}>
             <div className="kpi-head">
               <span className="kpi-icon">
-                <Icon size={14} weight="fill" />
+                <Icon size={15} weight="regular" />
               </span>
               {label}
             </div>
@@ -184,7 +147,6 @@ export default function Dashboard() {
               ) : null}
             </div>
             <div className="kpi-foot">{hint}</div>
-            <Spark values={series} />
           </div>
         ))}
       </div>
@@ -255,7 +217,7 @@ export default function Dashboard() {
             ].map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
-                  <Icon size={15} weight="fill" />
+                  <Icon size={15} weight="bold" />
                 </span>
                 <span>
                   <div className="qi-title">{title}</div>

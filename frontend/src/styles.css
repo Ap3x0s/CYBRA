@@ -338,6 +338,52 @@ input[type='file']::file-selector-button {
 }
 input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 
+/* ---------------------------------------------------------------- backdrop */
+.backdrop {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+}
+.backdrop-canvas { width: 100%; height: 100%; display: block; }
+.backdrop-toggle {
+  position: fixed; right: 14px; bottom: 14px;
+  pointer-events: auto;
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted-dim); background: transparent;
+  border: 1px solid var(--edge-soft); border-radius: 6px;
+  padding: 4px 8px; cursor: pointer;
+  opacity: 0.5; transition: opacity 160ms var(--ease), color 160ms var(--ease);
+}
+.backdrop-toggle:hover { opacity: 1; color: var(--muted); }
+
+/* ---------------------------------------------------------------- popover */
+.popover {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  min-width: 280px; max-width: 340px;
+  background: var(--ink-750);
+  border: 1px solid var(--edge);
+  border-radius: 11px;
+  box-shadow: 0 24px 60px -28px #000;
+  padding: 6px;
+  z-index: 40;
+  animation: rise 180ms var(--ease) both;
+}
+.popover-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--edge-soft);
+  font-size: 12px; font-weight: 500; color: var(--text);
+  margin-bottom: 4px;
+}
+.popover-empty { padding: 14px 10px; font-size: 12px; color: var(--muted-dim); line-height: 1.5; }
+.popover-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; width: 100%;
+  padding: 8px 10px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text);
+  font-family: inherit; font-size: 12.5px; text-align: left;
+  cursor: pointer;
+  transition: background 120ms var(--ease);
+}
+.popover-item:hover { background: var(--ink-600); }
 /* ---------------------------------------------------------------- topbar */
 .topbar {
   display: flex; align-items: center; gap: 16px;
@@ -394,9 +440,7 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
   background: linear-gradient(160deg, var(--ink-750), var(--ink-700));
   border: 1px solid var(--edge-soft);
   border-radius: var(--radius-lg);
-  /* Bottom padding reserves the strip the sparkline occupies, so the graphic
-     can never sit under the text. */
-  padding: 16px 18px 32px;
+  padding: 16px 18px 18px;
   min-height: 118px;
 }
 .kpi-head {
@@ -424,14 +468,6 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .kpi-delta.down { color: var(--danger); }
 .kpi-foot { color: var(--muted-dim); font-size: 11px; margin-top: 6px; }
 
-.kpi-spark {
-  position: absolute; right: 0; bottom: 0;
-  width: 42%; height: 30px;
-  opacity: 0.55; pointer-events: none;
-  /* Fade at the left edge so the line grows out of the card rather than
-     being cut by it. */
-  mask-image: linear-gradient(90deg, transparent, #000 45%);
-}
 
 /* ---------------------------------------------------------------- quick actions */
 .quick-list { display: flex; flex-direction: column; }
