@@ -174,6 +174,9 @@ export default function RunDetail() {
             <span className="dim mono-sm">{modelSteps.length} инструментов</span>
           </div>
 
+          {/* The table has seven columns and a long artifact path; on narrower
+              windows it would push out of the card instead of scrolling. */}
+          <div style={{ overflowX: 'auto' }}>
           <table className="data">
             <thead>
               <tr>
@@ -220,6 +223,7 @@ export default function RunDetail() {
               })}
             </tbody>
           </table>
+          </div>
 
           {modelSteps.map((step) =>
             step.error ? (

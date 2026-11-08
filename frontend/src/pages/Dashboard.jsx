@@ -53,16 +53,21 @@ function toolAverages(runs) {
     .slice(0, 5)
 }
 
-/** A tiny sparkline drawn from the run history, so a KPI shows direction. */
-function Spark({ values, width = 130, height = 44 }) {
-  if (!values.length) return null
+/** A tiny sparkline drawn from the run history, so a KPI shows direction.
+ *  Returns null when there is nothing meaningful to plot: a straight diagonal
+ *  from an index counter says nothing and only adds noise. */
+function Spark({ values, width = 130, height = 30 }) {
+  if (!values || values.length < 2) return null
   const max = Math.max(...values, 1)
-  const step = values.length > 1 ? width / (values.length - 1) : width
+  const min = Math.min(...values, 0)
+  const span = max - min || 1
+  const step = width / (values.length - 1)
   const points = values
-    .map((value, index) => `${index * step},${height - (value / max) * (height - 6) - 3}`)
+    .map((value, index) => `${index * step},${height - ((value - min) / span) * (height - 6) - 3}`)
     .join(' ')
   return (
-    <svg className="kpi-spark" width={width} height={height} aria-hidden="true">
+    <svg className="kpi-spark" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
+         aria-hidden="true">
       <polyline
         points={points}
         fill="none"
@@ -70,7 +75,7 @@ function Spark({ values, width = 130, height = 44 }) {
         strokeWidth="1.6"
         strokeLinejoin="round"
         strokeLinecap="round"
-        opacity="0.9"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   )
@@ -92,13 +97,9 @@ export default function Dashboard() {
 
   // Oldest-first series for the sparklines.
   const chronology = [...list].reverse()
-  const runSeries = chronology.map((_, index) => index + 1)
   const checkSeries = chronology.map((run) =>
     (run.steps || []).reduce((sum, step) => sum + ((step.counts || {}).PASS || 0) +
       ((step.counts || {}).FAIL || 0), 0),
-  )
-  const findingSeries = chronology.map((run) =>
-    (run.steps || []).reduce((sum, step) => sum + ((step.counts || {}).FAIL || 0), 0),
   )
 
   const hour = new Date().getHours()
@@ -107,12 +108,17 @@ export default function Dashboard() {
   const KPI = [
     {
       label: 'Прогонов', value: list.length, hint: 'в истории', Icon: ListChecks,
-      series: runSeries, delta: null,
+      // The run count only ever grows by one; plotting it would draw a diagonal
+      // that means nothing. No sparkline here.
+      series: [], delta: null,
     },
     {
       label: 'Проверок', value: stats.checks, hint: `${stats.fails} с провалом`,
+      // A two-point series is not a trend; the sparkline returns null below,
+      // and the delta under the number already carries the useful signal.
       Icon: ShieldCheck, series: checkSeries,
-      delta: stats.checks ? `${pct(stats.fails / stats.checks)} провалов` : null,
+      delta: stats.checks ? pct(stats.fails / stats.checks) : null,
+      deltaLabel: 'провалов',
     },
     {
       label: 'Моделей', value: stats.models, hint: 'проверялось',
@@ -120,7 +126,9 @@ export default function Dashboard() {
     },
     {
       label: 'Шагов с находками', value: stats.findings, hint: 'модель × инструмент',
-      Icon: ShieldWarning, series: findingSeries, delta: null,
+      // Counts of findings per run are not a trend: two runs give two points,
+      // which draws a line that implies a trajectory the data does not have.
+      Icon: ShieldWarning, series: [], delta: null,
     },
   ]
 
@@ -155,7 +163,7 @@ export default function Dashboard() {
       ) : null}
 
       <div className="grid grid-4 stagger" style={{ marginBottom: 18 }}>
-        {KPI.map(({ label, value, hint, Icon, series, delta }) => (
+        {KPI.map(({ label, value, hint, Icon, series, delta, deltaLabel }) => (
           <div className="kpi" key={label}>
             <div className="kpi-head">
               <span className="kpi-icon">
@@ -165,7 +173,12 @@ export default function Dashboard() {
             </div>
             <div className="kpi-value">
               {value}
-              {delta ? <span className="kpi-delta down">{delta}</span> : null}
+              {delta ? (
+                <span className="kpi-delta down">
+                  {delta}
+                  {deltaLabel ? <span style={{ opacity: 0.75 }}> {deltaLabel}</span> : null}
+                </span>
+              ) : null}
             </div>
             <div className="kpi-foot">{hint}</div>
             <Spark values={series} />
@@ -193,27 +206,34 @@ export default function Dashboard() {
           {bars.length === 0 ? (
             <div className="empty">Нет данных: выполните прогон.</div>
           ) : (
-            <div className="bars">
-              {bars.map((bar) => (
-                <div className="bar-col" key={bar.tool}>
-                  <div className="bar-track">
-                    <div
-                      className="bar-fill"
-                      style={{
-                        height: `${Math.max(4, bar.rate * 100)}%`,
-                        background:
-                          bar.rate > 0.5
-                            ? 'linear-gradient(180deg, var(--danger), #a83c41)'
-                            : undefined,
-                      }}
-                      title={`${bar.tool}: ${pct(bar.rate)} из ${bar.total}`}
-                    />
+            <>
+              <div className="bars">
+                {bars.map((bar) => (
+                  <div className="bar-col" key={bar.tool}>
+                    <div className="bar-track">
+                      <div
+                        className="bar-fill"
+                        style={{
+                          height: `${Math.max(4, bar.rate * 100)}%`,
+                          background:
+                            bar.rate > 0.5
+                              ? 'linear-gradient(180deg, var(--danger), #a83c41)'
+                              : undefined,
+                        }}
+                        title={`${bar.tool}: ${pct(bar.rate)} из ${bar.total}`}
+                      />
+                    </div>
+                    <div className="bar-label">{pct(bar.rate)}</div>
+                    <div className="bar-sub">{bar.tool}</div>
                   </div>
-                  <div className="bar-label">{pct(bar.rate)}</div>
-                  <div className="bar-sub">{bar.tool}</div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              <div className="bar-axis">
+                <span>0 %</span>
+                <span>шкала: доля FAIL внутри инструмента</span>
+                <span>100 %</span>
+              </div>
+            </>
           )}
         </div>
 

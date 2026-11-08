@@ -365,7 +365,9 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
   background: linear-gradient(160deg, var(--ink-750), var(--ink-700));
   border: 1px solid var(--edge-soft);
   border-radius: var(--radius-lg);
-  padding: 16px 18px;
+  /* Bottom padding reserves the strip the sparkline occupies, so the graphic
+     can never sit under the text. */
+  padding: 16px 18px 32px;
   min-height: 118px;
 }
 .kpi-head {
@@ -383,18 +385,23 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
   font-size: 30px; font-weight: 600; letter-spacing: -0.04em;
   margin-top: 10px; line-height: 1;
 }
-.kpi-delta { font-size: 11.5px; margin-left: 8px; }
+/* The delta sits on its own line: inline with a large mono number it read as
+   part of the value ("6033.3%"). */
+.kpi-delta {
+  display: block; font-size: 11.5px; margin-top: 4px; margin-left: 0;
+  font-family: var(--font-body); font-weight: 500; letter-spacing: 0;
+}
 .kpi-delta.up { color: var(--pass); }
 .kpi-delta.down { color: var(--danger); }
 .kpi-foot { color: var(--muted-dim); font-size: 11px; margin-top: 6px; }
-.kpi-spark { position: absolute; right: 0; bottom: 0; opacity: 0.55; pointer-events: none; }
 
-.kpi { overflow: hidden; }
 .kpi-spark {
   position: absolute; right: 0; bottom: 0;
-  opacity: 0.5; pointer-events: none;
-  /* Fade the line out at the card edge instead of clipping it hard. */
-  mask-image: linear-gradient(90deg, transparent, #000 35%);
+  width: 42%; height: 30px;
+  opacity: 0.55; pointer-events: none;
+  /* Fade at the left edge so the line grows out of the card rather than
+     being cut by it. */
+  mask-image: linear-gradient(90deg, transparent, #000 45%);
 }
 
 /* ---------------------------------------------------------------- quick actions */
@@ -420,7 +427,7 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 /* ---------------------------------------------------------------- bar chart */
 .bars {
   display: flex; align-items: stretch; justify-content: space-around;
-  gap: 16px; height: 240px; padding: 4px 4px 0;
+  gap: 16px; height: 196px; padding: 4px 4px 0;
 }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .bar-track {
@@ -444,6 +451,15 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 }
 .bar-label { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
 .bar-sub { font-size: 11px; color: var(--muted); text-align: center; }
+.bar-axis {
+  display: flex; justify-content: space-between;
+  margin-top: 10px; padding-top: 8px;
+  border-top: 1px solid var(--edge-soft);
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted-dim);
+}
+.bar-note {
+  margin-top: 8px; font-size: 11px; color: var(--muted-dim); line-height: 1.5;
+}
 
 /* ---------------------------------------------------------------- session score */
 .score-cell { font-family: var(--font-mono); font-size: 12px; }
