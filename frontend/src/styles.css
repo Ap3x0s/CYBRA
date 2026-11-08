@@ -59,17 +59,39 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Atmosphere: a faint grid and one warm glow, so the console does not read as
-   a flat rectangle. Kept very low contrast to stay invisible while reading. */
+/* Atmosphere. The reference the user pointed at (sdkhub.org) uses halftone
+   grain, not a grid. The honest equivalent for a measurement console is an
+   instrument texture: a coarse dot screen for depth, one cool sweep of light,
+   and concentric ticks around the same origin like a frozen radar sweep.
+   Everything stays at very low contrast so it never competes with the data. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(900px 500px at 12% -10%, rgba(226, 163, 63, 0.05), transparent 70%),
-    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.012) 95%) 0 0 / 100% 28px,
-    linear-gradient(90deg, transparent 95%, rgba(255, 255, 255, 0.012) 95%) 0 0 / 28px 100%;
+    /* halftone dot screen */
+    radial-gradient(rgba(255, 255, 255, 0.05) 0.5px, transparent 0.6px) 0 0 / 3px 3px,
+    /* one soft sweep of warm light from the top-left */
+    radial-gradient(1200px 620px at 8% -12%, rgba(226, 163, 63, 0.06), transparent 68%),
+    /* a cool counter-light on the opposite corner */
+    radial-gradient(900px 520px at 100% 0%, rgba(106, 168, 216, 0.04), transparent 70%);
+  z-index: 0;
+}
+
+/* Concentric ticks around the same origin as the sweep: a radar face seen at
+   rest. Masked to the top-left so it fades before the content starts. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-radial-gradient(
+    circle at 8% -12%,
+    transparent 0 96px,
+    rgba(226, 163, 63, 0.03) 96px 97px
+  );
+  mask-image: radial-gradient(1000px 680px at 8% -12%, #000, transparent 74%);
   z-index: 0;
 }
 
@@ -157,6 +179,10 @@ button { font-family: inherit; }
   padding: 18px;
 }
 .card + .card { margin-top: 16px; }
+/* Cards stacked as siblings in a grid already get their gap from the grid;
+   the extra margin doubled it and pushed the block below away from the table. */
+.grid > .card + .card,
+.grid-tall > .card + .card { margin-top: 0; }
 .card-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; margin-bottom: 14px;
@@ -171,6 +197,9 @@ button { font-family: inherit; }
 /* Grid children must be full-height for the row to look aligned; by default a
    card only takes the height of its own content. */
 .grid-tall > * { height: 100%; }
+/* Both cards in the row must start at the same y: stretch gives equal height,
+   but a flex column can still centre its content and look shifted. */
+.grid-tall > .card { display: flex; flex-direction: column; }
 
 /* ---------------------------------------------------------------- metric */
 .metric-tile {
