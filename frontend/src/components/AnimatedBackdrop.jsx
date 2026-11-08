@@ -72,6 +72,26 @@ export default function AnimatedBackdrop() {
       if (!effectivePause()) raf = requestAnimationFrame(frame)
     }
 
+    function draw() {
+      ctx.clearRect(0, 0, width, height)
+      ctx.font = '11px ui-monospace, "JetBrains Mono", monospace'
+      ctx.textAlign = 'left'
+
+      for (const column of columns) {
+        column.chars.forEach((glyph, row) => {
+          // The head of the stream is brightest and fades upstream.
+          const alpha = Math.max(0.05, 0.46 - row * 0.032)
+          ctx.fillStyle = `rgba(226, 163, 63, ${alpha})`
+          ctx.fillText(glyph, column.x, column.y - row * 15)
+        })
+
+        if (column.word) {
+          ctx.fillStyle = 'rgba(126, 186, 232, 0.30)'
+          ctx.fillText(column.word, column.x, column.y + 18)
+        }
+      }
+    }
+
     function frame(now) {
       if (effectivePause()) {
         raf = 0
@@ -82,10 +102,6 @@ export default function AnimatedBackdrop() {
       if (now - last < 33) return
       last = now
 
-      ctx.clearRect(0, 0, width, height)
-      ctx.font = '11px ui-monospace, "JetBrains Mono", monospace'
-      ctx.textAlign = 'left'
-
       for (const column of columns) {
         column.y += column.speed * 0.033
         if (column.y - column.chars.length * 15 > height) {
@@ -94,23 +110,15 @@ export default function AnimatedBackdrop() {
             () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)],
           )
         }
-
-        column.chars.forEach((glyph, row) => {
-          // The head of the stream is brightest and fades upstream.
-          const alpha = Math.max(0.03, 0.30 - row * 0.022)
-          ctx.fillStyle = `rgba(226, 163, 63, ${alpha})`
-          ctx.fillText(glyph, column.x, column.y - row * 15)
-        })
-
-        if (column.word) {
-          ctx.fillStyle = 'rgba(106, 168, 216, 0.16)'
-          ctx.fillText(column.word, column.x, column.y + 18)
-        }
       }
+      draw()
     }
 
     resize()
-    window.addEventListener('resize', resize)
+    window.addEventListener('resize', () => {
+      resize()
+      draw()
+    })
 
     function onVisibility() {
       last = 0
@@ -135,7 +143,13 @@ export default function AnimatedBackdrop() {
       }
     }
 
-    schedule()
+    // Reduced motion means "do not animate", not "show nothing". Paint one
+    // static frame so the texture is still there when the OS asks for calm.
+    if (reduce.matches) {
+      draw()
+    } else {
+      schedule()
+    }
 
     return () => {
       cancelAnimationFrame(raf)
