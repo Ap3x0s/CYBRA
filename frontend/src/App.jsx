@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { can, useAuth } from './auth'
 import { Loading } from './components'
+import AnimatedBackdrop from './components/AnimatedBackdrop'
 import Datasets from './pages/Datasets'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
@@ -54,6 +55,7 @@ export default function App() {
         path="*"
         element={
           <Protected>
+            <AnimatedBackdrop />
             <div className="shell">
               <Sidebar />
               <div style={{ minWidth: 0 }}>
