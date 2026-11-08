@@ -3,13 +3,28 @@ import { api } from '../api'
 import { ErrorBox, Loading, StatusPill, formatDate, pct } from '../components'
 import { useApi } from '../hooks'
 
-export default function Runs() {
+export default function Runs({ query = '' }) {
   const runs = useApi(() => api.runs(100))
 
   if (runs.loading) return <Loading />
   if (runs.error) return <ErrorBox error={runs.error} />
 
-  const list = runs.data || []
+  const all = runs.data || []
+  // The top-bar search filters here rather than doing a new request: the runs
+  // list already holds every field worth matching on.
+  const needle = query.trim().toLowerCase()
+  const list = needle
+    ? all.filter((run) => {
+        const haystack = [
+          run.label,
+          run.run_id,
+          run.status,
+          ...(run.steps || []).map((step) => step.model_label),
+          ...(run.steps || []).map((step) => step.tool),
+        ].join(' ').toLowerCase()
+        return haystack.includes(needle)
+      })
+    : all
 
   return (
     <div className="fade-in">

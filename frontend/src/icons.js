@@ -4,6 +4,7 @@ export {
   ArrowClockwise,
   ArrowSquareOut,
   ArrowsClockwise,
+  Bell,
   CaretLeft,
   CaretRight,
   ChartLineUp,

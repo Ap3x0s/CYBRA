@@ -1,15 +1,19 @@
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { ErrorBox, Loading, MetricTile, StatusPill, formatRelative, pct } from '../components'
+import { ErrorBox, Loading, Meter, StatusPill, formatRelative, pct } from '../components'
 import { useApi } from '../hooks'
 import { useAuth } from '../auth'
-import { ArrowSquareOut, Play, Warning } from '../icons'
+import {
+  ChartLineUp, Database, FileText, Lightning, ListChecks, Play, ShieldCheck,
+  ShieldWarning, Stack, Target, Warning,
+} from '../icons'
 
 /** Aggregate numbers across recent runs. Deliberately not a single "safety score":
  *  the brief asked for explainable standardised metrics, and blending tools with
  *  different units would produce a number nobody can defend. */
 function summarise(runs) {
   const tools = new Set()
+  const models = new Set()
   let findings = 0
   let incomplete = 0
   let checks = 0
@@ -17,6 +21,7 @@ function summarise(runs) {
   for (const run of runs) {
     for (const step of run.steps || []) {
       tools.add(step.tool)
+      models.add(step.model_label)
       const counts = step.counts || {}
       checks += (counts.PASS || 0) + (counts.FAIL || 0)
       fails += counts.FAIL || 0
@@ -24,13 +29,58 @@ function summarise(runs) {
       if ((counts.FAIL || 0) > 0) findings += 1
     }
   }
-  return { tools: tools.size, findings, incomplete, checks, fails }
+  return { tools: tools.size, models: models.size, findings, incomplete, checks, fails }
+}
+
+/** Per-tool averages, used for the bar chart. One bar per tool, not per model:
+ *  tools are what the numbers are actually comparable within. */
+function toolAverages(runs) {
+  const buckets = new Map()
+  for (const run of runs) {
+    for (const step of run.steps || []) {
+      const counts = step.counts || {}
+      const scored = (counts.PASS || 0) + (counts.FAIL || 0)
+      if (!scored) continue
+      const entry = buckets.get(step.tool) || { tool: step.tool, fail: 0, total: 0 }
+      entry.fail += counts.FAIL || 0
+      entry.total += scored
+      buckets.set(step.tool, entry)
+    }
+  }
+  return [...buckets.values()]
+    .map((entry) => ({ ...entry, rate: entry.fail / entry.total }))
+    .sort((a, b) => b.rate - a.rate)
+    .slice(0, 5)
+}
+
+/** A tiny sparkline drawn from the run history, so a KPI shows direction. */
+function Spark({ values, width = 130, height = 44 }) {
+  if (!values.length) return null
+  const max = Math.max(...values, 1)
+  const step = values.length > 1 ? width / (values.length - 1) : width
+  const points = values
+    .map((value, index) => `${index * step},${height - (value / max) * (height - 6) - 3}`)
+    .join(' ')
+  return (
+    <svg className="kpi-spark" width={width} height={height} aria-hidden="true">
+      <polyline
+        points={points}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        opacity="0.9"
+      />
+    </svg>
+  )
 }
 
 export default function Dashboard() {
   const { user } = useAuth()
   const runs = useApi(() => api.runs(20))
   const caps = useApi(() => api.capabilities())
+  const catalog = useApi(() => api.metricsCatalog())
 
   if (runs.loading) return <Loading />
   if (runs.error) return <ErrorBox error={runs.error} />
@@ -38,15 +88,52 @@ export default function Dashboard() {
   const list = runs.data || []
   const stats = summarise(list)
   const missing = (caps.data || []).filter((item) => !item.available)
+  const bars = toolAverages(list)
+
+  // Oldest-first series for the sparklines.
+  const chronology = [...list].reverse()
+  const runSeries = chronology.map((_, index) => index + 1)
+  const checkSeries = chronology.map((run) =>
+    (run.steps || []).reduce((sum, step) => sum + ((step.counts || {}).PASS || 0) +
+      ((step.counts || {}).FAIL || 0), 0),
+  )
+  const findingSeries = chronology.map((run) =>
+    (run.steps || []).reduce((sum, step) => sum + ((step.counts || {}).FAIL || 0), 0),
+  )
+
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер'
+
+  const KPI = [
+    {
+      label: 'Прогонов', value: list.length, hint: 'в истории', Icon: ListChecks,
+      series: runSeries, delta: null,
+    },
+    {
+      label: 'Проверок', value: stats.checks, hint: `${stats.fails} с провалом`,
+      Icon: ShieldCheck, series: checkSeries,
+      delta: stats.checks ? `${pct(stats.fails / stats.checks)} провалов` : null,
+    },
+    {
+      label: 'Моделей', value: stats.models, hint: 'проверялось',
+      Icon: Stack, series: [], delta: null,
+    },
+    {
+      label: 'Шагов с находками', value: stats.findings, hint: 'модель × инструмент',
+      Icon: ShieldWarning, series: findingSeries, delta: null,
+    },
+  ]
 
   return (
     <div className="fade-in">
-      <div className="page-head">
+      <div className="page-head" style={{ marginBottom: 18 }}>
         <div>
-          <h1>Обзор</h1>
+          <h1 style={{ fontSize: 26, letterSpacing: '-0.035em' }}>
+            {greeting}, {user?.display_name || 'администратор'}
+          </h1>
           <p>
-            Сводка по последним прогонам. Числа относятся к конкретным наборам и профилям —
-            сравнивать инструменты между собой нельзя.
+            Оценка устойчивости моделей по наборам бенчмарков. Числа относятся к конкретным
+            профилям — сравнивать инструменты между собой нельзя.
           </p>
         </div>
         <Link className="btn primary" to="/runs/new">
@@ -67,26 +154,93 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-4 stagger" style={{ marginBottom: 20 }}>
-        <MetricTile label="Прогонов" value={list.length} hint="в истории" />
-        <MetricTile
-          label="Проверок"
-          value={stats.checks}
-          hint={`${stats.fails} с провалом`}
-          tone={stats.fails > 0 ? 'danger' : 'ok'}
-        />
-        <MetricTile
-          label="Шагов с находками"
-          value={stats.findings}
-          hint="модель × инструмент"
-          tone={stats.findings > 0 ? 'danger' : undefined}
-        />
-        <MetricTile
-          label="Неполных шагов"
-          value={stats.incomplete}
-          hint="требуют перепроверки"
-          tone={stats.incomplete > 0 ? 'danger' : 'ok'}
-        />
+      <div className="grid grid-4 stagger" style={{ marginBottom: 18 }}>
+        {KPI.map(({ label, value, hint, Icon, series, delta }) => (
+          <div className="kpi" key={label}>
+            <div className="kpi-head">
+              <span className="kpi-icon">
+                <Icon size={14} weight="fill" />
+              </span>
+              {label}
+            </div>
+            <div className="kpi-value">
+              {value}
+              {delta ? <span className="kpi-delta down">{delta}</span> : null}
+            </div>
+            <div className="kpi-foot">{hint}</div>
+            <Spark values={series} />
+          </div>
+        ))}
+      </div>
+
+      <div
+        className="grid grid-tall"
+        style={{ gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', marginBottom: 18 }}
+      >
+        <div className="card">
+          <div className="card-head">
+            <div>
+              <h2>Провалы по инструментам</h2>
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 3 }}>
+                Доля FAIL среди оценённых кейсов. Внутри инструмента, не между ними.
+              </div>
+            </div>
+            <Link to="/metrics" className="muted" style={{ fontSize: 12 }}>
+              метрики →
+            </Link>
+          </div>
+
+          {bars.length === 0 ? (
+            <div className="empty">Нет данных: выполните прогон.</div>
+          ) : (
+            <div className="bars">
+              {bars.map((bar) => (
+                <div className="bar-col" key={bar.tool}>
+                  <div className="bar-track">
+                    <div
+                      className="bar-fill"
+                      style={{
+                        height: `${Math.max(4, bar.rate * 100)}%`,
+                        background:
+                          bar.rate > 0.5
+                            ? 'linear-gradient(180deg, var(--danger), #a83c41)'
+                            : undefined,
+                      }}
+                      title={`${bar.tool}: ${pct(bar.rate)} из ${bar.total}`}
+                    />
+                  </div>
+                  <div className="bar-label">{pct(bar.rate)}</div>
+                  <div className="bar-sub">{bar.tool}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="card-head">
+            <h2>Быстрые действия</h2>
+          </div>
+          <div className="quick-list" style={{ flex: 1, justifyContent: 'center' }}>
+            {[
+              { to: '/runs/new', Icon: Play, title: 'Запустить прогон', sub: 'выбрать модели и наборы' },
+              { to: '/models', Icon: Target, title: 'Сравнить модели', sub: 'эндпоинты и группы' },
+              { to: '/datasets', Icon: Database, title: 'Править датасеты', sub: 'кейсы и версии' },
+              { to: '/runs', Icon: FileText, title: 'История прогонов', sub: 'все результаты' },
+            ].map(({ to, Icon, title, sub }) => (
+              <Link className="quick-item" to={to} key={to}>
+                <span className="qi-icon">
+                  <Icon size={15} weight="fill" />
+                </span>
+                <span>
+                  <div className="qi-title">{title}</div>
+                  <div className="qi-sub">{sub}</div>
+                </span>
+                <span className="qi-arrow">›</span>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="card">
@@ -99,8 +253,7 @@ export default function Dashboard() {
 
         {list.length === 0 ? (
           <div className="empty">
-            Пока нет ни одного прогона.{' '}
-            <Link to="/runs/new">Запустить первый</Link>
+            Пока нет ни одного прогона. <Link to="/runs/new">Запустить первый</Link>
           </div>
         ) : (
           <table className="data">
@@ -109,13 +262,13 @@ export default function Dashboard() {
                 <th>Прогон</th>
                 <th>Модели</th>
                 <th>Инструменты</th>
-                <th>Статус</th>
                 <th className="num">Провалы</th>
+                <th>Статус</th>
                 <th>Когда</th>
               </tr>
             </thead>
             <tbody>
-              {list.map((run) => {
+              {list.slice(0, 6).map((run) => {
                 const stepCounts = (run.steps || []).reduce(
                   (acc, step) => {
                     const counts = step.counts || {}
@@ -133,22 +286,16 @@ export default function Dashboard() {
                       <div className="dim mono-sm">{run.run_id}</div>
                     </td>
                     <td className="muted">
-                      {[...new Set((run.steps || []).map((step) => step.model_label))].join(', ') || '—'}
+                      {[...new Set((run.steps || []).map((s) => s.model_label))].join(', ') || '—'}
                     </td>
                     <td className="muted">
-                      {[...new Set((run.steps || []).map((step) => step.tool))].join(', ') || '—'}
+                      {[...new Set((run.steps || []).map((s) => s.tool))].join(', ') || '—'}
+                    </td>
+                    <td className="num">
+                      {total ? <Meter value={stepCounts.fail / total} /> : '—'}
                     </td>
                     <td>
                       <StatusPill status={run.status} />
-                    </td>
-                    <td className="num">
-                      {total ? (
-                        <span style={{ color: stepCounts.fail ? 'var(--danger)' : 'var(--accent)' }}>
-                          {pct(stepCounts.fail / total)}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
                     </td>
                     <td className="dim">{formatRelative(run.finished_at || run.created_at)}</td>
                   </tr>
@@ -157,6 +304,31 @@ export default function Dashboard() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-head">
+          <div>
+            <h2>Как читать эти числа</h2>
+            <div className="dim" style={{ fontSize: 11.5, marginTop: 3 }}>
+              Словарь метрик, который отдают сами инструменты.
+            </div>
+          </div>
+          <Link to="/metrics" className="muted" style={{ fontSize: 12 }}>
+            подробнее →
+          </Link>
+        </div>
+        <div className="grid grid-3">
+          {(catalog.data || []).slice(0, 3).map((metric) => (
+            <div key={metric.id} style={{ borderLeft: '2px solid var(--accent)', paddingLeft: 12 }}>
+              <div style={{ fontSize: 12.5, marginBottom: 3 }}>{metric.label}</div>
+              <div className="dim mono-sm" style={{ marginBottom: 5 }}>{metric.formula}</div>
+              <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.55 }}>
+                {metric.caveat}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
