@@ -114,7 +114,7 @@ export default function Settings() {
       </div>
 
       {can(user, 'admin') ? (
-        <>
+        <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
           <div className="card">
             <h2 style={{ marginBottom: 14 }}>Новый пользователь</h2>
             <form onSubmit={createUser}>
@@ -218,7 +218,7 @@ export default function Settings() {
               </tbody>
             </table>
           </div>
-        </>
+        </div>
       ) : null}
     </div>
   )
