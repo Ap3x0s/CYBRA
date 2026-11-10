@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { ErrorBox, Loading, StatusPill, formatDate, pct } from '../components'
+import { ErrorBox, StatusPill, formatDate, pct } from '../components'
+import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
+import { useI18n } from '../i18n-context'
 
 export default function Runs({ query = '' }) {
+  const { t } = useI18n()
   const runs = useApi(() => api.runs(100))
 
-  if (runs.loading) return <Loading />
+  if (runs.loading) return <PageSkeleton variant="runs" />
   if (runs.error) return <ErrorBox error={runs.error} />
 
   const all = runs.data || []
@@ -30,31 +33,31 @@ export default function Runs({ query = '' }) {
     <div className="fade-in">
       <div className="page-head">
         <div>
-          <h1>Прогоны</h1>
-          <p>История проверок. Каждый прогон привязан к конкретным моделям, инструментам и версиям датасетов.</p>
+          <h1>{t("Прогоны")}</h1>
+          <p>{t("История проверок. Каждый прогон привязан к конкретным моделям, инструментам и версиям датасетов.")}</p>
         </div>
         <Link className="btn primary" to="/runs/new">
-          Новый прогон
+          {t("Новый прогон")}
         </Link>
       </div>
 
       <div className="card">
         {list.length === 0 ? (
           <div className="empty">
-            История пуста. <Link to="/runs/new">Создать первый прогон</Link>
+            {t("История пуста.")} <Link to="/runs/new">{t("Создать первый прогон")}</Link>
           </div>
         ) : (
           <table className="data">
             <thead>
               <tr>
-                <th>Прогон</th>
-                <th>Статус</th>
-                <th>Модели</th>
-                <th>Инструменты</th>
-                <th className="num">Кейсов</th>
-                <th className="num">Провалы</th>
-                <th>Начат</th>
-                <th>Завершён</th>
+                <th>{t("Прогон")}</th>
+                <th>{t("Статус")}</th>
+                <th>{t("Модели")}</th>
+                <th>{t("Инструменты")}</th>
+                <th className="num">{t("Кейсов")}</th>
+                <th className="num">{t("Провалы")}</th>
+                <th>{t("Начат")}</th>
+                <th>{t("Завершён")}</th>
               </tr>
             </thead>
             <tbody>

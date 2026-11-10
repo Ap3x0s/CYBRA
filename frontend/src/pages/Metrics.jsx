@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { api } from '../api'
-import { ErrorBox, Loading, Meter, Pill, pct } from '../components'
+import { ErrorBox, Meter, Pill, pct } from '../components'
+import { BlockSkeleton, PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
+import { useI18n } from '../i18n-context'
 
 /** Charts are hand-drawn SVG: no chart dependency, and the semantics stay ours. */
 
@@ -15,7 +17,10 @@ function shortTime(value) {
 }
 
 function LineChart({ series, width = 720, height = 220 }) {
-  if (!series.length) return <div className="empty">Нет точек для графика.</div>
+  // LineChart — отдельный компонент, поэтому хук нужен свой: он не наследует
+  // t() из Metrics, и без этой строки страница падала с "t is not defined".
+  const { t } = useI18n()
+  if (!series.length) return <div className="empty">{t("Нет точек для графика.")}</div>
 
   const padding = { top: 16, right: 16, bottom: 26, left: 42 }
   const innerW = width - padding.left - padding.right
@@ -71,6 +76,7 @@ function LineChart({ series, width = 720, height = 220 }) {
 }
 
 export default function Metrics() {
+  const { t } = useI18n()
   const catalog = useApi(() => api.metricsCatalog())
   const runs = useApi(() => api.runs(60))
   const [metric, setMetric] = useState('failed_check_rate')
@@ -109,17 +115,16 @@ export default function Metrics() {
     return [...map.entries()]
   }, [series.data])
 
-  if (catalog.loading) return <Loading />
+  if (catalog.loading) return <PageSkeleton variant="metrics" />
   if (catalog.error) return <ErrorBox error={catalog.error} />
 
   return (
     <div className="fade-in">
       <div className="page-head">
         <div>
-          <h1>Метрики</h1>
+          <h1>{t("Метрики")}</h1>
           <p>
-            Каждое значение снабжено расшифровкой. Сравнивать инструменты между собой по одной
-            шкале нельзя — выбирайте один инструмент и одну метрику.
+            {t("Каждое значение снабжено расшифровкой. Сравнивать инструменты между собой по одной шкале нельзя — выбирайте один инструмент и одну метрику.")}
           </p>
         </div>
       </div>
@@ -127,7 +132,7 @@ export default function Metrics() {
       <div className="card">
         <div className="row" style={{ marginBottom: 0 }}>
           <div className="field" style={{ marginBottom: 0 }}>
-            <label>Метрика</label>
+            <label>{t("Метрика")}</label>
             <select className="select" value={metric} onChange={(event) => setMetric(event.target.value)}>
               {(catalog.data || []).map((item) => (
                 <option key={item.id} value={item.id}>
@@ -137,9 +142,9 @@ export default function Metrics() {
             </select>
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
-            <label>Инструмент</label>
+            <label>{t("Инструмент")}</label>
             <select className="select" value={tool} onChange={(event) => setTool(event.target.value)}>
-              <option value="">все</option>
+              <option value="">{t("все")}</option>
               {tools.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -148,9 +153,9 @@ export default function Metrics() {
             </select>
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
-            <label>Модель</label>
+            <label>{t("Модель")}</label>
             <select className="select" value={model} onChange={(event) => setModel(event.target.value)}>
-              <option value="">все</option>
+              <option value="">{t("все")}</option>
               {models.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -174,27 +179,27 @@ export default function Metrics() {
 
       <div className="card">
         <div className="card-head">
-          <h2>Динамика</h2>
-          <span className="dim mono-sm">{(series.data || []).length} точек</span>
+          <h2>{t("Динамика")}</h2>
+          <span className="dim mono-sm">{(series.data || []).length} {t('точек')}</span>
         </div>
-        {series.loading ? <Loading /> : <LineChart series={series.data || []} />}
+        {series.loading ? <BlockSkeleton rows={5} height={220} /> : <LineChart series={series.data || []} />}
       </div>
 
       <div className="card">
         <div className="card-head">
-          <h2>Последние значения по моделям</h2>
+          <h2>{t("Последние значения по моделям")}</h2>
         </div>
         {latest.length === 0 ? (
-          <div className="empty">Нет данных: выполните хотя бы один прогон.</div>
+          <div className="empty">{t("Нет данных: выполните хотя бы один прогон.")}</div>
         ) : (
           <table className="data">
             <thead>
               <tr>
-                <th>Модель</th>
-                <th>Инструмент</th>
-                <th>Значение</th>
-                <th>Полнота</th>
-                <th>Прогон</th>
+                <th>{t("Модель")}</th>
+                <th>{t("Инструмент")}</th>
+                <th>{t("Значение")}</th>
+                <th>{t("Полнота")}</th>
+                <th>{t("Прогон")}</th>
               </tr>
             </thead>
             <tbody>
@@ -220,14 +225,14 @@ export default function Metrics() {
 
       <div className="card">
         <div className="card-head">
-          <h2>Словарь метрик</h2>
+          <h2>{t("Словарь метрик")}</h2>
         </div>
         <table className="data">
           <thead>
             <tr>
-              <th>Метрика</th>
-              <th>Формула</th>
-              <th>Ограничение</th>
+              <th>{t("Метрика")}</th>
+              <th>{t("Формула")}</th>
+              <th>{t("Ограничение")}</th>
             </tr>
           </thead>
           <tbody>

@@ -45,6 +45,7 @@ export {
   Table,
   Target,
   TestTube,
+  Translate,
   Trash,
   UploadSimple,
   UserCircle,

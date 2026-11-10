@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth'
+import { I18nProvider } from './i18n-context'
 // SL UI Library component styles (vendored, MIT). Imported before the app sheet
 // so the app's tokens and overrides win where the two touch.
 import './sl-ui/sl-ui.css'
@@ -28,12 +29,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
-        {Agentation ? (
-          <React.Suspense fallback={null}>
-            <Agentation endpoint={AGENTATION_ENDPOINT} appName="CYBRA" />
-          </React.Suspense>
-        ) : null}
+        <I18nProvider>
+          <App />
+          {Agentation ? (
+            <React.Suspense fallback={null}>
+              <Agentation endpoint={AGENTATION_ENDPOINT} appName="CYBRA" />
+            </React.Suspense>
+          ) : null}
+        </I18nProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

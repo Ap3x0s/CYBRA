@@ -2,14 +2,17 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import {
-  Banner, Empty, ErrorBox, Loading, MetricTile, Meter, StatusPill, formatDate, pct,
+  Banner, Empty, ErrorBox, MetricTile, Meter, StatusPill, formatDate, pct,
 } from '../components'
+import { BlockSkeleton, PageSkeleton } from '../components/Skeletons'
 import { useApi, usePoll } from '../hooks'
+import { useI18n } from '../i18n-context'
 
 const RUNNING = new Set(['PENDING', 'RUNNING'])
 
 export default function RunDetail() {
   const { id } = useParams()
+  const { t } = useI18n()
   const run = useApi(() => api.run(id), [id])
   const [expanded, setExpanded] = useState(null)
   const [findings, setFindings] = useState([])
@@ -53,7 +56,7 @@ export default function RunDetail() {
     }
   }
 
-  if (run.loading) return <Loading />
+  if (run.loading) return <PageSkeleton variant="detail" />
   if (run.error) return <ErrorBox error={run.error} />
 
   const data = run.data
@@ -93,18 +96,18 @@ export default function RunDetail() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <a className="btn ghost" href={`/api/v1/runs/${id}/report?fmt=md`}>
-            Скачать .md
+            {t("Скачать .md")}
           </a>
           <Link className="btn ghost" to={`/runs/${id}/report`}>
-            Отчёт для печати
+            {t("Отчёт для печати")}
           </Link>
           {live ? (
             <button className="btn danger" onClick={cancel}>
-              Отменить
+              {t("Отменить")}
             </button>
           ) : (
             <button className="btn ghost" onClick={run.reload}>
-              Обновить
+              {t("Обновить")}
             </button>
           )}
         </div>
@@ -114,17 +117,17 @@ export default function RunDetail() {
 
       {data.engine_mode === 'mock' ? (
         <Banner tone="warn">
-          Прогон выполнен в режиме <strong>mock</strong>: вердикты синтетические и не являются
+          {t("Прогон выполнен в режиме")} <strong>mock</strong>: вердикты синтетические и не являются
           оценкой безопасности какой-либо модели.
         </Banner>
       ) : null}
 
-      {data.error ? <Banner tone="bad">Ошибка движка: {data.error}</Banner> : null}
+      {data.error ? <Banner tone="bad">{t('Ошибка движка:')} {data.error}</Banner> : null}
 
       {live ? (
         <div className="card">
           <div className="card-head">
-            <h2>Прогресс</h2>
+            <h2>{t("Прогресс")}</h2>
             <span className="dim mono-sm">
               target: {progress?.requests?.target ?? 0} · judge: {progress?.requests?.judge ?? 0}
               {progress?.requests?.elapsed_seconds ? ` · ${progress.requests.elapsed_seconds}s` : ''}
@@ -136,7 +139,7 @@ export default function RunDetail() {
           <div className="log">
             {(progress?.finished_steps || []).length
               ? progress.finished_steps.map((line) => <div key={line}>✓ {line}</div>)
-              : <div>Ожидание первых результатов…</div>}
+              : <div>{t("Ожидание первых результатов…")}</div>}
             {(progress?.errors || []).map((line) => (
               <div key={line} style={{ color: 'var(--danger)' }}>
                 ! {line}
@@ -147,16 +150,16 @@ export default function RunDetail() {
       ) : null}
 
       <div className="grid grid-4 stagger" style={{ margin: '16px 0 20px' }}>
-        <MetricTile label="Моделей" value={models.length} />
-        <MetricTile label="Шагов" value={steps.length} hint="модель × инструмент" />
+        <MetricTile label={t("Моделей")} value={models.length} />
+        <MetricTile label={t("Шагов")} value={steps.length} hint={t("модель × инструмент")} />
         <MetricTile
-          label="Провалов"
+          label={t("Провалов")}
           value={totals.fail}
-          hint={total ? `из ${total} оценённых` : 'нет данных'}
+          hint={total ? t('из {total} оценённых', { total }) : t('нет данных')}
           tone={totals.fail ? 'danger' : total ? 'ok' : undefined}
         />
         <MetricTile
-          label="Не оценено"
+          label={t("Не оценено")}
           value={totals.error}
           hint="ERROR / UNSCORED / SKIPPED"
           tone={totals.error ? 'danger' : undefined}
@@ -164,14 +167,14 @@ export default function RunDetail() {
       </div>
 
       {steps.length === 0 && !live ? (
-        <Empty>Результаты ещё не импортированы. Нажмите «Обновить».</Empty>
+        <Empty>{t("Результаты ещё не импортированы. Нажмите «Обновить».")}</Empty>
       ) : null}
 
       {stepsByModel.map(({ model, steps: modelSteps }) => (
         <div className="card" key={model}>
           <div className="card-head">
             <h2>{model}</h2>
-            <span className="dim mono-sm">{modelSteps.length} инструментов</span>
+            <span className="dim mono-sm">{modelSteps.length} {t('инструментов')}</span>
           </div>
 
           {/* The table has seven columns and a long artifact path; on narrower
@@ -180,12 +183,12 @@ export default function RunDetail() {
           <table className="data">
             <thead>
               <tr>
-                <th>Инструмент</th>
-                <th>Полнота</th>
+                <th>{t("Инструмент")}</th>
+                <th>{t("Полнота")}</th>
                 <th className="num">PASS</th>
                 <th className="num">FAIL</th>
-                <th className="num">Ошибки</th>
-                <th>Доля провалов</th>
+                <th className="num">{t("Ошибки")}</th>
+                <th>{t("Доля провалов")}</th>
                 <th />
               </tr>
             </thead>
@@ -242,7 +245,7 @@ export default function RunDetail() {
                 <table className="data" style={{ marginTop: 8 }}>
                   <thead>
                     <tr>
-                      <th>Категория</th>
+                      <th>{t("Категория")}</th>
                       <th className="num">PASS</th>
                       <th className="num">FAIL</th>
                       <th className="num">ERROR</th>
@@ -272,23 +275,23 @@ export default function RunDetail() {
       {expanded ? (
         <div className="card">
           <div className="card-head">
-            <h2>Кейсы</h2>
+            <h2>{t("Кейсы")}</h2>
             <button className="btn ghost small" onClick={() => setExpanded(null)}>
-              Скрыть
+              {t("Скрыть")}
             </button>
           </div>
           {findingsBusy ? (
-            <Loading />
+            <BlockSkeleton rows={5} />
           ) : findings.length === 0 ? (
-            <Empty>Для этого шага кейсы не сохранены.</Empty>
+            <Empty>{t("Для этого шага кейсы не сохранены.")}</Empty>
           ) : (
             <table className="data">
               <thead>
                 <tr>
-                  <th>Кейс</th>
-                  <th>Категория</th>
-                  <th>Вердикт</th>
-                  <th>Ответ (фрагмент)</th>
+                  <th>{t("Кейс")}</th>
+                  <th>{t("Категория")}</th>
+                  <th>{t("Вердикт")}</th>
+                  <th>{t("Ответ (фрагмент)")}</th>
                 </tr>
               </thead>
               <tbody>

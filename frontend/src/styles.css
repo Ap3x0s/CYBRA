@@ -688,6 +688,11 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
 }
 .report-page .num { font-family: var(--font-mono); text-align: right; }
 
+/* Language switcher: the code sits next to the icon, so the current language is
+   readable without opening the menu. */
+.lang-btn { width: auto; gap: 6px; padding: 0 9px; display: flex; }
+.lang-code { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; }
+.popover-item.is-current { color: var(--accent); }
 @media (max-width: 860px) {
   .skel-grid-2-1, .skel-grid-1-2 { grid-template-columns: 1fr; }
   .skel-tr { grid-template-columns: 100px 60px 1fr 40px; }

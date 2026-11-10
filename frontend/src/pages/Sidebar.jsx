@@ -3,6 +3,7 @@ import { can, useAuth } from '../auth'
 import {
   ChartLineUp, Circuitry, Database, Gear, ListChecks, SignOut, SquaresFour,
 } from '../icons'
+import { useI18n } from '../i18n-context'
 
 // The icons are read as a sentence: what you look at, what you run, what it
 // runs against, and how you measure. 'Модели' used to carry a line chart and
@@ -19,6 +20,7 @@ const ITEMS = [
 const ADMIN_ITEMS = [{ to: '/settings', label: 'Настройки', Icon: Gear }]
 
 export default function Sidebar() {
+  const { t } = useI18n()
   const { user, logout } = useAuth()
 
   return (
@@ -32,22 +34,22 @@ export default function Sidebar() {
       </div>
 
       <nav className="nav">
-        <div className="nav-label">Работа</div>
+        <div className="nav-label">{t("Работа")}</div>
         {ITEMS.map(({ to, label, Icon, end }) => (
           <NavLink key={to} to={to} end={end}>
             <Icon size={16} weight="regular" />
-            {label}
+            {t(label)}
           </NavLink>
         ))}
         {can(user, 'admin') ? (
           <>
             <div className="nav-label" style={{ marginTop: 14 }}>
-              Админ
+              {t("Админ")}
             </div>
             {ADMIN_ITEMS.map(({ to, label, Icon }) => (
               <NavLink key={to} to={to}>
                 <Icon size={16} weight="regular" />
-                {label}
+                {t(label)}
               </NavLink>
             ))}
           </>
@@ -67,11 +69,11 @@ export default function Sidebar() {
             marginBottom: 10,
           }}
         >
-          {user?.role}
+          {t(user?.role)}
         </div>
         <button className="btn ghost small" style={{ width: '100%' }} onClick={logout}>
           <SignOut size={14} weight="bold" />
-          Выйти
+          {t("Выйти")}
         </button>
       </div>
     </aside>
