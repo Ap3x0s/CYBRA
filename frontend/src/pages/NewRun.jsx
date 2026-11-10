@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { Banner, ErrorBox, Field, Loading } from '../components'
+import { Banner, ErrorBox, Field } from '../components'
+import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
+import { useI18n } from '../i18n-context'
 
 const TOOLS = [
   { id: 'harmbench', label: 'HarmBench', note: 'вредоносные behaviors, 3 обёртки' },
@@ -19,6 +21,7 @@ const STEPS = ['Цель', 'Инструменты', 'Параметры', 'По
 
 export default function NewRun() {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const targets = useApi(() => api.targets())
   const caps = useApi(() => api.capabilities())
   const datasets = useApi(() => api.datasets())
@@ -42,7 +45,7 @@ export default function NewRun() {
     return map
   }, [caps.data])
 
-  if (targets.loading || datasets.loading) return <Loading />
+  if (targets.loading || datasets.loading) return <PageSkeleton variant="form" />
 
   const targetList = targets.data || []
   const versionList = datasets.data || []
@@ -85,8 +88,8 @@ export default function NewRun() {
     <div className="fade-in">
       <div className="page-head">
         <div>
-          <h1>Новый прогон</h1>
-          <p>Выберите модели, инструменты и профиль. Действия не требуют знания CLI-флагов.</p>
+          <h1>{t("Новый прогон")}</h1>
+          <p>{t("Выберите модели, инструменты и профиль. Действия не требуют знания CLI-флагов.")}</p>
         </div>
       </div>
 
@@ -105,7 +108,7 @@ export default function NewRun() {
                   color: index === step ? 'var(--accent)' : index < step ? 'var(--text)' : 'var(--muted-dim)',
                 }}
               >
-                {index + 1}. {name}
+                {index + 1}. {t(name)}
               </div>
             ))}
           </div>
@@ -114,20 +117,20 @@ export default function NewRun() {
 
           {step === 0 ? (
             <>
-              <Field label="Название прогона" help="Попадёт в историю и отчёт.">
+              <Field label={t("Название прогона")} help={t('Попадёт в историю и отчёт.')}>
                 <input
                   className="input"
                   value={label}
                   onChange={(event) => setLabel(event.target.value)}
-                  placeholder="Например: квартальная проверка пула"
+                  placeholder={t("Например: квартальная проверка пула")}
                 />
               </Field>
 
-              <Field label="Модели для проверки">
+              <Field label={t("Модели для проверки")}>
                 {targetList.length === 0 ? (
                   <Banner tone="warn">
                     Моделей нет. Сначала добавьте эндпоинт и модель в разделе{' '}
-                    <a href="/models">Модели</a>.
+                    <a href="/models">{t("Модели")}</a>.
                   </Banner>
                 ) : (
                   <div style={{ display: 'grid', gap: 8 }}>
@@ -163,13 +166,13 @@ export default function NewRun() {
                 )}
               </Field>
 
-              <Field label="Модель-судья" help="Оценивает смысловые критерии. Лучше отдельная от проверяемых.">
+              <Field label={t("Модель-судья")} help="Оценивает смысловые критерии. Лучше отдельная от проверяемых.">
                 <select
                   className="select"
                   value={judgeId || ''}
                   onChange={(event) => setJudgeId(Number(event.target.value))}
                 >
-                  <option value="">— по умолчанию первая выбранная —</option>
+                  <option value="">{t('— по умолчанию первая выбранная —')}</option>
                   {targetList.map((target) => (
                     <option key={target.id} value={target.id}>
                       {target.label || target.model_id}
@@ -181,7 +184,7 @@ export default function NewRun() {
           ) : null}
 
           {step === 1 ? (
-            <Field label="Инструменты" help="Можно выбрать несколько: отчёт покажет их раздельно.">
+            <Field label={t("Инструменты")} help="Можно выбрать несколько: отчёт покажет их раздельно.">
               <div style={{ display: 'grid', gap: 8 }}>
                 {TOOLS.map((tool) => {
                   const status = availability[tool.id]
@@ -207,7 +210,7 @@ export default function NewRun() {
                         <span style={{ color: 'var(--text)' }}>{tool.label}</span>
                         {unavailable ? (
                           <span className="pill warn" style={{ marginLeft: 8 }}>
-                            не установлен
+                            {t("не установлен")}
                           </span>
                         ) : null}
                         <div className="dim" style={{ fontSize: 11 }}>
@@ -224,13 +227,13 @@ export default function NewRun() {
           {step === 2 ? (
             <>
               <div className="row">
-                <Field label="Режим движка" help="mock — офлайн-фикстура для демонстрации, без реальных запросов.">
+                <Field label={t("Режим движка")} help="mock — офлайн-фикстура для демонстрации, без реальных запросов.">
                   <select className="select" value={engineMode} onChange={(event) => setEngineMode(event.target.value)}>
-                    <option value="mock">mock — фикстура</option>
-                    <option value="subprocess">subprocess — реальный run.py</option>
+                    <option value="mock">mock — {t('фикстура')}</option>
+                    <option value="subprocess">subprocess — {t('реальный')} run.py</option>
                   </select>
                 </Field>
-                <Field label="Лимит кейсов" help="0 — все записи выбранного набора.">
+                <Field label={t("Лимит кейсов")} help="0 — все записи выбранного набора.">
                   <input
                     className="input"
                     type="number"
@@ -250,7 +253,7 @@ export default function NewRun() {
                     onChange={(event) => setSeed(event.target.value)}
                   />
                 </Field>
-                <Field label="Бюджет запросов" help="На модель, инструмент и маршрут.">
+                <Field label={t("Бюджет запросов")} help="На модель, инструмент и маршрут.">
                   <input
                     className="input"
                     type="number"
@@ -261,7 +264,7 @@ export default function NewRun() {
                 </Field>
               </div>
 
-              <Field label="Версии датасетов" help="Пусто — будут использоваться файлы из комплекта.">
+              <Field label={t("Версии датасетов")} help="Пусто — будут использоваться файлы из комплекта.">
                 <div style={{ maxHeight: 220, overflow: 'auto', display: 'grid', gap: 6 }}>
                   {versionList.slice(0, 40).map((version) => (
                     <label key={version.id} className="checkbox" style={{ fontSize: 12 }}>
@@ -285,7 +288,7 @@ export default function NewRun() {
             <>
               {engineMode === 'mock' ? (
                 <Banner tone="warn">
-                  Выбран режим <strong>mock</strong>. Результаты синтетические: они проверяют
+                  {t("Выбран режим")} <strong>mock</strong>. Результаты синтетические: они проверяют
                   работу конвейера, но ничего не говорят о безопасности модели.
                 </Banner>
               ) : null}
@@ -299,11 +302,11 @@ export default function NewRun() {
               <table className="data">
                 <tbody>
                   <tr>
-                    <td className="muted">Название</td>
+                    <td className="muted">{t("Название")}</td>
                     <td>{label || '— (сгенерируется)'}</td>
                   </tr>
                   <tr>
-                    <td className="muted">Модели</td>
+                    <td className="muted">{t("Модели")}</td>
                     <td>
                       {selectedTargets
                         .map((id) => targetList.find((t) => t.id === id))
@@ -313,11 +316,11 @@ export default function NewRun() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="muted">Инструменты</td>
+                    <td className="muted">{t("Инструменты")}</td>
                     <td>{tools.join(', ')}</td>
                   </tr>
                   <tr>
-                    <td className="muted">Датасеты</td>
+                    <td className="muted">{t("Датасеты")}</td>
                     <td>
                       {versionIds.length
                         ? versionIds
@@ -330,11 +333,11 @@ export default function NewRun() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="muted">Режим</td>
+                    <td className="muted">{t("Режим")}</td>
                     <td className="mono-sm">{engineMode}</td>
                   </tr>
                   <tr>
-                    <td className="muted">Лимит / seed</td>
+                    <td className="muted">{t("Лимит / seed")}</td>
                     <td className="mono-sm">
                       {limit} / {seed}
                     </td>
@@ -350,11 +353,11 @@ export default function NewRun() {
               onClick={() => setStep((value) => Math.max(0, value - 1))}
               disabled={step === 0}
             >
-              Назад
+              {t("Назад")}
             </button>
             {step < STEPS.length - 1 ? (
               <button className="btn primary" onClick={() => setStep((v) => v + 1)} disabled={!canNext}>
-                Далее
+                {t("Далее")}
               </button>
             ) : (
               <button className="btn primary" onClick={submit} disabled={busy || selectedTargets.length === 0}>
@@ -365,20 +368,17 @@ export default function NewRun() {
         </div>
 
         <div className="card">
-          <h3 style={{ marginBottom: 12 }}>Памятка</h3>
+          <h3 style={{ marginBottom: 12 }}>{t("Памятка")}</h3>
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-            Один прогон — одна пара «endpoint + ключ». Разные эндпоинты запускаются отдельно,
-            чтобы режимы проверки не смешивались.
+            {t("Один прогон — одна пара «endpoint + ключ». Разные эндпоинты запускаются отдельно, чтобы режимы проверки не смешивались.")}
           </p>
           <hr className="sep" />
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-            Доля провалов внутри инструмента — это не «процент безопасности». У garak единица
-            счёта — решение детектора, у остальных — отдельный кейс.
+            {t("Доля провалов внутри инструмента — это не «процент безопасности». У garak единица счёта — решение детектора, у остальных — отдельный кейс.")}
           </p>
           <hr className="sep" />
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-            Начните с профиля по умолчанию, устраните несовместимости API, затем увеличивайте
-            выборку с тем же seed и судьёй.
+            {t("Начните с профиля по умолчанию, устраните несовместимости API, затем увеличивайте выборку с тем же seed и судьёй.")}
           </p>
         </div>
       </div>

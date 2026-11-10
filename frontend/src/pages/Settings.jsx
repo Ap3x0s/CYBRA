@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { can, useAuth } from '../auth'
-import { Banner, ErrorBox, Field, Loading, Pill, formatDate } from '../components'
+import { Banner, ErrorBox, Field, Pill, formatDate } from '../components'
+import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
+import { useI18n } from '../i18n-context'
 
 export default function Settings() {
   const { user } = useAuth()
+  const { t } = useI18n()
   const users = useApi(() => (can(user, 'admin') ? api.users() : Promise.resolve([])))
   const caps = useApi(() => api.capabilities())
 
@@ -14,14 +17,14 @@ export default function Settings() {
   const [form, setForm] = useState({ email: '', password: '', display_name: '', role: 'operator' })
   const [pwd, setPwd] = useState({ current_password: '', new_password: '' })
 
-  if (users.loading || caps.loading) return <Loading />
+  if (users.loading || caps.loading) return <PageSkeleton variant="default" />
 
   async function createUser(event) {
     event.preventDefault()
     setError(null)
     try {
       await api.createUser(form)
-      setNotice(`Пользователь ${form.email} создан`)
+      setNotice(t('Пользователь {email} создан', { email: form.email }))
       setForm({ email: '', password: '', display_name: '', role: 'operator' })
       users.reload()
     } catch (problem) {
@@ -34,7 +37,7 @@ export default function Settings() {
     setError(null)
     try {
       await api.changePassword(pwd.current_password, pwd.new_password)
-      setNotice('Пароль изменён')
+      setNotice(t('Пароль изменён'))
       setPwd({ current_password: '', new_password: '' })
     } catch (problem) {
       setError(problem)
@@ -45,8 +48,8 @@ export default function Settings() {
     <div className="fade-in">
       <div className="page-head">
         <div>
-          <h1>Настройки</h1>
-          <p>Пользователи, пароль и состояние окружения.</p>
+          <h1>{t("Настройки")}</h1>
+          <p>{t("Пользователи, пароль и состояние окружения.")}</p>
         </div>
       </div>
 
@@ -55,9 +58,9 @@ export default function Settings() {
 
       <div className="grid grid-2">
         <div className="card">
-          <h2 style={{ marginBottom: 14 }}>Сменить свой пароль</h2>
+          <h2 style={{ marginBottom: 14 }}>{t("Сменить свой пароль")}</h2>
           <form onSubmit={changePassword}>
-            <Field label="Текущий пароль">
+            <Field label={t("Текущий пароль")}>
               <input
                 className="input"
                 type="password"
@@ -66,7 +69,7 @@ export default function Settings() {
                 required
               />
             </Field>
-            <Field label="Новый пароль" help="Минимум 10 символов.">
+            <Field label={t("Новый пароль")} help={t("Минимум 10 символов.")}>
               <input
                 className="input"
                 type="password"
@@ -76,19 +79,19 @@ export default function Settings() {
                 required
               />
             </Field>
-            <button className="btn primary">Изменить пароль</button>
+            <button className="btn primary">{t("Изменить пароль")}</button>
           </form>
         </div>
 
         <div className="card">
-          <h2 style={{ marginBottom: 14 }}>Окружение</h2>
+          <h2 style={{ marginBottom: 14 }}>{t("Окружение")}</h2>
           <table className="data">
             <thead>
               <tr>
-                <th>Инструмент</th>
-                <th>Тип</th>
-                <th>Статус</th>
-                <th>Версия</th>
+                <th>{t("Инструмент")}</th>
+                <th>{t("Тип")}</th>
+                <th>{t("Статус")}</th>
+                <th>{t("Версия")}</th>
               </tr>
             </thead>
             <tbody>
@@ -98,7 +101,7 @@ export default function Settings() {
                   <td className="dim">{item.kind}</td>
                   <td>
                     <Pill tone={item.available ? 'ok' : 'warn'}>
-                      {item.available ? 'готов' : 'не установлен'}
+                      {item.available ? t('готов') : t('не установлен')}
                     </Pill>
                   </td>
                   <td className="dim mono-sm">{item.version || '—'}</td>
@@ -107,8 +110,7 @@ export default function Settings() {
             </tbody>
           </table>
           <div className="banner" style={{ marginTop: 14, marginBottom: 0 }}>
-            Тяжёлые инструменты (garak, PyRIT, promptfoo, AgentDojo) не входят в exe-сборку.
-            Установка: <span className="mono-sm">cybra setup --tools garak pyrit</span>
+            {t("Тяжёлые инструменты (garak, PyRIT, promptfoo, AgentDojo) не входят в exe-сборку. Установка:")} <span className="mono-sm">cybra setup --tools garak pyrit</span>
           </div>
         </div>
       </div>
@@ -116,7 +118,7 @@ export default function Settings() {
       {can(user, 'admin') ? (
         <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
           <div className="card">
-            <h2 style={{ marginBottom: 14 }}>Новый пользователь</h2>
+            <h2 style={{ marginBottom: 14 }}>{t("Новый пользователь")}</h2>
             <form onSubmit={createUser}>
               <div className="row">
                 <Field label="Email">
@@ -128,25 +130,25 @@ export default function Settings() {
                     required
                   />
                 </Field>
-                <Field label="Имя">
+                <Field label={t("Имя")}>
                   <input
                     className="input"
                     value={form.display_name}
                     onChange={(event) => setForm((c) => ({ ...c, display_name: event.target.value }))}
                   />
                 </Field>
-                <Field label="Роль">
+                <Field label={t("Роль")}>
                   <select
                     className="select"
                     value={form.role}
                     onChange={(event) => setForm((c) => ({ ...c, role: event.target.value }))}
                   >
-                    <option value="viewer">viewer — только просмотр</option>
-                    <option value="operator">operator — запуск прогонов</option>
-                    <option value="admin">admin — полный доступ</option>
+                    <option value="viewer">viewer — {t('только просмотр')}</option>
+                    <option value="operator">operator — {t('запуск прогонов')}</option>
+                    <option value="admin">admin — {t('полный доступ')}</option>
                   </select>
                 </Field>
-                <Field label="Пароль" help="Минимум 10 символов.">
+                <Field label={t("Пароль")} help={t("Минимум 10 символов.")}>
                   <input
                     className="input"
                     type="password"
@@ -157,20 +159,20 @@ export default function Settings() {
                   />
                 </Field>
               </div>
-              <button className="btn primary">Создать</button>
+              <button className="btn primary">{t("Создать")}</button>
             </form>
           </div>
 
           <div className="card">
-            <h2 style={{ marginBottom: 14 }}>Пользователи</h2>
+            <h2 style={{ marginBottom: 14 }}>{t("Пользователи")}</h2>
             <table className="data">
               <thead>
                 <tr>
                   <th>Email</th>
-                  <th>Имя</th>
-                  <th>Роль</th>
-                  <th>Активен</th>
-                  <th>Был вход</th>
+                  <th>{t("Имя")}</th>
+                  <th>{t("Роль")}</th>
+                  <th>{t("Активен")}</th>
+                  <th>{t("Был вход")}</th>
                   <th />
                 </tr>
               </thead>
@@ -196,7 +198,7 @@ export default function Settings() {
                     </td>
                     <td>
                       <Pill tone={item.is_active ? 'ok' : 'idle'}>
-                        {item.is_active ? 'да' : 'нет'}
+                        {item.is_active ? t('да') : t('нет')}
                       </Pill>
                     </td>
                     <td className="dim">{formatDate(item.last_login_at)}</td>
@@ -209,7 +211,7 @@ export default function Settings() {
                             users.reload()
                           }}
                         >
-                          {item.is_active ? 'Отключить' : 'Включить'}
+                          {item.is_active ? t('Отключить') : t('Включить')}
                         </button>
                       ) : null}
                     </td>

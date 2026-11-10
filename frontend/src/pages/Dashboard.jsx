@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { ErrorBox, Loading, Meter, StatusPill, formatRelative, pct } from '../components'
+import { ErrorBox, Meter, StatusPill, formatRelative, pct } from '../components'
+import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
 import { useAuth } from '../auth'
 import {
   ArrowsLeftRight, BracketsCurly, ClockCounterClockwise, Cpu, Flask, Gauge, Play,
   ShieldWarning, Warning,
 } from '../icons'
+import { useI18n } from '../i18n-context'
 
 /** Aggregate numbers across recent runs. Deliberately not a single "safety score":
  *  the brief asked for explainable standardised metrics, and blending tools with
@@ -55,11 +57,12 @@ function toolAverages(runs) {
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const { t } = useI18n()
   const runs = useApi(() => api.runs(20))
   const caps = useApi(() => api.capabilities())
   const catalog = useApi(() => api.metricsCatalog())
 
-  if (runs.loading) return <Loading />
+  if (runs.loading) return <PageSkeleton variant="dashboard" />
   if (runs.error) return <ErrorBox error={runs.error} />
 
   const list = runs.data || []
@@ -75,24 +78,24 @@ export default function Dashboard() {
   // generic "brain / sparkle" vocabulary of AI products.
   const KPI = [
     {
-      label: 'Прогонов', value: list.length, hint: 'в истории',
+      label: t('Прогонов'), value: list.length, hint: t('в истории'),
       // A flask: a prepared experiment that was executed.
       Icon: Flask,
     },
     {
-      label: 'Проверок', value: stats.checks, hint: `${stats.fails} с провалом`,
+      label: 'Проверок', value: stats.checks, hint: t('{fails} с провалом', { fails: stats.fails }),
       // A gauge: individual measurements, not a kit of parts.
       Icon: Gauge,
       delta: stats.checks ? pct(stats.fails / stats.checks) : null,
-      deltaLabel: 'провалов',
+      deltaLabel: t('провалов'),
     },
     {
-      label: 'Моделей', value: stats.models, hint: 'проверялось',
+      label: t('Моделей'), value: stats.models, hint: t('проверялось'),
       // A chip: the model behind the API endpoint.
       Icon: Cpu,
     },
     {
-      label: 'Шагов с находками', value: stats.findings, hint: 'модель × инструмент',
+      label: t('Шагов с находками'), value: stats.findings, hint: t('модель × инструмент'),
       // A shield with a crack, not a bug: 'находка' here is a security finding
       // in a model's behaviour, and a bug glyph reads as a code defect — plus
       // it is the only icon in the row that is a literal animal.
@@ -105,16 +108,15 @@ export default function Dashboard() {
       <div className="page-head" style={{ marginBottom: 18 }}>
         <div>
           <h1 style={{ fontSize: 26, letterSpacing: '-0.035em' }}>
-            {greeting}, {user?.display_name || 'администратор'}
+            {t(greeting)}, {user?.display_name || t('администратор')}
           </h1>
           <p>
-            Оценка устойчивости моделей по наборам бенчмарков. Числа относятся к конкретным
-            профилям — сравнивать инструменты между собой нельзя.
+            {t("Оценка устойчивости моделей по наборам бенчмарков. Числа относятся к конкретным профилям — сравнивать инструменты между собой нельзя.")}
           </p>
         </div>
         <Link className="btn primary" to="/runs/new">
           <Play size={15} weight="fill" />
-          Новый прогон
+          {t("Новый прогон")}
         </Link>
       </div>
 
@@ -122,9 +124,9 @@ export default function Dashboard() {
         <div className="banner warn">
           <Warning size={16} weight="bold" style={{ flex: '0 0 auto', marginTop: 1 }} />
           <div>
-            <strong>Не установлены нативные инструменты:</strong>{' '}
-            {missing.map((item) => item.name).join(', ')}. Их можно включить, но прогон по ним
-            завершится ошибкой. Установка:{' '}
+            <strong>{t("Не установлены нативные инструменты:")}</strong>{' '}
+            {missing.map((item) => item.name).join(', ')}.{' '}
+            {t('Их можно включить, но прогон по ним завершится ошибкой. Установка:')}{' '}
             <span className="mono-sm">cybra setup --tools {missing.map((m) => m.tool).join(' ')}</span>
           </div>
         </div>
@@ -132,23 +134,23 @@ export default function Dashboard() {
 
       <div className="grid grid-4 stagger" style={{ marginBottom: 18 }}>
         {KPI.map(({ label, value, hint, Icon, delta, deltaLabel }) => (
-          <div className="kpi" key={label}>
+          <div className="kpi" key={t(label)}>
             <div className="kpi-head">
               <span className="kpi-icon">
                 <Icon size={15} weight="regular" />
               </span>
-              {label}
+              {t(label)}
             </div>
             <div className="kpi-value">
               {value}
               {delta ? (
                 <span className="kpi-delta down">
                   {delta}
-                  {deltaLabel ? <span style={{ opacity: 0.75 }}> {deltaLabel}</span> : null}
+                  {deltaLabel ? <span style={{ opacity: 0.75 }}> {t(deltaLabel)}</span> : null}
                 </span>
               ) : null}
             </div>
-            <div className="kpi-foot">{hint}</div>
+            <div className="kpi-foot">{t(hint)}</div>
           </div>
         ))}
       </div>
@@ -160,18 +162,18 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-head">
             <div>
-              <h2>Провалы по инструментам</h2>
+              <h2>{t("Провалы по инструментам")}</h2>
               <div className="dim" style={{ fontSize: 11.5, marginTop: 3 }}>
-                Доля FAIL среди оценённых кейсов. Внутри инструмента, не между ними.
+                {t("Доля FAIL среди оценённых кейсов. Внутри инструмента, не между ними.")}
               </div>
             </div>
             <Link to="/metrics" className="muted" style={{ fontSize: 12 }}>
-              метрики →
+              {t('метрики →')}
             </Link>
           </div>
 
           {bars.length === 0 ? (
-            <div className="empty">Нет данных: выполните прогон.</div>
+            <div className="empty">{t("Нет данных: выполните прогон.")}</div>
           ) : (
             <>
               <div className="bars">
@@ -187,7 +189,7 @@ export default function Dashboard() {
                               ? 'linear-gradient(180deg, var(--danger), #a83c41)'
                               : undefined,
                         }}
-                        title={`${bar.tool}: ${pct(bar.rate)} из ${bar.total}`}
+                        title={t('{tool}: {rate} из {total}', { tool: bar.tool, rate: pct(bar.rate), total: bar.total })}
                       />
                     </div>
                     <div className="bar-label">{pct(bar.rate)}</div>
@@ -197,7 +199,7 @@ export default function Dashboard() {
               </div>
               <div className="bar-axis">
                 <span>0 %</span>
-                <span>шкала: доля FAIL внутри инструмента</span>
+                <span>{t('шкала: доля FAIL внутри инструмента')}</span>
                 <span>100 %</span>
               </div>
             </>
@@ -206,24 +208,24 @@ export default function Dashboard() {
 
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="card-head">
-            <h2>Быстрые действия</h2>
+            <h2>{t("Быстрые действия")}</h2>
           </div>
           <div className="quick-list" style={{ flex: 1, justifyContent: 'center' }}>
             {[
               // Each icon mirrors the destination, so the list is scannable
               // without reading the labels.
-              { to: '/runs/new', Icon: Play, title: 'Запустить прогон', sub: 'выбрать модели и наборы' },
-              { to: '/models', Icon: ArrowsLeftRight, title: 'Сравнить модели', sub: 'эндпоинты и группы' },
-              { to: '/datasets', Icon: BracketsCurly, title: 'Править датасеты', sub: 'кейсы и версии' },
-              { to: '/runs', Icon: ClockCounterClockwise, title: 'История прогонов', sub: 'все результаты' },
+              { to: '/runs/new', Icon: Play, title: t('Запустить прогон'), sub: t('выбрать модели и наборы') },
+              { to: '/models', Icon: ArrowsLeftRight, title: t('Сравнить модели'), sub: t('эндпоинты и группы') },
+              { to: '/datasets', Icon: BracketsCurly, title: t('Править датасеты'), sub: t('кейсы и версии') },
+              { to: '/runs', Icon: ClockCounterClockwise, title: t('История прогонов'), sub: t('все результаты') },
             ].map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
                   <Icon size={15} weight="bold" />
                 </span>
                 <span>
-                  <div className="qi-title">{title}</div>
-                  <div className="qi-sub">{sub}</div>
+                  <div className="qi-title">{t(title)}</div>
+                  <div className="qi-sub">{t(sub)}</div>
                 </span>
                 <span className="qi-arrow">›</span>
               </Link>
@@ -234,26 +236,26 @@ export default function Dashboard() {
 
       <div className="card">
         <div className="card-head">
-          <h2>Последние прогоны</h2>
+          <h2>{t("Последние прогоны")}</h2>
           <Link to="/runs" className="muted" style={{ fontSize: 12 }}>
-            все прогоны →
+            {t("все прогоны →")}
           </Link>
         </div>
 
         {list.length === 0 ? (
           <div className="empty">
-            Пока нет ни одного прогона. <Link to="/runs/new">Запустить первый</Link>
+            {t("Пока нет ни одного прогона.")} <Link to="/runs/new">{t("Запустить первый")}</Link>
           </div>
         ) : (
           <table className="data">
             <thead>
               <tr>
-                <th>Прогон</th>
-                <th>Модели</th>
-                <th>Инструменты</th>
-                <th className="num">Провалы</th>
-                <th>Статус</th>
-                <th>Когда</th>
+                <th>{t("Прогон")}</th>
+                <th>{t("Модели")}</th>
+                <th>{t("Инструменты")}</th>
+                <th className="num">{t("Провалы")}</th>
+                <th>{t("Статус")}</th>
+                <th>{t('Когда')}</th>
               </tr>
             </thead>
             <tbody>
@@ -286,7 +288,7 @@ export default function Dashboard() {
                     <td>
                       <StatusPill status={run.status} />
                     </td>
-                    <td className="dim">{formatRelative(run.finished_at || run.created_at)}</td>
+                    <td className="dim">{formatRelative(run.finished_at || run.created_at, t)}</td>
                   </tr>
                 )
               })}
@@ -298,13 +300,13 @@ export default function Dashboard() {
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-head">
           <div>
-            <h2>Как читать эти числа</h2>
+            <h2>{t("Как читать эти числа")}</h2>
             <div className="dim" style={{ fontSize: 11.5, marginTop: 3 }}>
-              Словарь метрик, который отдают сами инструменты.
+              {t("Словарь метрик, который отдают сами инструменты.")}
             </div>
           </div>
           <Link to="/metrics" className="muted" style={{ fontSize: 12 }}>
-            подробнее →
+            {t("подробнее →")}
           </Link>
         </div>
         <div className="grid grid-3">

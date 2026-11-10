@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
 import { api } from '../api'
 import { can, useAuth } from '../auth'
-import { Banner, Empty, ErrorBox, Field, Loading, Pill, formatDate } from '../components'
+import { Banner, Empty, ErrorBox, Field, Pill, formatDate } from '../components'
+import { BlockSkeleton, PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
+import { useI18n } from '../i18n-context'
 
 /** Dataset workbench: browse versions, edit a case (which forks a version), import. */
 export default function Datasets() {
   const { user } = useAuth()
+  const { t } = useI18n()
   const versions = useApi(() => api.datasets())
   const templates = useApi(() => api.datasetTemplates())
 
@@ -29,7 +32,7 @@ export default function Datasets() {
     [selected],
   )
 
-  if (versions.loading) return <Loading />
+  if (versions.loading) return <PageSkeleton variant="datasets" />
   if (versions.error) return <ErrorBox error={versions.error} />
 
   async function seed(name) {
@@ -60,10 +63,9 @@ export default function Datasets() {
     <div className="fade-in">
       <div className="page-head">
         <div>
-          <h1>Датасеты</h1>
+          <h1>{t("Датасеты")}</h1>
           <p>
-            Каждая версия неизменяема: правка кейса или импорт создают новую версию со ссылкой на
-            родителя. Поэтому старый прогон всегда воспроизводим.
+            {t("Каждая версия неизменяема: правка кейса или импорт создают новую версию со ссылкой на родителя. Поэтому старый прогон всегда воспроизводим.")}
           </p>
         </div>
         {can(user, 'operator') ? (
@@ -77,7 +79,7 @@ export default function Datasets() {
       {(versions.data || []).length === 0 ? (
         <div className="card">
           <Empty>
-            Датасетов нет. При первом старте они импортируются автоматически; можно создать вручную:
+            {t("Датасетов нет. При первом старте они импортируются автоматически; можно создать вручную:")}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 14 }}>
               {(templates.data || []).map((template) => (
                 <button key={template.name} className="btn small" onClick={() => seed(template.name)}>
@@ -92,7 +94,7 @@ export default function Datasets() {
       <div className="grid" style={{ gridTemplateColumns: 'minmax(260px, 320px) 1fr', alignItems: 'start' }}>
         <div className="card" style={{ maxHeight: '70vh', overflow: 'auto' }}>
           <div className="card-head">
-            <h2>Версии</h2>
+            <h2>{t("Версии")}</h2>
           </div>
           {grouped.map(([name, list]) => (
             <div key={name} style={{ marginBottom: 16 }}>
@@ -122,7 +124,7 @@ export default function Datasets() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <span className="mono-sm">v{version.version}</span>
                     <span className="dim" style={{ fontSize: 11 }}>
-                      {version.case_count} кейсов
+                      {version.case_count} {t('кейсов')}
                     </span>
                   </div>
                   <div className="dim" style={{ fontSize: 11 }}>
@@ -136,17 +138,17 @@ export default function Datasets() {
 
         <div className="card">
           {!selected ? (
-            <Empty>Выберите версию слева, чтобы посмотреть кейсы.</Empty>
+            <Empty>{t("Выберите версию слева, чтобы посмотреть кейсы.")}</Empty>
           ) : (
             <>
               <div className="card-head">
                 <h2>
-                  Кейсы версии{' '}
+                  {t('Кейсы версии')}{' '}
                   <span className="mono-sm dim">#{selected}</span>
                 </h2>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <a className="btn ghost small" href={`/api/v1/datasets/${selected}/export`}>
-                    Экспорт .jsonl
+                    {t("Экспорт .jsonl")}
                   </a>
                   <DiffPicker
                     versions={versions.data || []}
@@ -157,16 +159,16 @@ export default function Datasets() {
               </div>
 
               {cases.loading ? (
-                <Loading />
+                <BlockSkeleton rows={6} />
               ) : (cases.data || []).length === 0 ? (
-                <Empty>В этой версии нет кейсов.</Empty>
+                <Empty>{t("В этой версии нет кейсов.")}</Empty>
               ) : (
                 <table className="data">
                   <thead>
                     <tr>
                       <th>Case ID</th>
-                      <th>Категория</th>
-                      <th>Промпт</th>
+                      <th>{t("Категория")}</th>
+                      <th>{t("Промпт")}</th>
                       {can(user, 'operator') ? <th /> : null}
                     </tr>
                   </thead>
@@ -183,7 +185,7 @@ export default function Datasets() {
                         {can(user, 'operator') ? (
                           <td>
                             <button className="btn ghost small" onClick={() => setEditing(item)}>
-                              Править
+                              {t("Править")}
                             </button>
                           </td>
                         ) : null}
@@ -209,6 +211,7 @@ export default function Datasets() {
 }
 
 function CaseEditor({ item, onCancel, onSave }) {
+  const { t } = useI18n()
   const [form, setForm] = useState({
     case_id: item.case_id,
     category: item.category,
@@ -226,17 +229,17 @@ function CaseEditor({ item, onCancel, onSave }) {
       <div className="card-head">
         <h3>Правка кейса {item.case_id}</h3>
         <span className="dim" style={{ fontSize: 11 }}>
-          сохранится как новая версия
+          {t("сохранится как новая версия")}
         </span>
       </div>
       <div className="row">
         <Field label="Case ID">
           <input className="input" value={form.case_id} onChange={update('case_id')} />
         </Field>
-        <Field label="Категория">
+        <Field label={t("Категория")}>
           <input className="input" value={form.category} onChange={update('category')} />
         </Field>
-        <Field label="Тип">
+        <Field label={t("Тип")}>
           <select className="select" value={form.kind} onChange={update('kind')}>
             <option value="harmful">harmful</option>
             <option value="benign">benign</option>
@@ -245,18 +248,18 @@ function CaseEditor({ item, onCancel, onSave }) {
           </select>
         </Field>
       </div>
-      <Field label="Промпт">
+      <Field label={t("Промпт")}>
         <textarea className="textarea" value={form.prompt} onChange={update('prompt')} rows={4} />
       </Field>
-      <Field label="Цель / эталон">
+      <Field label={t("Цель / эталон")}>
         <textarea className="textarea" value={form.goal} onChange={update('goal')} rows={2} />
       </Field>
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn primary" onClick={() => onSave(form)}>
-          Сохранить как новую версию
+          {t("Сохранить как новую версию")}
         </button>
         <button className="btn ghost" onClick={onCancel}>
-          Отмена
+          {t("Отмена")}
         </button>
       </div>
     </div>
@@ -264,6 +267,7 @@ function CaseEditor({ item, onCancel, onSave }) {
 }
 
 function ImportForm({ onDone, onError }) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [file, setFile] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -287,10 +291,10 @@ function ImportForm({ onDone, onError }) {
   return (
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
       <div className="field" style={{ marginBottom: 0 }}>
-        <label>Импорт конфигурацией</label>
+        <label>{t("Импорт конфигурацией")}</label>
         <input
           className="input"
-          placeholder="имя датасета"
+          placeholder={t("имя датасета")}
           value={name}
           onChange={(event) => setName(event.target.value)}
           style={{ width: 170 }}
@@ -303,13 +307,14 @@ function ImportForm({ onDone, onError }) {
         style={{ fontSize: 11, maxWidth: 190 }}
       />
       <button className="btn" disabled={busy || !file || !name}>
-        {busy ? '…' : 'Загрузить'}
+        {busy ? '…' : t('Загрузить')}
       </button>
     </form>
   )
 }
 
 function DiffPicker({ versions, left, onError }) {
+  const { t } = useI18n()
   const [right, setRight] = useState('')
   const [result, setResult] = useState(null)
 
@@ -331,7 +336,7 @@ function DiffPicker({ versions, left, onError }) {
         value={right}
         onChange={(event) => setRight(event.target.value)}
       >
-        <option value="">сравнить с…</option>
+        <option value="">{t("сравнить с…")}</option>
         {versions
           .filter((version) => version.id !== left)
           .map((version) => (

@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { can, useAuth } from '../auth'
-import { Banner, ErrorBox, Field, Loading, Pill } from '../components'
+import { Banner, ErrorBox, Field, Pill } from '../components'
+import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
+import { useI18n } from '../i18n-context'
 
 export default function Models() {
   const { user } = useAuth()
+  const { t } = useI18n()
   const endpoints = useApi(() => api.endpoints())
   const targets = useApi(() => api.targets())
 
@@ -14,7 +17,7 @@ export default function Models() {
   const [error, setError] = useState(null)
   const [probe, setProbe] = useState({})
 
-  if (endpoints.loading || targets.loading) return <Loading />
+  if (endpoints.loading || targets.loading) return <PageSkeleton variant="dashboard" />
 
   async function runProbe(id) {
     setProbe((current) => ({ ...current, [id]: { busy: true } }))
@@ -30,19 +33,18 @@ export default function Models() {
     <div className="fade-in">
       <div className="page-head">
         <div>
-          <h1>Модели и эндпоинты</h1>
+          <h1>{t("Модели и эндпоинты")}</h1>
           <p>
-            Эндпоинт — это OpenAI-совместимый сервер (LiteLLM, OpenWebUI, vLLM). Модель — конкретный
-            ID за этим сервером; у каждой модели свои переключатели совместимости.
+            {t("Эндпоинт — это OpenAI-совместимый сервер (LiteLLM, OpenWebUI, vLLM). Модель — конкретный ID за этим сервером; у каждой модели свои переключатели совместимости.")}
           </p>
         </div>
         {can(user, 'operator') ? (
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn ghost" onClick={() => setShowEndpoint((value) => !value)}>
-              + Эндпоинт
+              + {t('Эндпоинт')}
             </button>
             <button className="btn primary" onClick={() => setShowTarget((value) => !value)}>
-              + Модель
+              + {t('Модель')}
             </button>
           </div>
         ) : null}
@@ -73,20 +75,20 @@ export default function Models() {
 
       <div className="card">
         <div className="card-head">
-          <h2>Эндпоинты</h2>
+          <h2>{t("Эндпоинты")}</h2>
           <span className="dim mono-sm">{(endpoints.data || []).length}</span>
         </div>
         {(endpoints.data || []).length === 0 ? (
-          <div className="empty">Эндпоинтов нет. Добавьте первый — например свой LiteLLM или OpenWebUI.</div>
+          <div className="empty">{t("Эндпоинтов нет. Добавьте первый — например свой LiteLLM или OpenWebUI.")}</div>
         ) : (
           <table className="data">
             <thead>
               <tr>
-                <th>Название</th>
+                <th>{t("Название")}</th>
                 <th>URL</th>
-                <th>Ключ</th>
+                <th>{t("Ключ")}</th>
                 <th>TLS</th>
-                <th>Проверка</th>
+                <th>{t("Проверка")}</th>
               </tr>
             </thead>
             <tbody>
@@ -96,22 +98,22 @@ export default function Models() {
                   <td className="mono-sm dim">{endpoint.chat_url || endpoint.base_url + '/chat/completions'}</td>
                   <td>
                     {endpoint.has_secret ? (
-                      <Pill tone="ok">задан …{endpoint.secret_hint}</Pill>
+                      <Pill tone="ok">{t('задан')} …{endpoint.secret_hint}</Pill>
                     ) : (
-                      <Pill tone="idle">без ключа</Pill>
+                      <Pill tone="idle">{t("без ключа")}</Pill>
                     )}
                   </td>
-                  <td className="dim">{endpoint.verify_tls ? 'проверяется' : 'отключена'}</td>
+                  <td className="dim">{endpoint.verify_tls ? t('проверяется') : t('отключена')}</td>
                   <td>
                     <button className="btn ghost small" onClick={() => runProbe(endpoint.id)}>
-                      {probe[endpoint.id]?.busy ? 'Проверка…' : 'Проверить связь'}
+                      {probe[endpoint.id]?.busy ? t('Проверка…') : t('Проверить связь')}
                     </button>
                     {probe[endpoint.id] && !probe[endpoint.id].busy ? (
                       <div
                         className="mono-sm"
                         style={{ marginTop: 6, color: probe[endpoint.id].ok ? 'var(--accent)' : 'var(--danger)' }}
                       >
-                        {probe[endpoint.id].ok ? 'связь есть' : probe[endpoint.id].detail}
+                        {probe[endpoint.id].ok ? t('связь есть') : probe[endpoint.id].detail}
                       </div>
                     ) : null}
                   </td>
@@ -124,20 +126,20 @@ export default function Models() {
 
       <div className="card">
         <div className="card-head">
-          <h2>Модели</h2>
+          <h2>{t("Модели")}</h2>
           <span className="dim mono-sm">{(targets.data || []).length}</span>
         </div>
         {(targets.data || []).length === 0 ? (
-          <div className="empty">Моделей нет. Добавьте ID модели, доступный на эндпоинте.</div>
+          <div className="empty">{t("Моделей нет. Добавьте ID модели, доступный на эндпоинте.")}</div>
         ) : (
           <table className="data">
             <thead>
               <tr>
-                <th>Модель</th>
+                <th>{t("Модель")}</th>
                 <th>ID</th>
-                <th>Эндпоинт</th>
-                <th>Группа</th>
-                <th>Совместимость</th>
+                <th>{t("Эндпоинт")}</th>
+                <th>{t("Группа")}</th>
+                <th>{t("Совместимость")}</th>
                 {can(user, 'operator') ? <th /> : null}
               </tr>
             </thead>
@@ -165,7 +167,7 @@ export default function Models() {
                           targets.reload()
                         }}
                       >
-                        Удалить
+                        {t("Удалить")}
                       </button>
                     </td>
                   ) : null}
@@ -180,6 +182,7 @@ export default function Models() {
 }
 
 function EndpointForm({ onDone, onError }) {
+  const { t } = useI18n()
   const [form, setForm] = useState({
     name: '',
     base_url: 'http://localhost:4000/v1',
@@ -211,36 +214,37 @@ function EndpointForm({ onDone, onError }) {
   return (
     <form className="card" onSubmit={submit}>
       <div className="card-head">
-        <h2>Новый эндпоинт</h2>
+        <h2>{t("Новый эндпоинт")}</h2>
       </div>
       <div className="row">
-        <Field label="Название">
+        <Field label={t("Название")}>
           <input className="input" value={form.name} onChange={update('name')} required />
         </Field>
-        <Field label="Base URL" help="Без /chat/completions — он добавится сам.">
+        <Field label="Base URL" help={t('Без /chat/completions — он добавится сам.')}>
           <input className="input" value={form.base_url} onChange={update('base_url')} required />
         </Field>
       </div>
       <div className="row">
-        <Field label="Полный URL метода" help="Необязательно. Приоритетнее base URL.">
+        <Field label={t("Полный URL метода")} help="Необязательно. Приоритетнее base URL.">
           <input className="input" value={form.chat_url} onChange={update('chat_url')} placeholder="http://host/v1/chat/completions" />
         </Field>
-        <Field label="API-ключ" help="Шифруется; в ответах API не показывается.">
+        <Field label={t("API-ключ")} help="Шифруется; в ответах API не показывается.">
           <input className="input" type="password" value={form.api_key} onChange={update('api_key')} autoComplete="off" />
         </Field>
       </div>
       <label className="checkbox" style={{ marginBottom: 14 }}>
         <input type="checkbox" checked={form.verify_tls} onChange={update('verify_tls')} />
-        Проверять TLS-сертификат
+        {t("Проверять TLS-сертификат")}
       </label>
       <button className="btn primary" disabled={busy}>
-        {busy ? 'Сохранение…' : 'Добавить эндпоинт'}
+        {busy ? t('Сохранение…') : t('Добавить эндпоинт')}
       </button>
     </form>
   )
 }
 
 function TargetForm({ endpoints, onDone, onError }) {
+  const { t } = useI18n()
   const [form, setForm] = useState({
     endpoint_id: endpoints[0]?.id || '',
     model_id: '',
@@ -274,15 +278,15 @@ function TargetForm({ endpoints, onDone, onError }) {
     }
   }
 
-  if (endpoints.length === 0) return <Banner tone="warn">Сначала добавьте эндпоинт.</Banner>
+  if (endpoints.length === 0) return <Banner tone="warn">{t("Сначала добавьте эндпоинт.")}</Banner>
 
   return (
     <form className="card" onSubmit={submit}>
       <div className="card-head">
-        <h2>Новая модель</h2>
+        <h2>{t("Новая модель")}</h2>
       </div>
       <div className="row">
-        <Field label="Эндпоинт">
+        <Field label={t("Эндпоинт")}>
           <select className="select" value={form.endpoint_id} onChange={update('endpoint_id')}>
             {endpoints.map((endpoint) => (
               <option key={endpoint.id} value={endpoint.id}>
@@ -291,18 +295,18 @@ function TargetForm({ endpoints, onDone, onError }) {
             ))}
           </select>
         </Field>
-        <Field label="ID модели" help="Именно то имя, которое принимает сервер.">
+        <Field label={t("ID модели")} help="Именно то имя, которое принимает сервер.">
           <input className="input" value={form.model_id} onChange={update('model_id')} required />
         </Field>
       </div>
       <div className="row">
-        <Field label="Отображаемое имя">
+        <Field label={t("Отображаемое имя")}>
           <input className="input" value={form.label} onChange={update('label')} />
         </Field>
-        <Field label="Группа" help="Для сравнения пула моделей в графиках.">
+        <Field label={t("Группа")} help="Для сравнения пула моделей в графиках.">
           <input className="input" value={form.group_name} onChange={update('group_name')} />
         </Field>
-        <Field label="Параметр лимита">
+        <Field label={t("Параметр лимита")}>
           <select className="select" value={form.token_parameter} onChange={update('token_parameter')}>
             <option value="max_tokens">max_tokens</option>
             <option value="max_completion_tokens">max_completion_tokens</option>
@@ -311,10 +315,10 @@ function TargetForm({ endpoints, onDone, onError }) {
       </div>
       <label className="checkbox" style={{ marginBottom: 14 }}>
         <input type="checkbox" checked={form.developer_as_system} onChange={update('developer_as_system')} />
-        Заменять роль developer на system (фиксируется в manifest)
+        {t("Заменять роль developer на system (фиксируется в manifest)")}
       </label>
       <button className="btn primary" disabled={busy}>
-        {busy ? 'Сохранение…' : 'Добавить модель'}
+        {busy ? t('Сохранение…') : t('Добавить модель')}
       </button>
     </form>
   )

@@ -3,9 +3,11 @@ import { useAuth } from '../auth'
 import { ErrorBox } from '../components'
 import { ShieldCheck } from '../icons'
 import { SlTextField } from '../sl-ui/react'
+import { useI18n } from '../i18n-context'
 
 export default function Login() {
   const { login } = useAuth()
+  const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
@@ -35,9 +37,9 @@ export default function Login() {
           </div>
         </div>
 
-        <h1 style={{ fontSize: 20, marginBottom: 6 }}>Вход в консоль</h1>
+        <h1 style={{ fontSize: 20, marginBottom: 6 }}>{t("Вход в консоль")}</h1>
         <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 22 }}>
-          Прогон бенчмарков безопасности моделей и отчёты для ИБ.
+          {t("Прогон бенчмарков безопасности моделей и отчёты для ИБ.")}
         </p>
 
         <ErrorBox error={error} />
@@ -49,12 +51,12 @@ export default function Login() {
               type="email"
               value={email}
               onChange={setEmail}
-              help="Логин администратора печатается при первом старте сервера."
+              help={t('Логин администратора печатается при первом старте сервера.')}
             />
           </div>
           <div style={{ marginBottom: 20 }}>
             <SlTextField
-              label="Пароль"
+              label={t("Пароль")}
               type="password"
               value={password}
               onChange={setPassword}
@@ -62,7 +64,7 @@ export default function Login() {
           </div>
           <button className="btn primary" type="submit" style={{ width: '100%' }} disabled={busy}>
             <ShieldCheck size={16} weight="bold" />
-            {busy ? 'Проверка…' : 'Войти'}
+            {busy ? t('Проверка…') : t('Войти')}
           </button>
         </form>
       </div>

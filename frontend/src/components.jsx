@@ -1,3 +1,4 @@
+import { useI18n } from './i18n-context'
 // Shared presentational pieces. Kept tiny on purpose: a component earns its
 // place only if it appears on more than one screen.
 
@@ -39,7 +40,9 @@ const STATUS_LABEL = {
 
 export function StatusPill({ status }) {
   const tone = STATUS_TONE[status] || 'idle'
-  return <Pill tone={tone}>{STATUS_LABEL[status] || status}</Pill>
+  const { t } = useI18n()
+  const label = STATUS_LABEL[status]
+  return <Pill tone={tone}>{label ? t(label) : status}</Pill>
 }
 
 /** A number with an explanation attached. Every metric in the UI uses this. */
@@ -111,14 +114,14 @@ export function formatDate(value) {
   })
 }
 
-export function formatRelative(value) {
+export function formatRelative(value, t = (s) => s) {
   if (!value) return '—'
   const date = new Date(value)
   const diff = (Date.now() - date.getTime()) / 1000
-  if (diff < 60) return 'только что'
-  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`
-  return `${Math.floor(diff / 86400)} дн назад`
+  if (diff < 60) return t('только что')
+  if (diff < 3600) return t('{n} мин назад', { n: Math.floor(diff / 60) })
+  if (diff < 86400) return t('{n} ч назад', { n: Math.floor(diff / 3600) })
+  return t('{n} дн назад', { n: Math.floor(diff / 86400) })
 }
 
 export function pct(value) {

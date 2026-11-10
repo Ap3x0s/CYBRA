@@ -4,6 +4,8 @@ import { api } from '../api'
 import { useAuth, can } from '../auth'
 import { useApi } from '../hooks'
 import { ArrowSquareOut, Bell, MagnifyingGlass, SignOut, UserCircle, X } from '../icons'
+import LanguageSwitcher from '../components/LanguageSwitcher'
+import { useI18n } from '../i18n-context'
 
 /** Sticky top bar: search, notifications, account menu.
  *
@@ -16,6 +18,7 @@ export default function Topbar({ query, onQuery }) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const runs = useApi(() => api.runs(50))
+  const { t } = useI18n()
   const [panel, setPanel] = useState(null) // 'bell' | 'account' | null
   const inputRef = useRef(null)
   const wrapRef = useRef(null)
@@ -61,18 +64,18 @@ export default function Topbar({ query, onQuery }) {
         <MagnifyingGlass size={15} weight="bold" />
         <input
           ref={inputRef}
-          placeholder="Поиск по прогонам, моделям, инструментам…"
+          placeholder={t('Поиск по прогонам, моделям, инструментам…')}
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           onKeyDown={submit}
-          aria-label="Поиск"
+          aria-label={t("Поиск")}
         />
         {query ? (
           <button
             className="icon-btn"
             style={{ width: 22, height: 22, border: 0, background: 'transparent' }}
             onClick={() => onQuery('')}
-            aria-label="Очистить"
+            aria-label={t("Очистить")}
           >
             <X size={13} weight="bold" />
           </button>
@@ -80,6 +83,8 @@ export default function Topbar({ query, onQuery }) {
       </div>
 
       <div className="topbar-actions">
+        <LanguageSwitcher />
+
         <div style={{ position: 'relative' }}>
           <button
             className="icon-btn"
@@ -94,12 +99,12 @@ export default function Topbar({ query, onQuery }) {
           {panel === 'bell' ? (
             <div className="popover" role="menu">
               <div className="popover-head">
-                Незавершённые прогоны
+                {t('Незавершённые прогоны')}
                 <span className="dim mono-sm">{alerts.length}</span>
               </div>
               {alerts.length === 0 ? (
                 <div className="popover-empty">
-                  Все прогоны завершились полно. Предупреждать не о чем.
+                  {t('Нет незавершённых прогонов')}.
                 </div>
               ) : (
                 alerts.slice(0, 6).map((run) => (
@@ -125,7 +130,7 @@ export default function Topbar({ query, onQuery }) {
         <div style={{ position: 'relative' }}>
           <button
             className="avatar"
-            aria-label="Аккаунт"
+            aria-label={t("Аккаунт")}
             aria-expanded={panel === 'account'}
             onClick={() => setPanel(panel === 'account' ? null : 'account')}
           >
@@ -135,7 +140,7 @@ export default function Topbar({ query, onQuery }) {
           {panel === 'account' ? (
             <div className="popover" role="menu" style={{ minWidth: 240 }}>
               <div className="popover-head" style={{ display: 'block' }}>
-                <div>{user?.display_name || 'Администратор'}</div>
+                <div>{user?.display_name || t('Администратор')}</div>
                 <div className="dim mono-sm" style={{ fontWeight: 400 }}>{user?.email}</div>
                 <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
                   роль: {user?.role}
@@ -150,7 +155,7 @@ export default function Topbar({ query, onQuery }) {
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <UserCircle size={14} weight="bold" />
-                  Настройки и пароль
+                  {t('Настройки')} и пароль
                 </span>
               </button>
               {can(user, 'operator') ? (
@@ -163,14 +168,14 @@ export default function Topbar({ query, onQuery }) {
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <ArrowSquareOut size={14} weight="bold" />
-                    Новый прогон
+                    {t('Новый прогон')}
                   </span>
                 </button>
               ) : null}
               <button className="popover-item" onClick={logout}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <SignOut size={14} weight="bold" />
-                  Выйти
+                  {t('Выйти')}
                 </span>
               </button>
             </div>
