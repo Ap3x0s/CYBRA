@@ -8,8 +8,12 @@ import { createField } from '../field'
  *  эффектов от мыши (клики, след, звук) — они в референсе не были нужны.
  *
  *  Сам рендер живёт в ../field.js — переносе createTexture. Здесь только
- *  монтирование канваса и переключатель. Выбор запоминается: решение
- *  «мне фон мешает» не должно сбрасываться на каждой странице. */
+ *  монтирование канваса.
+ *
+ *  Кнопки «остановить фон» нет: в референсе её нет, и это фон, а не элемент
+ *  управления. Выключить поле можно через localStorage (cybra:field = 'off') —
+ *  так делают scripts/audit_layout.py и scripts/bench_field.py, которым
+ *  анимация мешает мерить вёрстку. */
 
 const STORE_KEY = 'cybra:field'
 
@@ -22,16 +26,8 @@ function initialEnabled() {
 }
 
 export default function AnimatedBackdrop() {
-  const [enabled, setEnabled] = useState(initialEnabled)
+  const [enabled] = useState(initialEnabled)
   const host = useRef(null)
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORE_KEY, enabled ? 'on' : 'off')
-    } catch {
-      /* приватный режим — не повод ломать страницу */
-    }
-  }, [enabled])
 
   useEffect(() => {
     if (!enabled || !host.current) return undefined
@@ -51,13 +47,6 @@ export default function AnimatedBackdrop() {
   return (
     <div className="backdrop" aria-hidden="true">
       {enabled ? <div ref={host} className="backdrop-field" /> : null}
-      <button
-        className="backdrop-toggle"
-        onClick={() => setEnabled((value) => !value)}
-        title={enabled ? 'Остановить фоновую анимацию' : 'Включить фоновую анимацию'}
-      >
-        {enabled ? 'остановить фон' : 'включить фон'}
-      </button>
     </div>
   )
 }
