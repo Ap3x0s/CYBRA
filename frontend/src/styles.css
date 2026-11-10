@@ -32,8 +32,9 @@
 
   --accent: #e2a33f;
   --accent-deep: #c4862a;
-  --accent-dim: rgba(226, 163, 63, 0.12);
+  --accent-dim: rgba(226, 163, 63, 0.12);   /* glows only, never a fill */
   --accent-ink: #1c1305;
+  --accent-surface: #362f25;                /* that 12% already flattened */
 
   --pass: #3ecf8e;
   --pass-dim: rgba(62, 207, 142, 0.12);
@@ -43,6 +44,14 @@
   --warn-dim: rgba(226, 163, 63, 0.12);
   --info: #6aa8d8;
   --info-dim: rgba(106, 168, 216, 0.12);
+
+  /* Box fills are opaque: the same 12% tint, but flattened onto the card
+     colour so nothing shows through. The -dim values stay for shadows and
+     focus rings, where transparency is the point. */
+  --pass-surface: #23342f;
+  --danger-surface: #38282b;
+  --warn-surface: #362f25;
+  --info-surface: #282f38;
 
   --paper: #f6f3ec;
   --paper-ink: #1f2328;
@@ -128,7 +137,7 @@ button { font-family: inherit; }
   width: 26px; height: 26px;
   display: grid; place-items: center;
   border-radius: 8px;
-  background: var(--accent-dim);
+  background: var(--accent-surface);
   border: 1px solid rgba(226, 163, 63, 0.32);
   color: var(--accent);
   font-weight: 700; font-size: 13px;
@@ -237,10 +246,10 @@ table.data tbody tr.clickable { cursor: pointer; }
   border: 1px solid transparent; white-space: nowrap;
 }
 .pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.pill.ok { color: var(--pass); background: var(--pass-dim); border-color: rgba(62, 207, 142, 0.3); }
-.pill.bad { color: var(--danger); background: var(--danger-dim); border-color: rgba(242, 105, 111, 0.3); }
-.pill.warn { color: var(--warn); background: var(--warn-dim); border-color: rgba(226, 163, 63, 0.3); }
-.pill.info { color: var(--info); background: var(--info-dim); border-color: rgba(106, 168, 216, 0.3); }
+.pill.ok { color: var(--pass); background: var(--pass-surface); border-color: rgba(62, 207, 142, 0.3); }
+.pill.bad { color: var(--danger); background: var(--danger-surface); border-color: rgba(242, 105, 111, 0.3); }
+.pill.warn { color: var(--warn); background: var(--warn-surface); border-color: rgba(226, 163, 63, 0.3); }
+.pill.info { color: var(--info); background: var(--info-surface); border-color: rgba(106, 168, 216, 0.3); }
 .pill.idle { color: var(--muted); background: var(--ink-600); border-color: var(--edge); }
 
 /* ---------------------------------------------------------------- buttons */
@@ -261,7 +270,7 @@ table.data tbody tr.clickable { cursor: pointer; }
 .btn.primary:hover:not(:disabled) { background: #efb65a; }
 .btn.ghost { background: transparent; border-color: var(--edge); color: var(--muted); }
 .btn.ghost:hover:not(:disabled) { color: var(--text); background: var(--ink-600); }
-.btn.danger { border-color: var(--danger); color: var(--danger); background: var(--danger-dim); }
+.btn.danger { border-color: var(--danger); color: var(--danger); background: var(--danger-surface); }
 .btn.small { min-height: 28px; padding: 0 10px; font-size: 12px; border-radius: 7px; }
 
 /* ---------------------------------------------------------------- forms */
@@ -353,16 +362,6 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
               rgba(0,0,0,0.55) 190px, #000 300px);
 }
 .backdrop-field[data-ready] { opacity: 1; }
-.backdrop-toggle {
-  position: fixed; right: 14px; bottom: 14px;
-  pointer-events: auto;
-  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--muted-dim); background: transparent;
-  border: 1px solid var(--edge-soft); border-radius: 6px;
-  padding: 4px 8px; cursor: pointer;
-  opacity: 0.5; transition: opacity 160ms var(--ease), color 160ms var(--ease);
-}
-.backdrop-toggle:hover { opacity: 1; color: var(--muted); }
 
 /* ---------------------------------------------------------------- popover */
 .popover {
@@ -558,8 +557,8 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   border: 1px solid var(--edge); background: var(--ink-700);
   font-size: 12.5px; color: var(--muted); margin-bottom: 16px;
 }
-.banner.warn { border-color: var(--warn); background: var(--warn-dim); color: #eddcb8; }
-.banner.bad { border-color: var(--danger); background: var(--danger-dim); color: #ffc9c9; }
+.banner.warn { border-color: var(--warn); background: var(--warn-surface); color: #eddcb8; }
+.banner.bad { border-color: var(--danger); background: var(--danger-surface); color: #ffc9c9; }
 
 .progress-track { height: 6px; border-radius: 3px; background: var(--ink-500); overflow: hidden; }
 .progress-fill {
