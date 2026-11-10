@@ -38,7 +38,8 @@ def main() -> int:
             page.wait_for_url(BASE + '/', timeout=15000)
 
         if off:
-            page.evaluate("() => document.querySelector('.backdrop-toggle')?.click()")
+            page.evaluate("() => localStorage.setItem('cybra:field', 'off')")
+            page.reload(wait_until='networkidle')
         page.wait_for_timeout(1500)
 
         started = time.time()

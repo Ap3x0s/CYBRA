@@ -58,7 +58,8 @@ def main() -> int:
             page.click('button[type=submit]')
             page.wait_for_url(BASE + '/', timeout=15000)
             if OFF:
-                page.evaluate("() => document.querySelector('.backdrop-toggle')?.click()")
+                page.evaluate("() => localStorage.setItem('cybra:field', 'off')")
+                page.reload(wait_until='networkidle')
             page.wait_for_timeout(2000)
             try:
                 print(label, page.evaluate(PROBE), flush=True)
