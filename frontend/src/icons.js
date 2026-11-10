@@ -11,6 +11,8 @@ export {
   CaretLeft,
   CaretRight,
   ChartLineUp,
+  SquaresFour,
+  ClockCounterClockwise,
   CheckCircle,
   Circuitry,
   ClipboardText,

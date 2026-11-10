@@ -1,15 +1,19 @@
 import { NavLink } from 'react-router-dom'
 import { can, useAuth } from '../auth'
 import {
-  ChartLineUp, Database, Gear, ListChecks, SignOut, Stack, UserCircle,
+  ChartLineUp, Circuitry, Database, Gear, ListChecks, SignOut, SquaresFour,
 } from '../icons'
 
+// The icons are read as a sentence: what you look at, what you run, what it
+// runs against, and how you measure. 'Модели' used to carry a line chart and
+// 'Метрики' a person — the chart belonged to the metrics screen, and the
+// person collided with the account avatar in the top bar.
 const ITEMS = [
-  { to: '/', label: 'Обзор', Icon: Stack, end: true },
+  { to: '/', label: 'Обзор', Icon: SquaresFour, end: true },
   { to: '/runs', label: 'Прогоны', Icon: ListChecks },
   { to: '/datasets', label: 'Датасеты', Icon: Database },
-  { to: '/models', label: 'Модели', Icon: ChartLineUp },
-  { to: '/metrics', label: 'Метрики', Icon: UserCircle },
+  { to: '/models', label: 'Модели', Icon: Circuitry },
+  { to: '/metrics', label: 'Метрики', Icon: ChartLineUp },
 ]
 
 const ADMIN_ITEMS = [{ to: '/settings', label: 'Настройки', Icon: Gear }]

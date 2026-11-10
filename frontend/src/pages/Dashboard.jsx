@@ -4,8 +4,8 @@ import { ErrorBox, Loading, Meter, StatusPill, formatRelative, pct } from '../co
 import { useApi } from '../hooks'
 import { useAuth } from '../auth'
 import {
-  ArrowsLeftRight, BracketsCurly, Bug, ChartLineUp, Cpu, Database, FileText,
-  Flask, Gauge, Play, Scales, ShieldCheck, Stack, TestTube, Warning,
+  ArrowsLeftRight, BracketsCurly, ClockCounterClockwise, Cpu, Flask, Gauge, Play,
+  ShieldWarning, Warning,
 } from '../icons'
 
 /** Aggregate numbers across recent runs. Deliberately not a single "safety score":
@@ -93,8 +93,10 @@ export default function Dashboard() {
     },
     {
       label: 'Шагов с находками', value: stats.findings, hint: 'модель × инструмент',
-      // A bug mark: what a finding actually is.
-      Icon: Bug,
+      // A shield with a crack, not a bug: 'находка' here is a security finding
+      // in a model's behaviour, and a bug glyph reads as a code defect — plus
+      // it is the only icon in the row that is a literal animal.
+      Icon: ShieldWarning,
     },
   ]
 
@@ -213,7 +215,7 @@ export default function Dashboard() {
               { to: '/runs/new', Icon: Play, title: 'Запустить прогон', sub: 'выбрать модели и наборы' },
               { to: '/models', Icon: ArrowsLeftRight, title: 'Сравнить модели', sub: 'эндпоинты и группы' },
               { to: '/datasets', Icon: BracketsCurly, title: 'Править датасеты', sub: 'кейсы и версии' },
-              { to: '/runs', Icon: ChartLineUp, title: 'История прогонов', sub: 'все результаты' },
+              { to: '/runs', Icon: ClockCounterClockwise, title: 'История прогонов', sub: 'все результаты' },
             ].map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
