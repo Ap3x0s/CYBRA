@@ -13,10 +13,10 @@
   --ink-900: #141416;
   --ink-800: #18181c;
   --ink-750: #1b1b1f;
-  --ink-700: #1f1f22;
-  --ink-650: #1d1d21;
-  --ink-600: #232326;
-  --ink-500: #2b2b30;
+  --ink-700: #1f1f22;   /* --card референса: коробки */
+  --ink-650: #1c1c20;
+  --ink-600: #2a2a2e;   /* подложка иконок = серый сайдбара */
+  --ink-500: #33333a;
   --edge: #2f2f35;
   --edge-soft: #26262b;
   --text: #f2f2f0;
@@ -80,29 +80,12 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    /* halftone dot screen */
-    radial-gradient(rgba(255, 255, 255, 0.05) 0.5px, transparent 0.6px) 0 0 / 3px 3px,
-    /* one soft sweep of warm light from the top-left */
-    radial-gradient(1200px 620px at 8% -12%, rgba(226, 163, 63, 0.06), transparent 68%),
-    /* a cool counter-light on the opposite corner */
-    radial-gradient(900px 520px at 100% 0%, rgba(106, 168, 216, 0.04), transparent 70%);
-  z-index: 0;
-}
-
-/* Concentric ticks around the same origin as the sweep: a radar face seen at
-   rest. Masked to the top-left so it fades before the content starts. */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-radial-gradient(
-    circle at 8% -12%,
-    transparent 0 96px,
-    rgba(226, 163, 63, 0.03) 96px 97px
-  );
-  mask-image: radial-gradient(1000px 680px at 8% -12%, #000, transparent 74%);
+  /* The halftone dot screen and the two coloured light sweeps that used to
+     live here are gone: they were invented for the old console look and the
+     reference has none of them. What is left is the plain page colour, so the
+     ASCII field is the only texture on screen. The dot grid in particular read
+     as a second, competing pattern over the field. */
+  background: none;
   z-index: 0;
 }
 
@@ -354,14 +337,20 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .backdrop {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
 }
-/* Same three rules as the reference's .texture: full-bleed, contained paint,
-   and a 1.2s fade-in once a first frame exists (field.js sets data-ready). */
+/* Same rules as the reference's .texture: full-bleed, contained paint, and a
+   1.2s fade-in once a first frame exists (field.js sets data-ready).
+   The mask dims the field towards the top of the viewport, where page titles
+   sit: the glyphs are dense enough to run through the heading and make it
+   hard to read, and the reference never has text on top of its field. The
+   field itself is untouched — only how much of it the page shows. */
 .backdrop-field {
   position: absolute; inset: 0;
   contain: layout paint;
   color: var(--field);
   opacity: 0;
   transition: opacity 1.2s ease-out;
+  mask-image: linear-gradient(180deg, transparent 0, rgba(0,0,0,0.22) 90px,
+              rgba(0,0,0,0.55) 190px, #000 300px);
 }
 .backdrop-field[data-ready] { opacity: 1; }
 .backdrop-toggle {
@@ -410,8 +399,11 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
   display: flex; align-items: center; gap: 16px;
   padding: 14px 30px;
   border-bottom: 1px solid var(--edge-soft);
-  background: rgba(8, 9, 11, 0.72);
-  backdrop-filter: blur(10px);
+  /* Same surface as the sidebar: the reference treats the chrome as one grey
+     shell around the content, not two differently coloured strips. It used to
+     be rgba(8,9,11,.72) — a leftover from the old black palette — which made
+     the top strip darker than the left one. */
+  background: var(--surface-sidebar);
   position: sticky; top: 0; z-index: 20;
 }
 .search-box {
@@ -452,13 +444,13 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .kpi {
   position: relative; overflow: hidden;
   display: flex; flex-direction: column;
-  /* Slightly translucent so the animated backdrop reads through the surface:
-     a fully opaque card would hide it, and 76% of the screen is card. */
+  /* Solid, like the reference's .tile: no border, the shadow does the lifting
+     so the ASCII field cannot show through the box and read as transparency. */
   background: var(--ink-700);
-  border: 1px solid var(--edge-soft);
   border-radius: var(--radius-lg);
   padding: 16px 18px 18px;
   min-height: 118px;
+  box-shadow: var(--shadow-box);
 }
 .kpi-head {
   display: flex; align-items: center; gap: 8px;
@@ -467,7 +459,9 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .kpi-icon {
   width: 26px; height: 26px; border-radius: 7px;
   display: grid; place-items: center;
-  background: var(--ink-600); border: 1px solid var(--edge);
+  /* The icon chip sits on top of a card, so it cannot use the card's own
+     colour — it needs a step up from it to exist at all. */
+  background: var(--ink-600);
   color: var(--accent);
 }
 .kpi-value {
@@ -499,8 +493,10 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .quick-item .qi-icon {
   width: 32px; height: 32px; flex: 0 0 32px;
   display: grid; place-items: center;
-  border-radius: 8px; border: 1px solid var(--edge);
-  background: var(--ink-700); color: var(--accent);
+  border-radius: 8px;
+  /* Same reasoning as .kpi-icon: it is drawn ON a card, so it must be lighter
+     than the card, not equal to it. */
+  background: var(--ink-600); color: var(--accent);
 }
 .quick-item .qi-title { font-size: 12.5px; font-weight: 500; }
 .quick-item .qi-sub { color: var(--muted-dim); font-size: 11px; }
