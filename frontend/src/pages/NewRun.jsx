@@ -129,7 +129,7 @@ export default function NewRun() {
               <Field label={t("Модели для проверки")}>
                 {targetList.length === 0 ? (
                   <Banner tone="warn">
-                    Моделей нет. Сначала добавьте эндпоинт и модель в разделе{' '}
+                    {t('Моделей нет. Сначала добавьте эндпоинт и модель в разделе')}{' '}
                     <a href="/models">{t("Модели")}</a>.
                   </Banner>
                 ) : (
@@ -166,7 +166,7 @@ export default function NewRun() {
                 )}
               </Field>
 
-              <Field label={t("Модель-судья")} help="Оценивает смысловые критерии. Лучше отдельная от проверяемых.">
+              <Field label={t("Модель-судья")} help={t('Оценивает смысловые критерии. Лучше отдельная от проверяемых.')}>
                 <select
                   className="select"
                   value={judgeId || ''}
@@ -214,7 +214,7 @@ export default function NewRun() {
                           </span>
                         ) : null}
                         <div className="dim" style={{ fontSize: 11 }}>
-                          {tool.note}
+                          {t(tool.note)}
                         </div>
                       </span>
                     </label>
@@ -245,7 +245,7 @@ export default function NewRun() {
               </div>
 
               <div className="row">
-                <Field label="Seed" help="Одинаковая выборка для всех моделей прогона.">
+                <Field label="Seed" help={t('Одинаковая выборка для всех моделей прогона.')}>
                   <input
                     className="input"
                     type="number"
@@ -275,7 +275,7 @@ export default function NewRun() {
                       />
                       <span>
                         {version.name} <span className="dim">v{version.version}</span>{' '}
-                        <span className="dim">· {version.case_count} кейсов · {version.origin}</span>
+                        <span className="dim">· {version.case_count} {t('кейсов')} · {version.origin}</span>
                       </span>
                     </label>
                   ))}
@@ -288,14 +288,12 @@ export default function NewRun() {
             <>
               {engineMode === 'mock' ? (
                 <Banner tone="warn">
-                  {t("Выбран режим")} <strong>mock</strong>. Результаты синтетические: они проверяют
-                  работу конвейера, но ничего не говорят о безопасности модели.
+                  {t('Выбран режим')} <strong>mock</strong>. {t('Результаты синтетические: они проверяют работу конвейера, но ничего не говорят о безопасности модели.')}
                 </Banner>
               ) : null}
               {missingTools.length ? (
                 <Banner tone="bad">
-                  Не установлены: {missingTools.join(', ')}. Эти шаги завершатся ошибкой, отчёт
-                  будет помечен как неполный.
+                  {t('Не установлены:')} {missingTools.join(', ')}. {t('Эти шаги завершатся ошибкой, отчёт будет помечен как неполный.')}
                 </Banner>
               ) : null}
 
@@ -303,7 +301,7 @@ export default function NewRun() {
                 <tbody>
                   <tr>
                     <td className="muted">{t("Название")}</td>
-                    <td>{label || '— (сгенерируется)'}</td>
+                    <td>{label || t('— (сгенерируется)')}</td>
                   </tr>
                   <tr>
                     <td className="muted">{t("Модели")}</td>
@@ -329,7 +327,7 @@ export default function NewRun() {
                               return v ? `${v.name} v${v.version}` : id
                             })
                             .join(', ')
-                        : 'из комплекта'}
+                        : t('из комплекта')}
                     </td>
                   </tr>
                   <tr>
@@ -361,7 +359,7 @@ export default function NewRun() {
               </button>
             ) : (
               <button className="btn primary" onClick={submit} disabled={busy || selectedTargets.length === 0}>
-                {busy ? 'Запуск…' : 'Запустить прогон'}
+                {busy ? t('Запуск…') : t('Запустить прогон')}
               </button>
             )}
           </div>

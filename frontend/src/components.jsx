@@ -78,8 +78,9 @@ export function Empty({ children }) {
   return <div className="empty">{children}</div>
 }
 
-export function Loading({ label = 'Загрузка…' }) {
-  return <div className="empty">{label}</div>
+export function Loading({ label }) {
+  const { t } = useI18n()
+  return <div className="empty">{label ? t(label) : t('Загрузка…')}</div>
 }
 
 export function ErrorBox({ error }) {
