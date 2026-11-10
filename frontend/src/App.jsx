@@ -7,7 +7,6 @@ import Datasets from './pages/Datasets'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Metrics from './pages/Metrics'
-import SkeletonPreview from './pages/SkeletonPreview'  // TEMP: демо скелетонов
 import Models from './pages/Models'
 import NewRun from './pages/NewRun'
 import RunDetail from './pages/RunDetail'
@@ -70,8 +69,6 @@ export default function App() {
                     <Route path="/datasets" element={<Datasets />} />
                     <Route path="/models" element={<Models />} />
                     <Route path="/metrics" element={<Metrics />} />
-                    {/* TEMP: демонстрация скелетонов, удалить после просмотра */}
-                    <Route path="/_skeletons" element={<SkeletonPreview />} />
                     <Route
                       path="/settings"
                       element={
