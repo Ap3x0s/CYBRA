@@ -8,6 +8,7 @@ export {
   Bell,
   BracketsCurly,
   Bug,
+  CaretDown,
   CaretLeft,
   CaretRight,
   ChartLineUp,

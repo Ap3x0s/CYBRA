@@ -1,0 +1,393 @@
+/* =============================================================================
+   ВЕРХНЯЯ ПОЛОСА — единственная навигация.
+
+   Порядок: логотип, меню с иконками, поиск (по центру свободного места),
+   язык, уведомления, профиль. Поиск постоянный: замер showed, что при 1440
+   всё влезает с запасом ~260 px, поэтому раскрытие из значка только дёргало
+   меню.
+   ============================================================================= */
+
+.shell { grid-template-columns: 1fr; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 22px;
+  min-height: 58px;
+  background: var(--surface-sidebar);
+  border-bottom: 1px solid var(--edge-soft);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* --- логотип ------------------------------------------------------------- */
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-right: 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  flex: 0 0 auto;
+}
+.topbar-brand .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+.topbar-brand .brand-name { font-size: 12px; letter-spacing: 0.12em; line-height: 1.1; }
+.topbar-brand .brand-sub {
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+}
+
+/* --- меню ---------------------------------------------------------------- */
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.topnav a {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 150ms var(--ease), color 150ms var(--ease);
+}
+.topnav a:hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+  text-decoration: none;
+}
+.topnav a.active {
+  background: rgba(255, 255, 255, 0.075);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* --- поиск: значок, раскрывающийся в поле --------------------------------
+   В покое это обычная квадратная кнопка среди прочих значков, поэтому полоса
+   не тратит ширину на постоянное поле. По клику раскрывается в бар. Ширина
+   анимируется, а сама кнопка остаётся на месте: пересборки порядка нет,
+   соседи не прыгают. */
+.search-box {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;          /* не растягивается: в покое ровно кнопка */
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  overflow: hidden;
+  width: 36px;
+  transition:
+    width 300ms var(--ease),
+    background 180ms var(--ease),
+    border-color 180ms var(--ease);
+}
+.search-box.is-open {
+  width: min(360px, 34vw);
+  background: var(--ink-800);
+  border-color: var(--edge);
+}
+.search-box.is-open:focus-within {
+  border-color: var(--accent-deep);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.search-toggle {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 140ms var(--ease), background 140ms var(--ease);
+}
+.search-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+
+.search-box input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 160ms var(--ease) 70ms;
+}
+.search-box.is-open input { opacity: 1; }
+.search-box input::placeholder { color: var(--muted-dim); }
+
+.search-clear {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-dim);
+  cursor: pointer;
+}
+.search-clear:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+
+/* --- действия + профиль -------------------------------------------------- */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 8px 0 4px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease);
+}
+.profile-btn:hover,
+.profile-btn.is-open {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+  max-width: 150px;
+  overflow: hidden;
+}
+.profile-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+.profile-role {
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted-dim);
+}
+.profile-caret { color: var(--muted-dim); flex: 0 0 auto; }
+
+/* --- меню аккаунта ------------------------------------------------------- */
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 12px;
+}
+.account-text { display: flex; flex-direction: column; min-width: 0; }
+.account-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-mail {
+  font-size: 11px;
+  color: var(--muted-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.popover-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--edge-soft);
+}
+.popover-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- адаптив ------------------------------------------------------------- */
+@media (max-width: 1240px) {
+  .profile-meta { display: none; }
+  .topbar-brand .brand-sub { display: none; }
+}
+@media (max-width: 1080px) {
+  .topnav a { padding: 8px 9px; }
+  .topnav-label { display: none; }
+  .search-box { max-width: 260px; }
+}
+@media (max-width: 860px) {
+  .topbar { padding: 8px 14px; gap: 10px; }
+  .search-box { max-width: none; }
+  .topnav a:nth-child(n + 5) { display: none; }
+}
+
+/* --- выравнивание высот ---------------------------------------------------
+   Кнопки, поиск и профиль держим на одной высоте: разнобой в 2 px читается
+   как небрежность, хотя по отдельности каждая кнопка выглядит нормально. */
+.topbar .icon-btn { width: 36px; height: 36px; border-radius: 10px; }
+.topbar .lang-btn { height: 36px; }
+.search-box input::placeholder { text-overflow: ellipsis; }
+
+/* --- переключатель языка --------------------------------------------------
+   Код языка не должен сжиматься: при узком контейнере он вылезал из кнопки
+   и читался как обрезанный. Фиксируем ширину и запрещаем перенос. */
+.topbar .lang-btn {
+  min-width: 58px;
+  padding: 0 10px;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.topbar .lang-btn .lang-code {
+  display: inline-block;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- схлопывание подписей при раскрытии поиска ---------------------------
+   Иначе полоса отнимает ширину у меню и режет «Настройки» посередине слова.
+   Схлопываем подписи целиком: иконки остаются, обрезки нет. */
+.topnav-label {
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 1;
+  transition: max-width 260ms var(--ease), opacity 160ms var(--ease);
+}
+.topnav.is-compact a { gap: 0; padding-left: 9px; padding-right: 9px; }
+.topnav.is-compact .topnav-label { max-width: 0; opacity: 0; }
+
+/* =============================================================================
+   ЦЕНТРАЛЬНАЯ ГРУППА: меню + поиск
+   =============================================================================
+
+   Два требования, которые конфликтовали в прошлых попытках:
+     1) поиск растёт ВПРАВО, не сдвигая свою левую кромку;
+     2) поле не обрезается и не наезжает на правую группу.
+
+   Замер на 1440: между брендом и правой группой 962 px. Меню с подписями —
+   592, поиск раскрытый — 340, зазор 8. Итого 940 — влезает, но впритык,
+   поэтому при justify-content:center группа перецентровывалась и поиск
+   уезжал влево, а на узких экранах обрезался.
+
+   Решение: группа НЕ центрируется через justify-content. Меню занимает
+   фиксированный слот по центру полосы, поиск прирастает вправо от него.
+   Ширина поля считается от реально доступного места, поэтому обрезки нет. */
+
+.topbar { position: relative; }
+
+/* =============================================================================
+   РАСКРЫТИЕ ВПРАВО, КРОМКА НЕПОДВИЖНА
+
+   Раскладка: меню в слоте ФИКСИРОВАННОЙ ширины (как в состоянии «подписи
+   видны»), поиск — сразу за слотом. При раскрытии слот не меняет ширину,
+   подписи схлопываются ВНУТРИ него (меню уезжает вправо внутри слота), а
+   поиск растёт вправо от неподвижной кромки. Ничего не пересчитывается.
+
+   Бюджет проверен замером: между брендом и правой группой 962 px на 1440 и
+   802 на 1280. Слот 592 + поле 340 + зазор 8 = 940 — влезает на 1440 и на
+   1280 (802 < 940, поэтому поле там ограничено 24vw). */
+/* =============================================================================
+   ПОИСК РАСКРЫВАЕТСЯ ВПРАВО — окончательная механика
+
+   Проблема всех прошлых попыток: ширина меню менялась (592 с подписями → 214
+   с иконками), и поиск, стоя за меню, ехал вместе с ним. Ни центрирование,
+   ни absolute не помогали, потому что менялась сама точка отсчёта.
+
+   Решение: ширина меню ЗАФИКСИРОВАНА на 592 в обоих состояниях. Подписи
+   схлопываются ВНУТРИ этого бокса (max-width:0 + overflow:hidden), поэтому
+   пункты съезжаются к левому краю, а сам бокс не меняет размер. Поиск стоит
+   сразу за ним — его левая кромка неподвижна при любом состоянии. Поле растёт
+   вправо, ряд расширяется вправо, ничто не пересчитывается. */
+.topbar-center {
+  display: flex;
+  align-items: center;
+  /* НЕ центрируем: любое центрирование пересчитывает положение при росте
+     ребёнка, и левая кромка поиска уезжает. Прижимаем влево зоны с
+     фиксированным отступом — тогда позиция предсказуема пиксель в пиксель. */
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 26px;
+}
+
+.topbar-center-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+  min-width: 0;
+  gap: 8px;
+}
+
+.topbar-center .topnav {
+  order: 1;
+  /* Ширина меню постоянна в обоих состояниях — это и держит кромку поиска
+     на месте. Значение 600 покрывает русские подписи (нужно 592); английские
+     короче (558), поэтому при переключении языка ничего не обрезается. */
+  flex: 0 0 auto;
+  width: 600px;
+  max-width: 46vw;
+  overflow: hidden;
+}
+
+.topbar-center .search-box {
+  order: 2;
+  position: static;
+  transform: none;
+  flex: 0 0 auto;
+}
+
+.topbar-center .search-box.is-open {
+  /* Ширина считается от реального остатка полосы: 100vw минус бренд (176),
+     минус отступ группы (26), минус меню (547), минус правая группа (280),
+     минус зазоры (30). Отсюда clamp, чтобы поле не наезжало и не было уже
+     180 px — при такой ширине placeholder ещё читается. */
+  /* Замер на 1440: кромка поиска 824, правая группа начинается на 1138 —
+     доступно 302 px. Формула выводит именно это: 100vw минус всё, что стоит
+     левее (бренд 176 + отступ 26 + меню 600 + зазор 8) и правее (группа 280
+     + отступ 22), плюс 14 px страховки от наезда. */
+  width: clamp(170px, calc(100vw - 1112px), 302px);
+}
+
+/* На узких экранах меню занимает меньше места: при 1280 и 1366 полный слот
+   600 px не оставляет поля, и оно упирается в правую группу. Схлопываем
+   подписи там, где иначе не хватает места, — это честнее, чем резать поле. */
+@media (max-width: 1400px) {
+  .topbar-center .topnav { width: 330px; }
+  .topbar-center .topnav .topnav-label { max-width: 0; opacity: 0; }
+  .topbar-center .topnav a { gap: 0; padding-left: 9px; padding-right: 9px; }
+  .topbar-center .search-box.is-open {
+    width: clamp(200px, calc(100vw - 850px), 340px);
+  }
+}

@@ -13,7 +13,6 @@ import RunDetail from './pages/RunDetail'
 import RunReport from './pages/RunReport'
 import Runs from './pages/Runs'
 import Settings from './pages/Settings'
-import Sidebar from './pages/Sidebar'
 import Topbar from './pages/Topbar'
 
 function Protected({ children }) {
@@ -57,7 +56,6 @@ export default function App() {
           <Protected>
             <AnimatedBackdrop />
             <div className="shell">
-              <Sidebar />
               <div style={{ minWidth: 0 }}>
                 <Topbar query={query} onQuery={setQuery} />
                 <main className="main">
