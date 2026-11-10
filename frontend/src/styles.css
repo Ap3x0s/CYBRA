@@ -26,6 +26,10 @@
   /* Sidebar takes the grey of the reference's big logo disc (#2a2a2e),
      the cards take its tile colour (#1f1f22). */
   --surface-sidebar: #2a2a2e;
+  /* The shell is not a slab: the column has no fill of its own, so the field
+     runs the full width. Only the controls sit on a surface. */
+  --pill-glass: rgba(255, 255, 255, 0.055);
+  --pill-glass-hover: rgba(255, 255, 255, 0.085);
   --field: #a8a69e;
   --shadow-box: 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 14px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.045);
@@ -126,15 +130,10 @@ button { font-family: inherit; }
 }
 
 .sidebar {
-  /* No divider between the two bars: they are one grey shell, and the line ran
-     along the seam between the sidebar and the top bar. Surfaces differ from
-     the content by colour alone. */
   padding: 22px 14px;
   display: flex;
   flex-direction: column;
   gap: 26px;
-  background: var(--surface-sidebar);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   position: sticky;
   top: 0;
   height: 100vh;
@@ -175,7 +174,10 @@ button { font-family: inherit; }
   color: var(--muted-dim); padding: 0 10px; margin-bottom: 6px;
 }
 
-.main { padding: 26px 30px 60px; max-width: 1420px; }
+/* Content is centred: equal air left and right. Before, the column was
+   pinned to the left edge with the max-width doing the job on wide screens,
+   and on 1440 that left a 20px lip on the right. */
+.main { padding: 26px 30px 60px; max-width: 1480px; margin: 0 auto; width: 100%; }
 
 .page-head {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -405,12 +407,10 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .topbar {
   display: flex; align-items: center; gap: 16px;
   padding: 14px 30px;
-  border-bottom: 1px solid var(--edge-soft);
-  /* Same surface as the sidebar: the reference treats the chrome as one grey
-     shell around the content, not two differently coloured strips. It used to
-     be rgba(8,9,11,.72) — a leftover from the old black palette — which made
-     the top strip darker than the left one. */
+  /* Opaque on purpose: the top strip is a control surface, not a window.
+     Same colour it had before the chrome experiment. */
   background: var(--surface-sidebar);
+  border-bottom: 1px solid var(--edge-soft);
   position: sticky; top: 0; z-index: 20;
 }
 .search-box {
@@ -664,6 +664,8 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
 .skel-tr-head { border-bottom: 1px solid var(--edge-soft); padding: 13px 18px; }
 .skel-tr + .skel-tr { border-top: 1px solid var(--edge-soft); }
 .skel-block { display: grid; gap: 10px; padding: 4px 0; }
+
+
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; align-items: center; overflow-x: auto; }

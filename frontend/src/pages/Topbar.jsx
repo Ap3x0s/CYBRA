@@ -1,39 +1,51 @@
+/** Верхняя полоса: логотип, меню с поиском, уведомления, профиль.
+ *
+ *  Структура слева направо: бренд (прижат к левому краю), центральная группа
+ *  «меню + поиск» (центрируется по полосе), правая группа «язык, колокольчик,
+ *  профиль».
+ *
+ *  Поиск стоит справа от меню и раскрывается ВПРАВО: его левая кромка не
+ *  двигается, поэтому это читается как выдвижение, а не как прыжок. Когда он
+ *  раскрыт, подписи меню схлопываются в иконки, чтобы полоса не отнимала у
+ *  них ширину и не резала слова.
+ *
+ *  Каждый элемент что-то делает: поиск фильтрует прогоны (⌘K наводит фокус),
+ *  колокольчик показывает незавершённые прогоны, профиль открывает меню. */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth, can } from '../auth'
 import { useApi } from '../hooks'
-import { ArrowSquareOut, Bell, MagnifyingGlass, SignOut, UserCircle, X } from '../icons'
-import LanguageSwitcher from '../components/LanguageSwitcher'
 import { useI18n } from '../i18n-context'
+import LanguageSwitcher from '../components/LanguageSwitcher'
+import TopNav from '../components/TopNav'
+import {
+  ArrowSquareOut, Bell, CaretDown, MagnifyingGlass, SignOut, UserCircle, X,
+} from '../icons'
 
-/** Sticky top bar: search, notifications, account menu.
- *
- *  Every control here does something. A decorative bell and a dead "⌘K" badge
- *  are worse than no control at all, so each one is wired:
- *    - the search field is focused by ⌘K / Ctrl+K and filters the runs list;
- *    - the bell opens a list of runs that ended without COMPLETE;
- *    - the avatar opens account actions. */
 export default function Topbar({ query, onQuery }) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const runs = useApi(() => api.runs(50))
   const { t } = useI18n()
   const [panel, setPanel] = useState(null) // 'bell' | 'account' | null
+  const [searchOpen, setSearchOpen] = useState(false)
   const inputRef = useRef(null)
   const wrapRef = useRef(null)
 
   const initials = (user?.display_name || user?.email || 'AD').slice(0, 2).toUpperCase()
+  const name = user?.display_name || user?.email || ''
 
-  // ⌘K / Ctrl+K focuses the search field, which is what the badge promises.
   useEffect(() => {
     function onKey(event) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        inputRef.current?.focus()
+        setSearchOpen(true)
+        setTimeout(() => inputRef.current?.focus(), 190)
       }
       if (event.key === 'Escape') {
         setPanel(null)
+        setSearchOpen(false)
         inputRef.current?.blur()
       }
     }
@@ -41,10 +53,12 @@ export default function Topbar({ query, onQuery }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Close popovers on an outside click.
   useEffect(() => {
     function onDown(event) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) setPanel(null)
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
+        setPanel(null)
+        setSearchOpen(false)
+      }
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
@@ -58,28 +72,54 @@ export default function Topbar({ query, onQuery }) {
     if (event.key === 'Enter' && query) navigate('/runs')
   }
 
+  function toggleSearch() {
+    if (searchOpen) {
+      setSearchOpen(false)
+    } else {
+      setSearchOpen(true)
+      setTimeout(() => inputRef.current?.focus(), 190)
+    }
+  }
+
   return (
     <div className="topbar" ref={wrapRef}>
-      <div className="search-box">
-        <MagnifyingGlass size={15} weight="bold" />
-        <input
-          ref={inputRef}
-          placeholder={t('Поиск по прогонам, моделям, инструментам…')}
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          onKeyDown={submit}
-          aria-label={t("Поиск")}
-        />
-        {query ? (
+      <div className="topbar-brand">
+        <div className="brand-mark">CY</div>
+        <div>
+          <div className="brand-name">CYBRA</div>
+          <div className="brand-sub">security console</div>
+        </div>
+      </div>
+
+      <div className="topbar-center">
+        <div className="topbar-center-inner">
+          <TopNav compact={searchOpen} />
+
+        <div className={`search-box${searchOpen ? ' is-open' : ''}`}>
           <button
-            className="icon-btn"
-            style={{ width: 22, height: 22, border: 0, background: 'transparent' }}
-            onClick={() => onQuery('')}
-            aria-label={t("Очистить")}
+            className="search-toggle"
+            onClick={toggleSearch}
+            aria-label={t('Поиск')}
+            aria-expanded={searchOpen}
           >
-            <X size={13} weight="bold" />
+            <MagnifyingGlass size={15} weight="bold" />
           </button>
-        ) : null}
+          <input
+            ref={inputRef}
+            placeholder={t('Поиск по прогонам, моделям, инструментам…')}
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+            onKeyDown={submit}
+            aria-label={t('Поиск')}
+            tabIndex={searchOpen ? 0 : -1}
+          />
+          {searchOpen && query ? (
+            <button className="search-clear" onClick={() => onQuery('')} aria-label={t('Очистить')}>
+              <X size={12} weight="bold" />
+            </button>
+          ) : null}
+        </div>
+        </div>
       </div>
 
       <div className="topbar-actions">
@@ -103,9 +143,7 @@ export default function Topbar({ query, onQuery }) {
                 <span className="dim mono-sm">{alerts.length}</span>
               </div>
               {alerts.length === 0 ? (
-                <div className="popover-empty">
-                  {t('Нет незавершённых прогонов')}.
-                </div>
+                <div className="popover-empty">{t('Нет незавершённых прогонов')}.</div>
               ) : (
                 alerts.slice(0, 6).map((run) => (
                   <button
@@ -129,23 +167,29 @@ export default function Topbar({ query, onQuery }) {
 
         <div style={{ position: 'relative' }}>
           <button
-            className="avatar"
-            aria-label={t("Аккаунт")}
+            className={`profile-btn${panel === 'account' ? ' is-open' : ''}`}
+            aria-label={t('Аккаунт')}
             aria-expanded={panel === 'account'}
             onClick={() => setPanel(panel === 'account' ? null : 'account')}
           >
-            {initials}
+            <span className="avatar">{initials}</span>
+            <span className="profile-meta">
+              <span className="profile-name">{name}</span>
+              <span className="profile-role">{user?.role}</span>
+            </span>
+            <CaretDown size={11} weight="bold" className="profile-caret" />
           </button>
 
           {panel === 'account' ? (
-            <div className="popover" role="menu" style={{ minWidth: 240 }}>
-              <div className="popover-head" style={{ display: 'block' }}>
-                <div>{t(user?.display_name) || t('Администратор')}</div>
-                <div className="dim mono-sm" style={{ fontWeight: 400 }}>{user?.email}</div>
-                <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-                  {t('роль:')} {user?.role}
-                </div>
+            <div className="popover" role="menu" style={{ minWidth: 264 }}>
+              <div className="account-head">
+                <span className="avatar avatar-lg">{initials}</span>
+                <span className="account-text">
+                  <span className="account-name">{name}</span>
+                  <span className="account-mail">{user?.email}</span>
+                </span>
               </div>
+              <div className="popover-sep" />
               <button
                 className="popover-item"
                 onClick={() => {
@@ -153,9 +197,9 @@ export default function Topbar({ query, onQuery }) {
                   navigate('/settings')
                 }}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="popover-row">
                   <UserCircle size={14} weight="bold" />
-                  {t('Настройки')} и пароль
+                  {t('Настройки')} и {t('пароль')}
                 </span>
               </button>
               {can(user, 'operator') ? (
@@ -166,14 +210,15 @@ export default function Topbar({ query, onQuery }) {
                     navigate('/runs/new')
                   }}
                 >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="popover-row">
                     <ArrowSquareOut size={14} weight="bold" />
                     {t('Новый прогон')}
                   </span>
                 </button>
               ) : null}
+              <div className="popover-sep" />
               <button className="popover-item" onClick={logout}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="popover-row">
                   <SignOut size={14} weight="bold" />
                   {t('Выйти')}
                 </span>
