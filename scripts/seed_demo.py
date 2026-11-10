@@ -28,7 +28,9 @@ def call(method, path, payload=None, csrf=''):
             raw = response.read().decode()
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as error:
-        raise SystemExit(f'{method} {path}: HTTP {error.code} {error.read(800).decode()}')
+        raise SystemExit(
+            f'{method} {path}: HTTP {error.code} {error.read(800).decode()}'
+        ) from error
 
 
 def main():
