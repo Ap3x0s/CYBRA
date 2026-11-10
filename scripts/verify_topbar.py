@@ -6,8 +6,6 @@ avatar open popovers, and every popover item navigates somewhere real.
 """
 from __future__ import annotations
 
-import sys
-
 from playwright.sync_api import sync_playwright
 
 BASE = 'http://127.0.0.1:8000'
