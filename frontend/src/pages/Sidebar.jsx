@@ -58,7 +58,7 @@ export default function Sidebar() {
 
       <div style={{ marginTop: 'auto', padding: '0 6px' }}>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>
-          {user?.display_name || user?.email}
+          {t(user?.display_name || user?.email || '')}
         </div>
         <div
           className="dim"

@@ -312,10 +312,10 @@ export default function Dashboard() {
         <div className="grid grid-3">
           {(catalog.data || []).slice(0, 3).map((metric) => (
             <div key={metric.id} style={{ borderLeft: '2px solid var(--accent)', paddingLeft: 12 }}>
-              <div style={{ fontSize: 12.5, marginBottom: 3 }}>{metric.label}</div>
-              <div className="dim mono-sm" style={{ marginBottom: 5 }}>{metric.formula}</div>
+              <div style={{ fontSize: 12.5, marginBottom: 3 }}>{t(metric.label)}</div>
+              <div className="dim mono-sm" style={{ marginBottom: 5 }}>{t(metric.formula)}</div>
               <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.55 }}>
-                {metric.caveat}
+                {t(metric.caveat)}
               </div>
             </div>
           ))}

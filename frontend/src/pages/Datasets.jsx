@@ -39,7 +39,7 @@ export default function Datasets() {
     setError(null)
     try {
       const created = await api.seedDataset(name)
-      setNotice(`Создан датасет ${created.name} v${created.version}`)
+      setNotice(t('Создан датасет {name} v{version}', { name: created.name, version: created.version }))
       versions.reload()
     } catch (problem) {
       setError(problem)
@@ -50,7 +50,7 @@ export default function Datasets() {
     setError(null)
     try {
       const created = await api.updateCase(selected, editing.id, form)
-      setNotice(`Правка сохранилась как новая версия v${created.version} (родитель v${created.parent_id})`)
+      setNotice(t('Правка сохранилась как новая версия v{version} (родитель v{parent})', { version: created.version, parent: created.parent_id }))
       setEditing(null)
       versions.reload()
       setSelected(created.id)
@@ -227,7 +227,7 @@ function CaseEditor({ item, onCancel, onSave }) {
   return (
     <div className="card" style={{ marginTop: 16, background: 'var(--ink-800)' }}>
       <div className="card-head">
-        <h3>Правка кейса {item.case_id}</h3>
+        <h3>{t('Правка кейса')} {item.case_id}</h3>
         <span className="dim" style={{ fontSize: 11 }}>
           {t("сохранится как новая версия")}
         </span>

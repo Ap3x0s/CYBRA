@@ -136,7 +136,7 @@ export default function Metrics() {
             <select className="select" value={metric} onChange={(event) => setMetric(event.target.value)}>
               {(catalog.data || []).map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.label}
+                  {t(item.label)}
                 </option>
               ))}
             </select>
@@ -168,11 +168,11 @@ export default function Metrics() {
         {definition ? (
           <div className="banner" style={{ marginTop: 16, marginBottom: 0, display: 'block' }}>
             <div style={{ marginBottom: 4 }}>
-              <strong>{definition.label}</strong>{' '}
-              <span className="mono-sm dim">{definition.formula}</span>
+              <strong>{t(definition.label)}</strong>{' '}
+              <span className="mono-sm dim">{t(definition.formula)}</span>
             </div>
-            <div>{definition.description}</div>
-            <div style={{ color: 'var(--warn)', marginTop: 6 }}>⚠ {definition.caveat}</div>
+            <div>{t(definition.description)}</div>
+            <div style={{ color: 'var(--warn)', marginTop: 6 }}>⚠ {t(definition.caveat)}</div>
           </div>
         ) : null}
       </div>
@@ -238,10 +238,10 @@ export default function Metrics() {
           <tbody>
             {(catalog.data || []).map((item) => (
               <tr key={item.id}>
-                <td style={{ whiteSpace: 'nowrap' }}>{item.label}</td>
-                <td className="mono-sm dim">{item.formula}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{t(item.label)}</td>
+                <td className="mono-sm dim">{t(item.formula)}</td>
                 <td className="muted" style={{ fontSize: 12 }}>
-                  {item.caveat}
+                  {t(item.caveat)}
                 </td>
               </tr>
             ))}

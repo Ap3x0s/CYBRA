@@ -90,7 +90,7 @@ export default function RunDetail() {
           <p>
             <StatusPill status={data.status} />{' '}
             <span className="muted" style={{ marginLeft: 8 }}>
-              начат {formatDate(data.started_at)} · завершён {formatDate(data.finished_at)}
+              {t('начат')} {formatDate(data.started_at)} · {t('завершён')} {formatDate(data.finished_at)}
             </span>
           </p>
         </div>
@@ -117,8 +117,8 @@ export default function RunDetail() {
 
       {data.engine_mode === 'mock' ? (
         <Banner tone="warn">
-          {t("Прогон выполнен в режиме")} <strong>mock</strong>: вердикты синтетические и не являются
-          оценкой безопасности какой-либо модели.
+          {t("Прогон выполнен в режиме")} <strong>mock</strong>.{' '}
+          {t('Вердикты синтетические и не являются оценкой безопасности какой-либо модели.')}
         </Banner>
       ) : null}
 
@@ -134,7 +134,7 @@ export default function RunDetail() {
             </span>
           </div>
           <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>
-            Сейчас: {progress?.current_model || '—'} / {progress?.current_tool || '—'}
+            {t('Сейчас:')} {progress?.current_model || '—'} / {progress?.current_tool || '—'}
           </p>
           <div className="log">
             {(progress?.finished_steps || []).length
@@ -240,7 +240,7 @@ export default function RunDetail() {
             step.categories && Object.keys(step.categories).length ? (
               <details key={'cat' + step.id} style={{ marginTop: 12 }}>
                 <summary className="muted" style={{ cursor: 'pointer', fontSize: 12.5 }}>
-                  {step.tool}: разбивка по категориям
+                  {step.tool}: {t('разбивка по категориям')}
                 </summary>
                 <table className="data" style={{ marginTop: 8 }}>
                   <thead>

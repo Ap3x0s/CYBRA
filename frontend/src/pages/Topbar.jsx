@@ -88,7 +88,7 @@ export default function Topbar({ query, onQuery }) {
         <div style={{ position: 'relative' }}>
           <button
             className="icon-btn"
-            aria-label={`Уведомления${alerts.length ? `: ${alerts.length}` : ''}`}
+            aria-label={t('Уведомления') + (alerts.length ? `: ${alerts.length}` : '')}
             aria-expanded={panel === 'bell'}
             onClick={() => setPanel(panel === 'bell' ? null : 'bell')}
           >
@@ -140,10 +140,10 @@ export default function Topbar({ query, onQuery }) {
           {panel === 'account' ? (
             <div className="popover" role="menu" style={{ minWidth: 240 }}>
               <div className="popover-head" style={{ display: 'block' }}>
-                <div>{user?.display_name || t('Администратор')}</div>
+                <div>{t(user?.display_name) || t('Администратор')}</div>
                 <div className="dim mono-sm" style={{ fontWeight: 400 }}>{user?.email}</div>
                 <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-                  роль: {user?.role}
+                  {t('роль:')} {user?.role}
                 </div>
               </div>
               <button

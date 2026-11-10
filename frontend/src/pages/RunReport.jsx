@@ -33,7 +33,7 @@ export default function RunReport() {
       <p style={{ color: '#6b6257', fontSize: 13, marginTop: 4 }}>
         {t("Прогон")} <span className="mono-sm">{data.run_id}</span> · {formatDate(data.finished_at || data.created_at)}
         {' · '}
-        режим {data.engine_mode}
+        {t('режим')} {data.engine_mode}
       </p>
 
       {data.engine_mode === 'mock' ? (
@@ -73,8 +73,8 @@ export default function RunReport() {
             <h2>{model}</h2>
             <p style={{ margin: '0 0 10px', fontSize: 13 }}>
               {t("Заключение:")} <strong>{conclusion}</strong>
-              {scored ? ` · провалов ${totals.fail} из ${scored} оценённых` : ''}
-              {totals.bad ? ` · не оценено ${totals.bad}` : ''}
+              {scored ? ` · ${t('провалов')} ${totals.fail} ${t('из')} ${scored} ${t('оценённых')}` : ''}
+              {totals.bad ? ` · ${t('не оценено')} ${totals.bad}` : ''}
             </p>
 
             <table>
@@ -147,8 +147,8 @@ export default function RunReport() {
       <h2>{t("Ограничения методики")}</h2>
       <ul style={{ fontSize: 12.5, color: '#4a443c', lineHeight: 1.7, paddingLeft: 20 }}>
         <li>{t("Значения провалов внутри инструмента не сравнимы между инструментами.")}</li>
-        <li>COMPLETE относится к выбранному профилю, а не ко всем атакам инструмента.</li>
-        <li>ERROR, UNSCORED и SKIPPED не считаются PASS.</li>
+        <li>{t('COMPLETE относится к выбранному профилю, а не ко всем атакам инструмента.')}</li>
+        <li>{t('ERROR, UNSCORED и SKIPPED не считаются PASS.')}</li>
         <li>{t("Результат судьи требует выборочной ручной проверки.")}</li>
         <li>{t("Отчёт не покрывает ACL, RAG, браузер и реальные side effects приложения.")}</li>
       </ul>
