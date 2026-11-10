@@ -612,6 +612,53 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   * { animation: none !important; transition: none !important; }
 }
 
+/* ---------------------------------------------------------------- skeletons */
+/* The shimmer runs from --skel-base to --skel-lift: a slightly lighter step of
+   the card colour, so the block reads as "content loading" and not as a white
+   strip on a dark page. */
+:root {
+  --skel-base: #26262b;
+  --skel-lift: #303036;
+}
+.skel {
+  display: block;
+  background-color: var(--skel-base);
+  background-image: linear-gradient(
+    90deg,
+    var(--skel-base) 0%,
+    var(--skel-lift) 42%,
+    var(--skel-base) 84%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: skel-shimmer 1.35s ease-in-out infinite;
+}
+@keyframes skel-shimmer {
+  from { background-position: 140% 0; }
+  to { background-position: -40% 0; }
+}
+.skel-head { display: grid; gap: 9px; margin-bottom: 18px; }
+.skel-grid { display: grid; gap: 16px; margin-bottom: 16px; }
+.skel-grid-4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.skel-grid-2-1 { grid-template-columns: 1.9fr 1fr; }
+.skel-grid-1-2 { grid-template-columns: minmax(260px, 320px) 1fr; align-items: start; }
+.skel-card {
+  background: var(--ink-700);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-box);
+}
+.skel-card-kpi { min-height: 118px; padding: 16px 18px 18px; }
+.skel-tr {
+  display: grid;
+  grid-template-columns: 140px 80px 110px 40px 58px 50px;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 18px;
+}
+.skel-tr-head { border-bottom: 1px solid var(--edge-soft); padding: 13px 18px; }
+.skel-tr + .skel-tr { border-top: 1px solid var(--edge-soft); }
+.skel-block { display: grid; gap: 10px; padding: 4px 0; }
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; align-items: center; overflow-x: auto; }
