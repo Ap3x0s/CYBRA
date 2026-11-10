@@ -8,18 +8,27 @@
    Verdict colours are deliberately a separate family from the brand accent:
    green means pass, red means fail, and neither is ever used decoratively. */
 :root {
-  --ink-900: #08090b;
-  --ink-800: #0c0e11;
-  --ink-750: #101318;
-  --ink-700: #12151b;
-  --ink-650: #171b22;
-  --ink-600: #1a1f27;
-  --ink-500: #232a34;
-  --edge: #262d37;
-  --edge-soft: #1a2028;
-  --text: #f0f2f5;
-  --muted: #8d97a4;
-  --muted-dim: #626b78;
+  /* Palette values are the reference's dark theme, not invented:
+     --bg #141416, --card #1f1f22, --pill rgba(255,255,255,.07). */
+  --ink-900: #141416;
+  --ink-800: #18181c;
+  --ink-750: #1b1b1f;
+  --ink-700: #1f1f22;
+  --ink-650: #1d1d21;
+  --ink-600: #232326;
+  --ink-500: #2b2b30;
+  --edge: #2f2f35;
+  --edge-soft: #26262b;
+  --text: #f2f2f0;
+  --muted: #a0a0a6;
+  --muted-dim: #6e6e75;
+
+  /* Sidebar takes the grey of the reference's big logo disc (#2a2a2e),
+     the cards take its tile colour (#1f1f22). */
+  --surface-sidebar: #2a2a2e;
+  --field: #a8a69e;
+  --shadow-box: 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 14px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
 
   --accent: #e2a33f;
   --accent-deep: #c4862a;
@@ -38,8 +47,10 @@
   --paper: #f6f3ec;
   --paper-ink: #1f2328;
 
+  /* The reference's tiles are 44px with border-radius 22.5% = 10px, so the
+     boxes inherit the same corner radius instead of inventing a larger one. */
   --radius: 10px;
-  --radius-lg: 14px;
+  --radius-lg: 10px;
   --font-body: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --ease: cubic-bezier(0.2, 0, 0, 1);
@@ -122,7 +133,8 @@ button { font-family: inherit; }
   display: flex;
   flex-direction: column;
   gap: 26px;
-  background: linear-gradient(180deg, var(--ink-800), var(--ink-900));
+  background: var(--surface-sidebar);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   position: sticky;
   top: 0;
   height: 100vh;
@@ -173,11 +185,10 @@ button { font-family: inherit; }
 
 /* ---------------------------------------------------------------- cards */
 .card {
-  background: rgba(18, 21, 27, 0.84);
-  backdrop-filter: blur(2px);
-  border: 1px solid var(--edge-soft);
+  background: var(--ink-700);
   border-radius: var(--radius-lg);
   padding: 18px;
+  box-shadow: var(--shadow-box);
 }
 .card + .card { margin-top: 16px; }
 /* Cards stacked as siblings in a grid already get their gap from the grid;
@@ -205,11 +216,11 @@ button { font-family: inherit; }
 /* ---------------------------------------------------------------- metric */
 .metric-tile {
   background: var(--ink-700);
-  border: 1px solid var(--edge-soft);
   border-radius: var(--radius);
   padding: 14px 16px;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-box);
 }
 .metric-tile .label { color: var(--muted); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
 .metric-tile .value {
@@ -343,7 +354,16 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 .backdrop {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
 }
-.backdrop-canvas { width: 100%; height: 100%; display: block; }
+/* Same three rules as the reference's .texture: full-bleed, contained paint,
+   and a 1.2s fade-in once a first frame exists (field.js sets data-ready). */
+.backdrop-field {
+  position: absolute; inset: 0;
+  contain: layout paint;
+  color: var(--field);
+  opacity: 0;
+  transition: opacity 1.2s ease-out;
+}
+.backdrop-field[data-ready] { opacity: 1; }
 .backdrop-toggle {
   position: fixed; right: 14px; bottom: 14px;
   pointer-events: auto;
@@ -434,8 +454,7 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
   display: flex; flex-direction: column;
   /* Slightly translucent so the animated backdrop reads through the surface:
      a fully opaque card would hide it, and 76% of the screen is card. */
-  background: linear-gradient(160deg, rgba(16, 19, 24, 0.82), rgba(18, 21, 27, 0.88));
-  backdrop-filter: blur(2px);
+  background: var(--ink-700);
   border: 1px solid var(--edge-soft);
   border-radius: var(--radius-lg);
   padding: 16px 18px 18px;

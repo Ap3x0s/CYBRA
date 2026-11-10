@@ -98,6 +98,13 @@ def main() -> int:
         page.click('button[type=submit]')
         page.wait_for_url(BASE + '/', timeout=15000)
 
+        # The backdrop repaints a full-screen canvas and every navigation
+        # rebuilds it; the rasteriser here does not survive nine screens. It
+        # has no bearing on layout, so switch it off for the whole run via the
+        # remembered preference the toggle already writes.
+        page.add_init_script("try{localStorage.setItem('cybra:field','off')}catch(e){}")
+        page.reload(wait_until='networkidle')
+
         for path in SCREENS:
             page.goto(BASE + path, wait_until='networkidle')
             page.wait_for_timeout(600)
