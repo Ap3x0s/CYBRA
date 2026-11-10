@@ -616,26 +616,31 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
 /* The shimmer runs from --skel-base to --skel-lift: a slightly lighter step of
    the card colour, so the block reads as "content loading" and not as a white
    strip on a dark page. */
+/* Contrast note: the first version ran #26262b -> #303036, a delta of ~10 of
+   255. It animated correctly but was invisible on a dark page, so the sweep is
+   brighter and tighter now: a distinct band instead of an even wash. */
 :root {
-  --skel-base: #26262b;
-  --skel-lift: #303036;
+  --skel-base: #2e2e36;
+  --skel-lift: #4a4a55;
 }
 .skel {
   display: block;
   background-color: var(--skel-base);
+  /* A narrow bright band rather than a wide gradient: with a 220% wash the
+     moving part was too soft to read at this size. */
   background-image: linear-gradient(
     90deg,
-    var(--skel-base) 0%,
-    var(--skel-lift) 42%,
-    var(--skel-base) 84%
+    transparent 0%,
+    var(--skel-lift) 50%,
+    transparent 100%
   );
-  background-size: 220% 100%;
+  background-size: 200% 100%;
   background-repeat: no-repeat;
-  animation: skel-shimmer 1.35s ease-in-out infinite;
+  animation: skel-shimmer 1.5s ease-in-out infinite;
 }
 @keyframes skel-shimmer {
-  from { background-position: 140% 0; }
-  to { background-position: -40% 0; }
+  from { background-position: 200% 0; }
+  to { background-position: -100% 0; }
 }
 .skel-head { display: grid; gap: 9px; margin-bottom: 18px; }
 .skel-grid { display: grid; gap: 16px; margin-bottom: 16px; }
