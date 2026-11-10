@@ -13,7 +13,6 @@ import argparse
 import base64
 import json
 import os
-import sys
 import time
 import urllib.error
 import urllib.parse
@@ -110,7 +109,14 @@ def main() -> int:
     done = set(DONE)
     todo = set(TODO)
 
+    # A missing block used to be skipped silently, so the script printed
+    # "sync complete" while touching nothing — that is how a run could look
+    # successful and leave the trackers untouched. Name what was skipped.
+    skipped: list[str] = []
+
     # --- Jira -------------------------------------------------------
+    if not os.environ.get('JIRA_BASE'):
+        skipped.append('Jira (JIRA_BASE/JIRA_EMAIL/JIRA_TOKEN are not set)')
     if os.environ.get('JIRA_BASE'):
         auth = jira_auth()
         project = os.environ.get('JIRA_PROJECT', 'CYB')
@@ -130,6 +136,8 @@ def main() -> int:
                 print(f'JIRA {issue["key"]}: {status} (остаётся в работе)')
 
     # --- GitHub -----------------------------------------------------
+    if not os.environ.get('GITHUB_TOKEN'):
+        skipped.append('GitHub (GITHUB_TOKEN is not set)')
     if os.environ.get('GITHUB_TOKEN'):
         issues = []
         page = 1
@@ -153,6 +161,12 @@ def main() -> int:
                             {'state': 'closed', 'state_reason': 'completed'})
                 print(f'GH #{issue["number"]}: closed')
                 time.sleep(0.4)
+
+    if skipped:
+        for item in skipped:
+            print(f'skipped {item}')
+        print('sync incomplete: nothing was written for the skipped trackers')
+        return 2
 
     print('sync complete')
     return 0
