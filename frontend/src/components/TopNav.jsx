@@ -1,24 +1,26 @@
 /** Горизонтальная навигация с иконками.
  *
- *  Подпись видна, пока поиск закрыт. Когда поиск раскрывается, подписи
- *  уезжают влево и схлопываются — остаются только значки. Ширина анимируется
- *  через max-width, поэтому пункты «сжимаются», а не исчезают скачком. */
+ *  Иконки заданы семантическими именами и живут в AppIcon — там же они
+ *  окрашиваются в акцентный цвет и там же выбирается источник (Phosphor или
+ *  кастомный SVG). Компонент не знает, откуда картинка, поэтому набор можно
+ *  менять в одном месте.
+ *
+ *  Подписи статичны: видны всегда, независимо от состояния поиска и ширины
+ *  экрана. */
 import { NavLink } from 'react-router-dom'
 import { can, useAuth } from '../auth'
 import { useI18n } from '../i18n-context'
-import {
-  ChartLineUp, Circuitry, Database, Gear, ListChecks, SquaresFour,
-} from '../icons'
+import AppIcon from './AppIcon'
 
 const ITEMS = [
-  { to: '/', key: 'Обзор', Icon: SquaresFour, end: true },
-  { to: '/runs', key: 'Прогоны', Icon: ListChecks },
-  { to: '/datasets', key: 'Датасеты', Icon: Database },
-  { to: '/models', key: 'Модели', Icon: Circuitry },
-  { to: '/metrics', key: 'Метрики', Icon: ChartLineUp },
+  { to: '/', key: 'Обзор', icon: 'overview', end: true },
+  { to: '/runs', key: 'Прогоны', icon: 'runs' },
+  { to: '/datasets', key: 'Датасеты', icon: 'datasets' },
+  { to: '/models', key: 'Модели', icon: 'models' },
+  { to: '/metrics', key: 'Метрики', icon: 'metrics' },
 ]
 
-const ADMIN = { to: '/settings', key: 'Настройки', Icon: Gear }
+const ADMIN = { to: '/settings', key: 'Настройки', icon: 'settings' }
 
 export default function TopNav() {
   const { user } = useAuth()
@@ -26,7 +28,7 @@ export default function TopNav() {
 
   const render = (item) => (
     <NavLink key={item.to} to={item.to} end={item.end} data-label={t(item.key)}>
-      <item.Icon size={16} weight="regular" />
+      <AppIcon name={item.icon} size={18} />
       <span className="topnav-label">{t(item.key)}</span>
     </NavLink>
   )

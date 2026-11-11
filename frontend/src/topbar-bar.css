@@ -493,3 +493,16 @@
   .topbar-center .search-box:not(.is-open) { width: 120px; }
   .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 84px; }
 }
+
+/* --- окраска иконок навигации --------------------------------------------
+   Все иконки в акцентном янтарном, независимо от источника: кастомные SVG
+   используют currentColor, Phosphor — fill, поэтому одно правило красит и те
+   и другие. Подпись остаётся приглушённой: акцент должен вести глаз по
+   значкам, а не спорить с текстом. Активный пункт делает иконку чуть ярче. */
+.topnav a svg { color: var(--accent); transition: color 150ms var(--ease); }
+.topnav a:hover svg { color: var(--accent); }
+.topnav a.active svg { color: var(--accent); }
+
+/* у активного пункта подпись тоже светлеет — пара «иконка + текст» читается
+   как одно целое */
+.topnav a.active .topnav-label { color: var(--text); }
