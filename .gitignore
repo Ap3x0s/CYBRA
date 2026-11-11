@@ -20,3 +20,12 @@ validation-final/
 .env
 *private-headers.json
 jira/.env
+
+# Временные скрипты диагностики UI (не часть продукта).
+# Одноразовые: снимают замеры, пишут картинки в var/, удаляются после задачи.
+scripts/diag_*.py
+scripts/shot_*.py
+scripts/edit_preview.py
+scripts/sync_preview*.py
+scripts/check_topbar_final.py
+var/

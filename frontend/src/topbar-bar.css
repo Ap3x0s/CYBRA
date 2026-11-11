@@ -216,7 +216,21 @@
   gap: 10px;
   padding: 10px 10px 12px;
 }
-.account-text { display: flex; flex-direction: column; min-width: 0; }
+/* Крупный аватар в шапке поповера. Класс использовался в разметке, но стиля
+   не было — работал базовый .avatar 34 px, и строка выглядела мелкой. */
+.avatar-lg {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.account-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
 .account-name {
   font-size: 13px;
   font-weight: 500;
@@ -242,6 +256,82 @@
   gap: 8px;
 }
 
+/* Поповеры прижаты к правому краю своей кнопки. У профиля кнопка — последняя
+   в полосе, поэтому right:0 давал вылет на 22 px за экран (замер на 1920:
+   right=1898 при ширине 1920, но при 1440 right=1418 — на границе). Сдвигаем
+   внутрь полосы: правый край поповера не должен выходить за topbar. */
+.topbar .popover {
+  right: 0;
+  max-width: calc(100vw - 24px);
+}
+.topbar .profile-btn + .popover,
+.topbar-actions .popover {
+  right: 0;
+}
+
+/* --- улучшения правой группы --------------------------------------------- */
+
+/* Открытая кнопка должна быть визуально отличима от просто наведённой:
+   иначе непонятно, чьё меню на экране. */
+.topbar .icon-btn.is-open,
+.topbar .lang-btn.is-open {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.085);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+.topbar .icon-btn.is-open svg,
+.topbar .lang-btn.is-open .lang-code { color: var(--text); }
+
+/* Кнопка языка: иконка-переводчик + код текущего языка. */
+.topbar .lang-btn {
+  min-width: 58px;
+  padding: 0 9px;
+  gap: 5px;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.topbar .lang-btn:hover { color: var(--text); }
+.topbar .lang-btn .lang-code {
+  display: inline-block;
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+}
+
+/* Меню языка: узкое, по содержимому, выровнено по кнопке. */
+.topbar .popover-lang {
+  min-width: 168px;
+  max-width: 200px;
+}
+
+/* Текущий язык в списке только цветом — как было до правки. */
+.popover-item.is-current { color: var(--accent); }
+
+/* Длинные подписи прогонов в уведомлениях раньше выпихивали статус за край:
+   текст должен усекаться, а pill — оставаться на месте. */
+.popover-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.popover-item .pill { flex: 0 0 auto; }
+
+/* Выход — единственное разрушительное действие в меню: отделяем цветом. */
+.popover-item.danger { color: var(--danger); }
+.popover-item.danger:hover { background: var(--danger-surface); }
+
+/* Меню аккаунта шире прочих: в нём email, который не должен усекаться
+   раньше времени. */
+.topbar .popover-account {
+  min-width: 268px;
+  max-width: 300px;
+}
+
 /* --- адаптив ------------------------------------------------------------- */
 @media (max-width: 1240px) {
   .profile-meta { display: none; }
@@ -261,19 +351,17 @@
 .topbar .lang-btn { height: 36px; }
 .search-box input::placeholder { text-overflow: ellipsis; }
 
-/* --- переключатель языка --------------------------------------------------
-   Код языка не должен сжиматься: при узком контейнере он вылезал из кнопки
-   и читался как обрезанный. Фиксируем ширину и запрещаем перенос. */
-.topbar .lang-btn {
-  min-width: 58px;
-  padding: 0 10px;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-.topbar .lang-btn .lang-code {
-  display: inline-block;
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
+/* На узких экранах подписи остаются полностью видимыми — ужимаем не текст,
+   а отступы и кегль. Замер: при 1280 нужно 616 px, доступно 560–597, поэтому
+   padding 11→6, gap 7→4 и шрифт 13→12 экономят ~65 px без обрезки слов. */
+@media (max-width: 1400px) {
+  .topnav a {
+    padding: 8px 6px;
+    gap: 4px;
+    font-size: 12px;
+  }
+  .topnav { gap: 0; }
+  .topnav a svg { width: 18px; height: 18px; }
 }
 
 /* --- схлопывание подписей при раскрытии поиска ---------------------------
@@ -338,39 +426,52 @@
   justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
-  position: relative;
-  /* зона отсчёта центрирования: растянута на всю полосу, чтобы left:50%
-     внутри неё совпадал с центром экрана */
-  margin-left: -154px;
-  margin-right: -281px;
-  /* Центр группы считался внутри этой зоны, а она начинается после логотипа,
-     поэтому группа уезжала влево от центра экрана (замер: −63 px). Тянем зону
-     на всю ширину левой части, чтобы justify-content:center считал от края
-     полосы, а не от края после бренда. */
-
-  /* Центрируем ТОЛЬКО меню и поиск. Логотип и правая группа остаются по
-     краям, поэтому оптический центр совпадает с геометрическим. */
+  position: static;
 }
 
+/* Центрирование без margin-хаков: группа позиционируется от самой полосы,
+   а не от своей зоны. Раньше зона начиналась после бренда, поэтому центр
+   уезжал влево на 63 px, и это компенсировали отрицательными полями, которые
+   при каждой правке ширины приходилось подгонять заново (последняя подгонка
+   дала −57 px). Теперь левый край группы считается от края экрана — подгонка
+   не нужна ни при какой ширине. */
+.topbar { position: relative; }
+
+.topbar-center {
+  position: static;
+}
 
 .topbar-center-inner {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   flex: 0 0 auto;
   min-width: 0;
-  gap: 8px;
+  gap: 10px;
 }
+
 
 .topbar-center .topnav {
   order: 1;
-  /* Ширина меню постоянна в обоих состояниях — это и держит кромку поиска
-     на месте. Значение 600 покрывает русские подписи (нужно 592); английские
-     короче (558), поэтому при переключении языка ничего не обрезается. */
+  /* Русским подписям нужно 616 px — было 600, и «Настройки» обрезалось на
+     16, а на 1280 на 27. Ставим 620, но не больше доступного места: при
+     1280 полный слот выпихивал группу на правую кнопку.
+     Доступное место = ширина экрана минус бренд (176) минус правая группа
+     (≈310) минус слот поиска (38..400) минус зазоры (40). */
   flex: 0 0 auto;
-  width: 600px;
-  max-width: 46vw;
+  width: clamp(260px, calc(100vw - 788px), 620px);
   overflow: hidden;
+  transition: width 300ms var(--ease);
+}
+
+/* Пока поиск раскрыт, меню уступает ему ширину — иначе группа выпирает на
+   правую кнопку (замер: +18 px на 1280, поле упиралось в 1600). Сжимаем ровно
+   на столько, сколько занимает раскрытое поле сверх значка. */
+.topbar-center-inner.is-searching .topnav {
+  width: clamp(0px, calc(100vw - 1160px), 620px);
 }
 
 .topbar-center .search-box {
@@ -422,45 +523,42 @@
 
    Подписи меню больше не схлопываются ни при каком состоянии и ширине:
    компоненты статичны, как и просили. */
-.topbar-center-inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  min-width: 0;
-  gap: 10px;
-  /* Центр считаем от полосы: .topbar-center имеет position:relative и лежит
-     между брендом и правой группой, поэтому left:50% внутри него смещён.
-     Компенсируем половиной ширины зоны — тогда центр группы совпадает с
-     центром полосы. */
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
 
 .topbar-center .topnav {
   flex: 0 0 auto;
 }
 
-/* слот под поиск: постоянная ширина, поле растёт внутри него */
+/* слот под поиск: постоянная ширина, поле растёт внутри него.
+   В покое — ровно кнопка (36 + рамки 2 = 38), при раскрытии слот расширяется
+   вправо до 320. Раньше слот был 240 в обоих состояниях, поэтому поле не
+   могло вырасти: замер показывал 4–6 px на 1280 и 170 px на 1920 — вводимый
+   текст обрезался. Левая кромка при этом неподвижна, поэтому группа,
+   центрированная через translateX(-50%), сдвигается вправо ровно на
+   половину прироста — поиск растёт ВПРАВО, как требуется. */
 .topbar-center .search-box {
   flex: 0 0 auto;
-  width: 240px;
-  transition: width 280ms var(--ease), background 180ms var(--ease),
+  width: 38px;
+  transition: width 300ms var(--ease), background 180ms var(--ease),
               border-color 180ms var(--ease);
+}
+
+.topbar-center .search-box.is-open {
+  /* Замер бюджета: при 1920 под поле остаётся 694 px, при 1700 — 474.
+     400 покрывает типовой запрос и не подходит к правой группе. */
+  width: 400px;
 }
 
 /* в покое слот пуст: видна только кнопка, поле прозрачно */
 .topbar-center .search-box:not(.is-open) {
-  width: 240px;
+  width: 38px;
   padding: 0;
   border-color: transparent;
   background: transparent;
 }
 
-/* визуально в покое поле занимает 36, но место под него уже отведено */
+/* В покое поле скрыто, поэтому отступ справа не нужен. */
 .topbar-center .search-box:not(.is-open) .search-toggle {
-  margin-right: 204px;
+  margin-right: 0;
 }
 
 @media (max-width: 1360px) {
@@ -469,29 +567,58 @@
   .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 134px; }
 }
 
-/* На 1280–1440 группа из меню (600) + слот (240) не оставляет воздуха справа.
-   Уменьшаем слот там, где иначе он упирается в правую группу: подписи меню
-   при этом НЕ схлопываются — они статичны, как требуется. */
+/* На узких экранах раскрытый поиск уступает место: ширина поля считается от
+   реально доступного места, иначе оно упирается в правую группу. Подписи
+   меню при этом НЕ схлопываются — они статичны, как требуется. */
 @media (max-width: 1460px) {
-  .topbar-center .search-box,
-  .topbar-center .search-box:not(.is-open) { width: 200px; }
-  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 164px; }
+  .topbar-center .search-box.is-open { width: 300px; }
 }
 @media (max-width: 1340px) {
-  .topbar-center .search-box,
-  .topbar-center .search-box:not(.is-open) { width: 120px; }
-  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 84px; }
-  .topbar-center-inner { gap: 6px; }
-}
-@media (max-width: 1300px) {
-  .topbar-center .search-box,
-  .topbar-center .search-box:not(.is-open) { width: 76px; }
-  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 40px; }
+  .topbar-center .search-box.is-open { width: 220px; }
 }
 @media (max-width: 1240px) {
-  .topbar-center .search-box,
-  .topbar-center .search-box:not(.is-open) { width: 120px; }
-  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 84px; }
+  .topbar-center .search-box.is-open { width: 190px; }
+}
+
+/* =============================================================================
+   УЗКИЕ ЭКРАНЫ: раскрытый поиск перехватывает полосу
+
+   Замер бюджета показал физическое ограничение: меню 620 px центрировано, и
+   под раскрытое поле остаётся 214 px на 1440, 140 на 1366 и 54 на 1280.
+   Втиснуть туда поле с текстом нельзя — оно обрезает ввод до 4–6 px.
+
+   Поэтому до 1500 px поиск занимает ВСЮ среднюю зону: меню и бренд уходят,
+   поле получает место от логотипа до правой группы (замер: 814 px на 1280).
+   Это стандартное поведение строки поиска и единственный вариант, при котором
+   ввод остаётся читаемым. */
+@media (max-width: 1500px) {
+  /* меню уступает место поиску */
+  .topbar-center-inner.is-searching .topnav {
+    display: none;
+  }
+
+  /* группа больше не центрирована: растягиваем её на всю среднюю зону */
+  .topbar-center-inner.is-searching {
+    position: static;
+    transform: none;
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .topbar-center:has(.is-searching) {
+    margin-left: 0;
+    margin-right: 0;
+    margin-inline: 0;
+  }
+
+  .topbar-center-inner.is-searching .search-box.is-open {
+    width: 100%;
+    max-width: 640px;
+  }
+
+  .topbar-center-inner.is-searching .search-box input {
+    font-size: 13.5px;
+  }
 }
 
 /* --- окраска иконок навигации --------------------------------------------

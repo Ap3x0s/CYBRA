@@ -1,16 +1,23 @@
-/** Верхняя полоса: логотип, меню с поиском, уведомления, профиль.
+/** Верхняя полоса: логотип, меню, поиск, уведомления, профиль.
  *
- *  Структура слева направо: бренд (прижат к левому краю), центральная группа
- *  «меню + поиск» (центрируется по полосе), правая группа «язык, колокольчик,
- *  профиль».
+ *  Структура слева направо: бренд, центральная группа «меню + поиск» (центр
+ *  полосы), правая группа «язык, колокольчик, профиль».
  *
- *  Поиск стоит справа от меню и раскрывается ВПРАВО: его левая кромка не
- *  двигается, поэтому это читается как выдвижение, а не как прыжок. Когда он
- *  раскрыт, подписи меню схлопываются в иконки, чтобы полоса не отнимала у
- *  них ширину и не резала слова.
+ *  ПРАВИЛА ПОВЕДЕНИЯ, которые здесь закреплены замером:
  *
- *  Каждый элемент что-то делает: поиск фильтрует прогоны (⌘K наводит фокус),
- *  колокольчик показывает незавершённые прогоны, профиль открывает меню. */
+ *  1. Открыт максимум ОДИН поповер. Раньше язык жил своим состоянием внутри
+ *     LanguageSwitcher, поэтому клик по колокольчику оставлял меню языка
+ *     открытым — на экране было два меню, а Escape закрывал не всё.
+ *
+ *  2. Escape закрывает любой поповер и поиск, но НЕ стирает введённый запрос:
+ *     пользователь мог свернуть поиск, чтобы посмотреть результаты.
+ *
+ *  3. Закрытие поиска СБРАСЫВАЕТ фильтр. Раньше запрос оставался в состоянии
+ *     App и продолжал фильтровать список при невидимом поиске — на экране
+ *     были пустые «Прогоны» без видимой причины.
+ *
+ *  4. Поиск с непустым запросом не схлопывается в иконку, пока его не
+ *     очистят: иначе активный фильтр становится невидимым. */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -28,7 +35,7 @@ export default function Topbar({ query, onQuery }) {
   const { user, logout } = useAuth()
   const runs = useApi(() => api.runs(50))
   const { t } = useI18n()
-  const [panel, setPanel] = useState(null) // 'bell' | 'account' | null
+  const [panel, setPanel] = useState(null) // 'bell' | 'account' | 'lang' | null
   const [searchOpen, setSearchOpen] = useState(false)
   const inputRef = useRef(null)
   const wrapRef = useRef(null)
@@ -40,24 +47,27 @@ export default function Topbar({ query, onQuery }) {
     function onKey(event) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
+        setPanel(null)
         setSearchOpen(true)
         setTimeout(() => inputRef.current?.focus(), 190)
       }
       if (event.key === 'Escape') {
         setPanel(null)
-        setSearchOpen(false)
+        closeSearch()
         inputRef.current?.blur()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+    // query в зависимостях обязателен: без него замыкание держит значение из
+    // первого рендера (пустую строку), и closeSearch() не снимал фильтр —
+    // поиск визуально закрывался, а список оставался отфильтрованным.
+  }, [query, onQuery])
 
   useEffect(() => {
     function onDown(event) {
       if (wrapRef.current && !wrapRef.current.contains(event.target)) {
         setPanel(null)
-        setSearchOpen(false)
       }
     }
     document.addEventListener('mousedown', onDown)
@@ -68,17 +78,32 @@ export default function Topbar({ query, onQuery }) {
     ['PARTIAL', 'ERROR', 'CANCELLED'].includes(run.status),
   )
 
+  /** Закрыть поиск и снять фильтр: пустой список без видимого поиска
+   *  выглядит как поломка, а не как отфильтрованный результат. */
+  function closeSearch() {
+    setSearchOpen(false)
+    if (query) onQuery('')
+  }
+
   function submit(event) {
     if (event.key === 'Enter' && query) navigate('/runs')
   }
 
   function toggleSearch() {
     if (searchOpen) {
-      setSearchOpen(false)
+      closeSearch()
     } else {
+      setPanel(null)
       setSearchOpen(true)
       setTimeout(() => inputRef.current?.focus(), 190)
     }
+  }
+
+  /** Единственная точка переключения поповеров — гарантирует «один за раз». */
+  function togglePanel(which) {
+    setPanel((current) => (current === which ? null : which))
+    if (!searchOpen) return
+    closeSearch()
   }
 
   return (
@@ -92,45 +117,56 @@ export default function Topbar({ query, onQuery }) {
       </div>
 
       <div className="topbar-center">
-        <div className="topbar-center-inner">
+        <div className={`topbar-center-inner${searchOpen ? ' is-searching' : ''}`}>
           <TopNav />
 
-        <div className={`search-box${searchOpen ? ' is-open' : ''}`}>
-          <button
-            className="search-toggle"
-            onClick={toggleSearch}
-            aria-label={t('Поиск')}
-            aria-expanded={searchOpen}
-          >
-            <MagnifyingGlass size={15} weight="bold" />
-          </button>
-          <input
-            ref={inputRef}
-            placeholder={t('Поиск по прогонам, моделям, инструментам…')}
-            value={query}
-            onChange={(event) => onQuery(event.target.value)}
-            onKeyDown={submit}
-            aria-label={t('Поиск')}
-            tabIndex={searchOpen ? 0 : -1}
-          />
-          {searchOpen && query ? (
-            <button className="search-clear" onClick={() => onQuery('')} aria-label={t('Очистить')}>
-              <X size={12} weight="bold" />
+          <div className={`search-box${searchOpen ? ' is-open' : ''}`}>
+            <button
+              className="search-toggle"
+              onClick={toggleSearch}
+              aria-label={searchOpen ? t('Свернуть поиск') : t('Поиск')}
+              aria-expanded={searchOpen}
+              title={t('Поиск (Ctrl+K)')}
+            >
+              <MagnifyingGlass size={15} weight="bold" />
             </button>
-          ) : null}
-        </div>
+            <input
+              ref={inputRef}
+              placeholder={t('Поиск по прогонам…')}
+              value={query}
+              onChange={(event) => onQuery(event.target.value)}
+              onKeyDown={submit}
+              aria-label={t('Поиск')}
+              tabIndex={searchOpen ? 0 : -1}
+            />
+            {searchOpen && query ? (
+              <button
+                className="search-clear"
+                onClick={() => {
+                  onQuery('')
+                  inputRef.current?.focus()
+                }}
+                aria-label={t('Очистить')}
+              >
+                <X size={12} weight="bold" />
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
       <div className="topbar-actions">
-        <LanguageSwitcher />
+        <LanguageSwitcher
+          open={panel === 'lang'}
+          onToggle={(next) => setPanel(next ? 'lang' : null)}
+        />
 
         <div style={{ position: 'relative' }}>
           <button
-            className="icon-btn"
+            className={`icon-btn${panel === 'bell' ? ' is-open' : ''}`}
             aria-label={t('Уведомления') + (alerts.length ? `: ${alerts.length}` : '')}
             aria-expanded={panel === 'bell'}
-            onClick={() => setPanel(panel === 'bell' ? null : 'bell')}
+            onClick={() => togglePanel('bell')}
           >
             <Bell size={15} weight="bold" />
             {alerts.length ? <span className="dot" /> : null}
@@ -154,7 +190,7 @@ export default function Topbar({ query, onQuery }) {
                       navigate(`/runs/${run.id}`)
                     }}
                   >
-                    <span>{run.label}</span>
+                    <span className="popover-label">{run.label}</span>
                     <span className={`pill ${run.status === 'ERROR' ? 'bad' : 'warn'}`}>
                       {run.status}
                     </span>
@@ -170,7 +206,7 @@ export default function Topbar({ query, onQuery }) {
             className={`profile-btn${panel === 'account' ? ' is-open' : ''}`}
             aria-label={t('Аккаунт')}
             aria-expanded={panel === 'account'}
-            onClick={() => setPanel(panel === 'account' ? null : 'account')}
+            onClick={() => togglePanel('account')}
           >
             <span className="avatar">{initials}</span>
             <span className="profile-meta">
@@ -181,7 +217,7 @@ export default function Topbar({ query, onQuery }) {
           </button>
 
           {panel === 'account' ? (
-            <div className="popover" role="menu" style={{ minWidth: 264 }}>
+            <div className="popover popover-account" role="menu">
               <div className="account-head">
                 <span className="avatar avatar-lg">{initials}</span>
                 <span className="account-text">
@@ -217,7 +253,7 @@ export default function Topbar({ query, onQuery }) {
                 </button>
               ) : null}
               <div className="popover-sep" />
-              <button className="popover-item" onClick={logout}>
+              <button className="popover-item danger" onClick={logout}>
                 <span className="popover-row">
                   <SignOut size={14} weight="bold" />
                   {t('Выйти')}
