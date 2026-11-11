@@ -4,9 +4,9 @@ import { ErrorBox, Meter, StatusPill, formatRelative, pct } from '../components'
 import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
 import { useAuth } from '../auth'
+import AppIcon from '../components/AppIcon'
 import {
-  ArrowsLeftRight, BracketsCurly, ClockCounterClockwise, Cpu, Flask, Gauge, Play,
-  ShieldWarning, Warning,
+  ArrowsLeftRight, BracketsCurly, ClockCounterClockwise, Play, Warning,
 } from '../icons'
 import { useI18n } from '../i18n-context'
 
@@ -74,32 +74,25 @@ export default function Dashboard() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер'
 
-  // Each icon has to say what the number measures, and not fall back on the
-  // generic "brain / sparkle" vocabulary of AI products.
+  // AI Red Teaming & LLM Security KPI metrics with semantically verified icons
   const KPI = [
     {
       label: t('Прогонов'), value: list.length, hint: t('в истории'),
-      // A flask: a prepared experiment that was executed.
-      Icon: Flask,
+      iconName: 'ci-pipeline-check',
     },
     {
       label: 'Проверок', value: stats.checks, hint: t('{fails} с провалом', { fails: stats.fails }),
-      // A gauge: individual measurements, not a kit of parts.
-      Icon: Gauge,
+      iconName: 'exam-check',
       delta: stats.checks ? pct(stats.fails / stats.checks) : null,
       deltaLabel: t('провалов'),
     },
     {
       label: t('Моделей'), value: stats.models, hint: t('проверялось'),
-      // A chip: the model behind the API endpoint.
-      Icon: Cpu,
+      iconName: 'ai-scan',
     },
     {
       label: t('Шагов с находками'), value: stats.findings, hint: t('модель × инструмент'),
-      // A shield with a crack, not a bug: 'находка' here is a security finding
-      // in a model's behaviour, and a bug glyph reads as a code defect — plus
-      // it is the only icon in the row that is a literal animal.
-      Icon: ShieldWarning,
+      iconName: 'WarningOctagon',
     },
   ]
 
@@ -114,10 +107,24 @@ export default function Dashboard() {
             {t("Оценка устойчивости моделей по наборам бенчмарков. Числа относятся к конкретным профилям — сравнивать инструменты между собой нельзя.")}
           </p>
         </div>
-        <Link className="btn primary" to="/runs/new">
-          <Play size={15} weight="fill" />
-          {t("Новый прогон")}
-        </Link>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Link
+            className="btn"
+            to="/icons-preview"
+            style={{
+              borderColor: '#E5A93C',
+              color: '#E5A93C',
+              background: 'rgba(229, 169, 60, 0.08)',
+              fontSize: 12,
+            }}
+          >
+            ★ Предосмотр иконок
+          </Link>
+          <Link className="btn primary" to="/runs/new">
+            <Play size={15} weight="fill" />
+            {t("Новый прогон")}
+          </Link>
+        </div>
       </div>
 
       {missing.length ? (
@@ -133,11 +140,11 @@ export default function Dashboard() {
       ) : null}
 
       <div className="grid grid-4 stagger" style={{ marginBottom: 18 }}>
-        {KPI.map(({ label, value, hint, Icon, delta, deltaLabel }) => (
+        {KPI.map(({ label, value, hint, iconName, delta, deltaLabel }) => (
           <div className="kpi" key={t(label)}>
             <div className="kpi-head">
               <span className="kpi-icon">
-                <Icon size={15} weight="regular" />
+                <AppIcon name={iconName} size={20} />
               </span>
               {t(label)}
             </div>
@@ -221,7 +228,7 @@ export default function Dashboard() {
             ].map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
-                  <Icon size={15} weight="bold" />
+                  <Icon size={20} weight="bold" />
                 </span>
                 <span>
                   <div className="qi-title">{t(title)}</div>

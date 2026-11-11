@@ -34,9 +34,9 @@
   --shadow-box: 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 14px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.045);
 
-  --accent: #e2a33f;
+  --accent: #E5A93C;
   --accent-deep: #c4862a;
-  --accent-dim: rgba(226, 163, 63, 0.12);   /* glows only, never a fill */
+  --accent-dim: rgba(229, 169, 60, 0.12);   /* glows only, never a fill */
   --accent-ink: #1c1305;
   --accent-surface: #362f25;                /* that 12% already flattened */
 
@@ -464,12 +464,11 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
   color: var(--muted); font-size: 11.5px; letter-spacing: 0.03em;
 }
 .kpi-icon {
-  width: 26px; height: 26px; border-radius: 7px;
+  width: 30px; height: 30px; border-radius: 8px;
   display: grid; place-items: center;
-  /* The icon chip sits on top of a card, so it cannot use the card's own
-     colour — it needs a step up from it to exist at all. */
-  background: var(--ink-600);
+  background: rgba(229, 169, 60, 0.08);
   color: var(--accent);
+  flex-shrink: 0;
 }
 .kpi-value {
   font-family: var(--font-mono);
@@ -498,12 +497,11 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 }
 .quick-item:hover { background: var(--ink-600); text-decoration: none; }
 .quick-item .qi-icon {
-  width: 32px; height: 32px; flex: 0 0 32px;
+  width: 34px; height: 34px; flex: 0 0 34px;
   display: grid; place-items: center;
   border-radius: 8px;
-  /* Same reasoning as .kpi-icon: it is drawn ON a card, so it must be lighter
-     than the card, not equal to it. */
-  background: var(--ink-600); color: var(--accent);
+  background: rgba(229, 169, 60, 0.08);
+  color: var(--accent);
 }
 .quick-item .qi-title { font-size: 12.5px; font-weight: 500; }
 .quick-item .qi-sub { color: var(--muted-dim); font-size: 11px; }
