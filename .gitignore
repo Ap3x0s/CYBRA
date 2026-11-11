@@ -38,3 +38,6 @@ scripts/add_i18n_search.py
 scripts/check_i18n.py
 scripts/check_i18n_conflicts.py
 scripts/diag_401.py
+scripts/diag_jitter*.py
+scripts/diag_drift*.py
+scripts/add_i18n_bell.py

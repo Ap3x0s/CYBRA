@@ -97,11 +97,25 @@ export default function Topbar() {
           {panel === 'bell' ? (
             <div className="popover" role="menu">
               <div className="popover-head">
-                {t('Незавершённые прогоны')}
-                <span className="dim mono-sm">{alerts.length}</span>
+                <span>{t('Незавершённые прогоны')}</span>
+                <span className={`popover-count${alerts.length ? ' is-active' : ''}`}>
+                  {alerts.length}
+                </span>
               </div>
               {alerts.length === 0 ? (
-                <div className="popover-empty">{t('Нет незавершённых прогонов')}.</div>
+                /* Пустое состояние объясняет, что здесь появится: без этого
+                   меню выглядело как незаконченная заготовка. */
+                <div className="popover-blank">
+                  <span className="popover-blank-ico">
+                    <Bell size={17} weight="bold" />
+                  </span>
+                  <span className="popover-blank-title">
+                    {t('Нет незавершённых прогонов')}
+                  </span>
+                  <span className="popover-blank-hint">
+                    {t('Здесь появятся прогоны со статусом PARTIAL, ERROR или CANCELLED.')}
+                  </span>
+                </div>
               ) : (
                 alerts.slice(0, 6).map((run) => (
                   <button
@@ -145,6 +159,7 @@ export default function Topbar() {
                 <span className="account-text">
                   <span className="account-name">{name}</span>
                   <span className="account-mail">{user?.email}</span>
+                  <span className="account-role">{user?.role}</span>
                 </span>
               </div>
               <div className="popover-sep" />
