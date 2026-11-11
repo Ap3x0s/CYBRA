@@ -28,4 +28,6 @@ scripts/shot_*.py
 scripts/edit_preview.py
 scripts/sync_preview*.py
 scripts/check_topbar_final.py
+scripts/drop_preview_routes.py
+scripts/verify_*.py
 var/
