@@ -93,7 +93,7 @@ export default function Topbar({ query, onQuery }) {
 
       <div className="topbar-center">
         <div className="topbar-center-inner">
-          <TopNav compact={searchOpen} />
+          <TopNav />
 
         <div className={`search-box${searchOpen ? ' is-open' : ''}`}>
           <button

@@ -20,26 +20,19 @@ const ITEMS = [
 
 const ADMIN = { to: '/settings', key: 'Настройки', Icon: Gear }
 
-export default function TopNav({ compact = false }) {
+export default function TopNav() {
   const { user } = useAuth()
   const { t } = useI18n()
 
   const render = (item) => (
-    <NavLink
-      key={item.to}
-      to={item.to}
-      end={item.end}
-      className={compact ? 'is-compact' : ''}
-      data-label={t(item.key)}
-      title={compact ? t(item.key) : undefined}
-    >
+    <NavLink key={item.to} to={item.to} end={item.end} data-label={t(item.key)}>
       <item.Icon size={16} weight="regular" />
       <span className="topnav-label">{t(item.key)}</span>
     </NavLink>
   )
 
   return (
-    <nav className={`topnav${compact ? ' is-compact' : ''}`}>
+    <nav className="topnav">
       {ITEMS.map(render)}
       {can(user, 'admin') ? render(ADMIN) : null}
     </nav>

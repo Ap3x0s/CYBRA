@@ -247,15 +247,11 @@
   .profile-meta { display: none; }
   .topbar-brand .brand-sub { display: none; }
 }
-@media (max-width: 1080px) {
-  .topnav a { padding: 8px 9px; }
-  .topnav-label { display: none; }
-  .search-box { max-width: 260px; }
-}
+
 @media (max-width: 860px) {
   .topbar { padding: 8px 14px; gap: 10px; }
   .search-box { max-width: none; }
-  .topnav a:nth-child(n + 5) { display: none; }
+
 }
 
 /* --- выравнивание высот ---------------------------------------------------
@@ -339,14 +335,23 @@
 .topbar-center {
   display: flex;
   align-items: center;
-  /* НЕ центрируем: любое центрирование пересчитывает положение при росте
-     ребёнка, и левая кромка поиска уезжает. Прижимаем влево зоны с
-     фиксированным отступом — тогда позиция предсказуема пиксель в пиксель. */
-  justify-content: flex-start;
+  justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
-  padding-left: 26px;
+  position: relative;
+  /* зона отсчёта центрирования: растянута на всю полосу, чтобы left:50%
+     внутри неё совпадал с центром экрана */
+  margin-left: -154px;
+  margin-right: -281px;
+  /* Центр группы считался внутри этой зоны, а она начинается после логотипа,
+     поэтому группа уезжала влево от центра экрана (замер: −63 px). Тянем зону
+     на всю ширину левой части, чтобы justify-content:center считал от края
+     полосы, а не от края после бренда. */
+
+  /* Центрируем ТОЛЬКО меню и поиск. Логотип и правая группа остаются по
+     краям, поэтому оптический центр совпадает с геометрическим. */
 }
+
 
 .topbar-center-inner {
   display: flex;
@@ -375,29 +380,11 @@
   flex: 0 0 auto;
 }
 
-.topbar-center .search-box.is-open {
-  /* Ширина считается от реального остатка полосы: 100vw минус бренд (176),
-     минус отступ группы (26), минус меню (547), минус правая группа (280),
-     минус зазоры (30). Отсюда clamp, чтобы поле не наезжало и не было уже
-     180 px — при такой ширине placeholder ещё читается. */
-  /* Замер на 1440: кромка поиска 824, правая группа начинается на 1138 —
-     доступно 302 px. Формула выводит именно это: 100vw минус всё, что стоит
-     левее (бренд 176 + отступ 26 + меню 600 + зазор 8) и правее (группа 280
-     + отступ 22), плюс 14 px страховки от наезда. */
-  width: clamp(170px, calc(100vw - 1112px), 302px);
-}
+
 
 /* На узких экранах меню занимает меньше места: при 1280 и 1366 полный слот
    600 px не оставляет поля, и оно упирается в правую группу. Схлопываем
    подписи там, где иначе не хватает места, — это честнее, чем резать поле. */
-@media (max-width: 1400px) {
-  .topbar-center .topnav { width: 330px; }
-  .topbar-center .topnav .topnav-label { max-width: 0; opacity: 0; }
-  .topbar-center .topnav a { gap: 0; padding-left: 9px; padding-right: 9px; }
-  .topbar-center .search-box.is-open {
-    width: clamp(200px, calc(100vw - 850px), 340px);
-  }
-}
 
 /* В закрытом состоянии контейнер 36 px. Кнопка 34 + рамки 2 = 36 — ровно.
    Скрываем поле полностью, чтобы оно не создавало scrollWidth и не резало
@@ -422,4 +409,87 @@
 }
 .search-box:not(.is-open) .search-toggle {
   margin: 0;
+}
+
+/* =============================================================================
+   СТАБИЛЬНОЕ ЦЕНТРИРОВАНИЕ: слот под поиск зарезервирован
+
+   Меню и поиск — одна центрированная группа. Чтобы центр не ехал при
+   раскрытии, ширина группы должна быть постоянной. Поэтому под поле заранее
+   зарезервировано фиксированное место: в покое там виден только значок, при
+   раскрытии поле занимает ровно этот слот, и группа не меняет ширину —
+   центрирование остаётся на месте, соседи не сдвигаются.
+
+   Подписи меню больше не схлопываются ни при каком состоянии и ширине:
+   компоненты статичны, как и просили. */
+.topbar-center-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  gap: 10px;
+  /* Центр считаем от полосы: .topbar-center имеет position:relative и лежит
+     между брендом и правой группой, поэтому left:50% внутри него смещён.
+     Компенсируем половиной ширины зоны — тогда центр группы совпадает с
+     центром полосы. */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.topbar-center .topnav {
+  flex: 0 0 auto;
+}
+
+/* слот под поиск: постоянная ширина, поле растёт внутри него */
+.topbar-center .search-box {
+  flex: 0 0 auto;
+  width: 240px;
+  transition: width 280ms var(--ease), background 180ms var(--ease),
+              border-color 180ms var(--ease);
+}
+
+/* в покое слот пуст: видна только кнопка, поле прозрачно */
+.topbar-center .search-box:not(.is-open) {
+  width: 240px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+/* визуально в покое поле занимает 36, но место под него уже отведено */
+.topbar-center .search-box:not(.is-open) .search-toggle {
+  margin-right: 204px;
+}
+
+@media (max-width: 1360px) {
+  .topbar-center .search-box,
+  .topbar-center .search-box:not(.is-open) { width: 170px; }
+  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 134px; }
+}
+
+/* На 1280–1440 группа из меню (600) + слот (240) не оставляет воздуха справа.
+   Уменьшаем слот там, где иначе он упирается в правую группу: подписи меню
+   при этом НЕ схлопываются — они статичны, как требуется. */
+@media (max-width: 1460px) {
+  .topbar-center .search-box,
+  .topbar-center .search-box:not(.is-open) { width: 200px; }
+  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 164px; }
+}
+@media (max-width: 1340px) {
+  .topbar-center .search-box,
+  .topbar-center .search-box:not(.is-open) { width: 120px; }
+  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 84px; }
+  .topbar-center-inner { gap: 6px; }
+}
+@media (max-width: 1300px) {
+  .topbar-center .search-box,
+  .topbar-center .search-box:not(.is-open) { width: 76px; }
+  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 40px; }
+}
+@media (max-width: 1240px) {
+  .topbar-center .search-box,
+  .topbar-center .search-box:not(.is-open) { width: 120px; }
+  .topbar-center .search-box:not(.is-open) .search-toggle { margin-right: 84px; }
 }
