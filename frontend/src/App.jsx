@@ -67,7 +67,7 @@ export default function App() {
                     <Route path="/datasets" element={<Datasets />} />
                     <Route path="/models" element={<Models />} />
                     <Route path="/metrics" element={<Metrics />} />
-                    <Route
+                                  <Route
                       path="/settings"
                       element={
                         <Admin>

@@ -108,18 +108,6 @@ export default function Dashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Link
-            className="btn"
-            to="/icons-preview"
-            style={{
-              borderColor: '#E5A93C',
-              color: '#E5A93C',
-              background: 'rgba(229, 169, 60, 0.08)',
-              fontSize: 12,
-            }}
-          >
-            ★ Предосмотр иконок
-          </Link>
           <Link className="btn primary" to="/runs/new">
             <Play size={15} weight="fill" />
             {t("Новый прогон")}
