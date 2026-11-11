@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '../api'
 import { can, useAuth } from '../auth'
 import { Banner, ErrorBox, Field, Pill } from '../components'
+import PageSearch from '../components/PageSearch'
 import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
 import { useI18n } from '../i18n-context'
@@ -12,12 +13,28 @@ export default function Models() {
   const endpoints = useApi(() => api.endpoints())
   const targets = useApi(() => api.targets())
 
+  // Поиск на странице фильтрует оба списка: и эндпоинты, и модели. Раньше
+  // общий поиск в шапке сюда вообще не доходил — на этой странице он был
+  // мёртвой кнопкой.
+  const [query, setQuery] = useState('')
+
   const [showEndpoint, setShowEndpoint] = useState(false)
   const [showTarget, setShowTarget] = useState(false)
   const [error, setError] = useState(null)
   const [probe, setProbe] = useState({})
 
   if (endpoints.loading || targets.loading) return <PageSkeleton variant="dashboard" />
+
+  const needle = query.trim().toLowerCase()
+  const matches = (...fields) =>
+    !needle || fields.filter(Boolean).join(' ').toLowerCase().includes(needle)
+
+  const endpointList = (endpoints.data || []).filter((endpoint) =>
+    matches(endpoint.name, endpoint.base_url, endpoint.chat_url),
+  )
+  const targetList = (targets.data || []).filter((target) =>
+    matches(target.label, target.model_id, target.endpoint_name, target.group_name),
+  )
 
   async function runProbe(id) {
     setProbe((current) => ({ ...current, [id]: { busy: true } }))
@@ -39,7 +56,13 @@ export default function Models() {
           </p>
         </div>
         {can(user, 'operator') ? (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <PageSearch
+              value={query}
+              onChange={setQuery}
+              placeholder="Поиск по моделям…"
+              width={260}
+            />
             <button className="btn ghost" onClick={() => setShowEndpoint((value) => !value)}>
               + {t('Эндпоинт')}
             </button>
@@ -47,7 +70,14 @@ export default function Models() {
               + {t('Модель')}
             </button>
           </div>
-        ) : null}
+        ) : (
+          <PageSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Поиск по моделям…"
+            width={260}
+          />
+        )}
       </div>
 
       <ErrorBox error={error} />
@@ -76,10 +106,17 @@ export default function Models() {
       <div className="card">
         <div className="card-head">
           <h2>{t("Эндпоинты")}</h2>
-          <span className="dim mono-sm">{(endpoints.data || []).length}</span>
+          <span className="dim mono-sm">
+            {needle ? `${endpointList.length} / ${(endpoints.data || []).length}`
+                    : endpointList.length}
+          </span>
         </div>
-        {(endpoints.data || []).length === 0 ? (
-          <div className="empty">{t("Эндпоинтов нет. Добавьте первый — например свой LiteLLM или OpenWebUI.")}</div>
+        {endpointList.length === 0 ? (
+          needle ? (
+            <div className="empty">{t("Ничего не найдено по запросу")} «{query.trim()}».</div>
+          ) : (
+            <div className="empty">{t("Эндпоинтов нет. Добавьте первый — например свой LiteLLM или OpenWebUI.")}</div>
+          )
         ) : (
           <table className="data">
             <thead>
@@ -92,7 +129,7 @@ export default function Models() {
               </tr>
             </thead>
             <tbody>
-              {(endpoints.data || []).map((endpoint) => (
+              {endpointList.map((endpoint) => (
                 <tr key={endpoint.id}>
                   <td>{endpoint.name}</td>
                   <td className="mono-sm dim">{endpoint.chat_url || endpoint.base_url + '/chat/completions'}</td>
@@ -127,10 +164,17 @@ export default function Models() {
       <div className="card">
         <div className="card-head">
           <h2>{t("Модели")}</h2>
-          <span className="dim mono-sm">{(targets.data || []).length}</span>
+          <span className="dim mono-sm">
+            {needle ? `${targetList.length} / ${(targets.data || []).length}`
+                    : targetList.length}
+          </span>
         </div>
-        {(targets.data || []).length === 0 ? (
-          <div className="empty">{t("Моделей нет. Добавьте ID модели, доступный на эндпоинте.")}</div>
+        {targetList.length === 0 ? (
+          needle ? (
+            <div className="empty">{t("Ничего не найдено по запросу")} «{query.trim()}».</div>
+          ) : (
+            <div className="empty">{t("Моделей нет. Добавьте ID модели, доступный на эндпоинте.")}</div>
+          )
         ) : (
           <table className="data">
             <thead>
@@ -144,7 +188,7 @@ export default function Models() {
               </tr>
             </thead>
             <tbody>
-              {(targets.data || []).map((target) => (
+              {targetList.map((target) => (
                 <tr key={target.id}>
                   <td>{target.label || target.model_id}</td>
                   <td className="mono-sm dim">{target.model_id}</td>

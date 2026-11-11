@@ -1,23 +1,16 @@
-/** Верхняя полоса: логотип, меню, поиск, уведомления, профиль.
+/** Верхняя полоса: логотип, меню, уведомления, профиль.
  *
- *  Структура слева направо: бренд, центральная группа «меню + поиск» (центр
- *  полосы), правая группа «язык, колокольчик, профиль».
+ *  Поиска здесь больше нет: он переехал на страницы «Прогоны» и «Модели», где
+ *  ищет свои данные. Общий фильтр в шапке был неверен — он применялся только к
+ *  списку прогонов, а на остальных экранах просто занимал место.
  *
- *  ПРАВИЛА ПОВЕДЕНИЯ, которые здесь закреплены замером:
+ *  Правила поведения, закреплённые замером:
  *
- *  1. Открыт максимум ОДИН поповер. Раньше язык жил своим состоянием внутри
- *     LanguageSwitcher, поэтому клик по колокольчику оставлял меню языка
+ *  1. Открыт максимум ОДИН поповер. Раньше меню языка жило своим состоянием
+ *     внутри LanguageSwitcher, поэтому клик по колокольчику оставлял его
  *     открытым — на экране было два меню, а Escape закрывал не всё.
  *
- *  2. Escape закрывает любой поповер и поиск, но НЕ стирает введённый запрос:
- *     пользователь мог свернуть поиск, чтобы посмотреть результаты.
- *
- *  3. Закрытие поиска СБРАСЫВАЕТ фильтр. Раньше запрос оставался в состоянии
- *     App и продолжал фильтровать список при невидимом поиске — на экране
- *     были пустые «Прогоны» без видимой причины.
- *
- *  4. Поиск с непустым запросом не схлопывается в иконку, пока его не
- *     очистят: иначе активный фильтр становится невидимым. */
+ *  2. Escape закрывает любой поповер. */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -27,17 +20,15 @@ import { useI18n } from '../i18n-context'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import TopNav from '../components/TopNav'
 import {
-  ArrowSquareOut, Bell, CaretDown, MagnifyingGlass, SignOut, UserCircle, X,
+  ArrowSquareOut, Bell, CaretDown, SignOut, UserCircle,
 } from '../icons'
 
-export default function Topbar({ query, onQuery }) {
+export default function Topbar() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const runs = useApi(() => api.runs(50))
   const { t } = useI18n()
   const [panel, setPanel] = useState(null) // 'bell' | 'account' | 'lang' | null
-  const [searchOpen, setSearchOpen] = useState(false)
-  const inputRef = useRef(null)
   const wrapRef = useRef(null)
 
   const initials = (user?.display_name || user?.email || 'AD').slice(0, 2).toUpperCase()
@@ -45,24 +36,11 @@ export default function Topbar({ query, onQuery }) {
 
   useEffect(() => {
     function onKey(event) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setPanel(null)
-        setSearchOpen(true)
-        setTimeout(() => inputRef.current?.focus(), 190)
-      }
-      if (event.key === 'Escape') {
-        setPanel(null)
-        closeSearch()
-        inputRef.current?.blur()
-      }
+      if (event.key === 'Escape') setPanel(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // query в зависимостях обязателен: без него замыкание держит значение из
-    // первого рендера (пустую строку), и closeSearch() не снимал фильтр —
-    // поиск визуально закрывался, а список оставался отфильтрованным.
-  }, [query, onQuery])
+  }, [])
 
   useEffect(() => {
     function onDown(event) {
@@ -78,32 +56,9 @@ export default function Topbar({ query, onQuery }) {
     ['PARTIAL', 'ERROR', 'CANCELLED'].includes(run.status),
   )
 
-  /** Закрыть поиск и снять фильтр: пустой список без видимого поиска
-   *  выглядит как поломка, а не как отфильтрованный результат. */
-  function closeSearch() {
-    setSearchOpen(false)
-    if (query) onQuery('')
-  }
-
-  function submit(event) {
-    if (event.key === 'Enter' && query) navigate('/runs')
-  }
-
-  function toggleSearch() {
-    if (searchOpen) {
-      closeSearch()
-    } else {
-      setPanel(null)
-      setSearchOpen(true)
-      setTimeout(() => inputRef.current?.focus(), 190)
-    }
-  }
-
   /** Единственная точка переключения поповеров — гарантирует «один за раз». */
   function togglePanel(which) {
     setPanel((current) => (current === which ? null : which))
-    if (!searchOpen) return
-    closeSearch()
   }
 
   return (
@@ -117,41 +72,8 @@ export default function Topbar({ query, onQuery }) {
       </div>
 
       <div className="topbar-center">
-        <div className={`topbar-center-inner${searchOpen ? ' is-searching' : ''}`}>
+        <div className="topbar-center-inner">
           <TopNav />
-
-          <div className={`search-box${searchOpen ? ' is-open' : ''}`}>
-            <button
-              className="search-toggle"
-              onClick={toggleSearch}
-              aria-label={searchOpen ? t('Свернуть поиск') : t('Поиск')}
-              aria-expanded={searchOpen}
-              title={t('Поиск (Ctrl+K)')}
-            >
-              <MagnifyingGlass size={15} weight="bold" />
-            </button>
-            <input
-              ref={inputRef}
-              placeholder={t('Поиск по прогонам…')}
-              value={query}
-              onChange={(event) => onQuery(event.target.value)}
-              onKeyDown={submit}
-              aria-label={t('Поиск')}
-              tabIndex={searchOpen ? 0 : -1}
-            />
-            {searchOpen && query ? (
-              <button
-                className="search-clear"
-                onClick={() => {
-                  onQuery('')
-                  inputRef.current?.focus()
-                }}
-                aria-label={t('Очистить')}
-              >
-                <X size={12} weight="bold" />
-              </button>
-            ) : null}
-          </div>
         </div>
       </div>
 
