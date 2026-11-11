@@ -28,7 +28,7 @@ export default function TopNav() {
 
   const render = (item) => (
     <NavLink key={item.to} to={item.to} end={item.end} data-label={t(item.key)}>
-      <AppIcon name={item.icon} size={18} />
+      <AppIcon name={item.icon} size={20} />
       <span className="topnav-label">{t(item.key)}</span>
     </NavLink>
   )

@@ -331,15 +331,15 @@ export const SEMANTIC_ICON_MAP = {
   checks: CustomIcons['exam-check'],
   findings: PhosphorIcons.WarningOctagon,
 
-  // Навигация — по рекомендациям Senior UX.
+  // Навигация — финальный набор, утверждён заказчиком.
   // runs/models встречаются и в KPI, но там компоненты передают iconName
   // напрямую ('ai-scan'), поэтому конфликта нет.
   overview: PhosphorIcons.SquaresFour,
-  runs: CustomIcons['ci-pipeline-check'],
+  runs: CustomIcons['clipboard-text-history'],
   datasets: PhosphorIcons.Database,
   models: CustomIcons['ai-chip-robot-outline'],
   metrics: CustomIcons['rollup-metric'],
-  settings: PhosphorIcons.SlidersHorizontal,
+  settings: PhosphorIcons.Gear,
 
   // Quick actions
   'new-run': PhosphorIcons.Play,
