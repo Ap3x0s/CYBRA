@@ -1,0 +1,78 @@
+/* =============================================================================
+   ПОИСК НА СТРАНИЦЕ
+
+   Живёт в шапке раздела рядом с кнопкой действия. Раньше поиск был в верхней
+   полосе, но применялся только к списку прогонов — на остальных экранах он
+   занимал место и ничего не фильтровал. Теперь у каждой страницы свой поиск,
+   который знает, что именно ищет.
+
+   Высота 34 совпадает с кнопкой рядом (btn — 34), чтобы шапка не разъезжалась.
+   ============================================================================= */
+.page-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 150px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  gap: 7px;
+  background: var(--ink-800);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+.page-search:focus-within {
+  border-color: var(--accent-deep);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.page-search-icon {
+  flex: 0 0 auto;
+  color: var(--muted-dim);
+  transition: color 140ms var(--ease);
+}
+.page-search:focus-within .page-search-icon { color: var(--accent); }
+
+.page-search-input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+.page-search-input::placeholder {
+  color: var(--muted-dim);
+  text-overflow: ellipsis;
+}
+/* Встроенный крестик type=search дублирует нашу кнопку очистки. */
+.page-search-input::-webkit-search-cancel-button { display: none; }
+
+.page-search-clear {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-dim);
+  cursor: pointer;
+  transition: color 140ms var(--ease), background 140ms var(--ease);
+}
+.page-search-clear:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* На узких экранах поиск занимает всю строку шапки, а кнопки уходят под него:
+   иначе поле сжимается до нечитаемых 80 px. */
+@media (max-width: 900px) {
+  .page-head { flex-wrap: wrap; }
+  .page-search { width: 100% !important; }
+}

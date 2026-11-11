@@ -1,20 +1,24 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { ErrorBox, StatusPill, formatDate, pct } from '../components'
+import PageSearch from '../components/PageSearch'
 import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
 import { useI18n } from '../i18n-context'
 
-export default function Runs({ query = '' }) {
+export default function Runs() {
   const { t } = useI18n()
   const runs = useApi(() => api.runs(100))
+  // Поиск живёт на странице: он ищет только прогоны, поэтому общий фильтр
+  // в шапке был лишним слоем и применялся к чужим экранам.
+  const [query, setQuery] = useState('')
 
   if (runs.loading) return <PageSkeleton variant="runs" />
   if (runs.error) return <ErrorBox error={runs.error} />
 
   const all = runs.data || []
-  // The top-bar search filters here rather than doing a new request: the runs
-  // list already holds every field worth matching on.
+  // Фильтрация локальная, без запроса: список уже содержит все нужные поля.
   const needle = query.trim().toLowerCase()
   const list = needle
     ? all.filter((run) => {
@@ -36,16 +40,35 @@ export default function Runs({ query = '' }) {
           <h1>{t("Прогоны")}</h1>
           <p>{t("История проверок. Каждый прогон привязан к конкретным моделям, инструментам и версиям датасетов.")}</p>
         </div>
-        <Link className="btn primary" to="/runs/new">
-          {t("Новый прогон")}
-        </Link>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <PageSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Поиск по прогонам…"
+            width={280}
+          />
+          <Link className="btn primary" to="/runs/new">
+            {t("Новый прогон")}
+          </Link>
+        </div>
       </div>
 
       <div className="card">
         {list.length === 0 ? (
-          <div className="empty">
-            {t("История пуста.")} <Link to="/runs/new">{t("Создать первый прогон")}</Link>
-          </div>
+          // Различаем «истории нет» и «поиск ничего не нашёл»: иначе пустой
+          // экран при активном фильтре читается как потеря данных.
+          needle ? (
+            <div className="empty">
+              {t("Ничего не найдено по запросу")} «{query.trim()}».
+              <button className="btn ghost small" style={{ marginLeft: 10 }} onClick={() => setQuery('')}>
+                {t("Сбросить поиск")}
+              </button>
+            </div>
+          ) : (
+            <div className="empty">
+              {t("История пуста.")} <Link to="/runs/new">{t("Создать первый прогон")}</Link>
+            </div>
+          )
         ) : (
           <table className="data">
             <thead>

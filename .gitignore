@@ -31,3 +31,10 @@ scripts/check_topbar_final.py
 scripts/drop_preview_routes.py
 scripts/verify_*.py
 var/
+scripts/check_page_search.py
+scripts/patch_models_filter.py
+scripts/patch_topbar_check.py
+scripts/add_i18n_search.py
+scripts/check_i18n.py
+scripts/check_i18n_conflicts.py
+scripts/diag_401.py

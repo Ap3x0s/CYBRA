@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { can, useAuth } from './auth'
 import { Loading } from './components'
@@ -30,9 +29,6 @@ function Admin({ children }) {
 
 export default function App() {
   const { user, ready } = useAuth()
-  // Search lives at the shell level so the top bar keeps its value while the
-  // user moves between screens.
-  const [query, setQuery] = useState('')
 
   if (!ready) return <Loading label="Проверка сессии…" />
 
@@ -57,11 +53,11 @@ export default function App() {
             <AnimatedBackdrop />
             <div className="shell">
               <div style={{ minWidth: 0 }}>
-                <Topbar query={query} onQuery={setQuery} />
+                <Topbar />
                 <main className="main">
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
-                    <Route path="/runs" element={<Runs query={query} />} />
+                    <Route path="/runs" element={<Runs />} />
                     <Route path="/runs/new" element={<NewRun />} />
                     <Route path="/runs/:id" element={<RunDetail />} />
                     <Route path="/datasets" element={<Datasets />} />
