@@ -109,19 +109,38 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  height: 36px;
-  padding: 0 8px 0 4px;
-  border: 1px solid transparent;
+  height: 38px;
+  padding: 0 10px 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 999px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.028);
   color: var(--text);
   cursor: pointer;
   transition: background 150ms var(--ease), border-color 150ms var(--ease);
 }
 .profile-btn:hover,
 .profile-btn.is-open {
-  background: rgba(255, 255, 255, 0.055);
-  border-color: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.11);
+}
+/* Каретка поворачивается при открытии: иначе состояние кнопки читается только
+   по фону, а он меняется слабо. */
+.profile-btn .profile-caret {
+  transition: transform 160ms var(--ease);
+}
+.profile-btn.is-open .profile-caret { transform: rotate(180deg); }
+
+/* Аватар в полосе: янтарная подложка и кольцо — так он читается как личность,
+   а не как ещё одна серая кнопка среди уведомлений и языка. */
+.topbar .profile-btn .avatar {
+  width: 30px;
+  height: 30px;
+  background: rgba(229, 169, 60, 0.13);
+  border: 1px solid rgba(229, 169, 60, 0.3);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .profile-meta {
@@ -131,6 +150,7 @@
   line-height: 1.15;
   max-width: 150px;
   overflow: hidden;
+  gap: 1px;
 }
 .profile-name {
   font-size: 12.5px;
@@ -141,38 +161,52 @@
   max-width: 150px;
 }
 .profile-role {
-  font-size: 9.5px;
-  letter-spacing: 0.07em;
+  font-size: 9px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted-dim);
+  line-height: 1.2;
 }
 .profile-caret { color: var(--muted-dim); flex: 0 0 auto; }
+.profile-btn:hover .profile-caret,
+.profile-btn.is-open .profile-caret { color: var(--muted); }
 
 /* --- меню аккаунта ------------------------------------------------------- */
 .account-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 10px 12px;
+  gap: 12px;
+  padding: 12px 12px 14px;
+  /* Мягкая подложка отделяет шапку от списка действий: раньше строка висела
+     на голом фоне, и граница между «кто это» и «что можно сделать» терялась. */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
+  border-radius: 9px;
+  margin: 2px 2px 6px;
 }
 /* Крупный аватар в шапке поповера. Класс использовался в разметке, но стиля
    не было — работал базовый .avatar 34 px, и строка выглядела мелкой. */
 .avatar-lg {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  font-size: 13.5px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  font-size: 14px;
   font-weight: 600;
+  /* Янтарная подложка под initials: аватар — единственная «личность» в меню,
+     он должен читаться как акцент, а не как серая заглушка. */
+  background: rgba(229, 169, 60, 0.13);
+  border: 1px solid rgba(229, 169, 60, 0.3);
+  color: var(--accent);
 }
 .account-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 1px;
+  gap: 2px;
 }
 .account-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -184,6 +218,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Роль как бейдж: в шапке полосы она подписана мелким капсом под именем, а в
+   меню нужен явный маркер прав — иначе ADMIN/OPERATOR неотличимы от текста. */
+.account-role {
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(229, 169, 60, 0.12);
+  border: 1px solid rgba(229, 169, 60, 0.22);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.6;
+}
 .popover-sep {
   height: 1px;
   margin: 4px 6px;
@@ -192,8 +242,17 @@
 .popover-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
 }
+/* Иконки действий в меню — в единой колонке: разноширинные глифы иначе
+   сдвигают текст, и подписи начинаются с разных позиций. */
+.popover-row svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: color 140ms var(--ease);
+}
+.popover-item:hover .popover-row svg { color: var(--accent); }
+.popover-item.danger .popover-row svg { color: var(--danger); }
 
 /* Поповеры прижаты к правому краю своей кнопки и не выходят за экран. */
 .topbar .popover {
@@ -249,6 +308,64 @@
   white-space: nowrap;
 }
 .popover-item .pill { flex: 0 0 auto; }
+
+/* --- уведомления ---------------------------------------------------------
+   Счётчик в шапке меню: серый ноль вместо бледной цифры без смысла, и
+   янтарный акцент, когда есть что показать. */
+.popover-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--ink-600);
+  color: var(--muted-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+.popover-count.is-active {
+  background: rgba(229, 169, 60, 0.15);
+  color: var(--accent);
+}
+
+/* Пустое состояние: вместо голой строки «нет прогонов» — значок, заголовок и
+   пояснение, что именно здесь появится. Меню перестаёт читаться как
+   незаконченная заготовка. */
+.popover-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 3px;
+  padding: 16px 18px 18px;
+}
+.popover-blank-ico {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  margin-bottom: 5px;
+  background: rgba(229, 169, 60, 0.09);
+  color: var(--accent);
+}
+.popover-blank-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.popover-blank-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted-dim);
+  max-width: 230px;
+}
+
+/* Строка уведомления: статус прижат вправо, подпись занимает остаток. */
+.popover-item .popover-label { flex: 1 1 auto; }
 
 /* Выход — единственное разрушительное действие в меню: отделяем цветом. */
 .popover-item.danger { color: var(--danger); }
