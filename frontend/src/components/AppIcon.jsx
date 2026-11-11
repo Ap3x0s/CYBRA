@@ -23,10 +23,12 @@ export const CustomIcons = {
         style={{ verticalAlign: 'middle', flexShrink: 0, ...style }}
         aria-hidden="true"
       >
-        <rect width="4.5" height="5" x="2.75" y="12.5" rx="1.25" />
-        <rect width="4.5" height="5" x="9.75" y="12.5" rx="1.25" />
-        <rect width="4.5" height="5" x="16.75" y="12.5" rx="1.25" />
-        <path d="M7.25 15h2.5m4.5 0h2.5m-12-4.75V8.5a3 3 0 0 1 3-3h8.5a3 3 0 0 1 3 3v1.75M17.5 8.5l1.75 1.75L21 8.5" />
+        <g transform="translate(0 0.51)">
+          <rect width="4.5" height="5" x="2.75" y="12.5" rx="1.25" />
+          <rect width="4.5" height="5" x="9.75" y="12.5" rx="1.25" />
+          <rect width="4.5" height="5" x="16.75" y="12.5" rx="1.25" />
+          <path d="M7.25 15h2.5m4.5 0h2.5m-12-4.75V8.5a3 3 0 0 1 3-3h8.5a3 3 0 0 1 3 3v1.75M17.5 8.5l1.75 1.75L21 8.5" />
+        </g>
       </svg>
     )
   },
@@ -272,7 +274,9 @@ export const CustomIcons = {
         style={{ verticalAlign: 'middle', flexShrink: 0, ...style }}
         aria-hidden="true"
       >
-        <path d="M21 11.11V5a2 2 0 0 0-2-2h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14a2 2 0 0 0 2 2h6.11c1.26 1.24 2.98 2 4.89 2c3.87 0 7-3.13 7-7c0-1.91-.76-3.63-2-4.89M12 3c.55 0 1 .45 1 1s-.45 1-1 1s-1-.45-1-1s.45-1 1-1M5 19V5h2v2h10V5h2v4.68c-.91-.43-1.92-.68-3-.68H7v2h4.1c-.6.57-1.06 1.25-1.42 2H7v2h2.08c-.05.33-.08.66-.08 1c0 1.08.25 2.09.68 3zm11 2c-2.76 0-5-2.24-5-5s2.24-5 5-5s5 2.24 5 5s-2.24 5-5 5m.5-4.75l2.86 1.69l-.75 1.22L15 17v-5h1.5z" />
+        <g transform="translate(-1.02 0)">
+          <path d="M21 11.11V5a2 2 0 0 0-2-2h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14a2 2 0 0 0 2 2h6.11c1.26 1.24 2.98 2 4.89 2c3.87 0 7-3.13 7-7c0-1.91-.76-3.63-2-4.89M12 3c.55 0 1 .45 1 1s-.45 1-1 1s-1-.45-1-1s.45-1 1-1M5 19V5h2v2h10V5h2v4.68c-.91-.43-1.92-.68-3-.68H7v2h4.1c-.6.57-1.06 1.25-1.42 2H7v2h2.08c-.05.33-.08.66-.08 1c0 1.08.25 2.09.68 3zm11 2c-2.76 0-5-2.24-5-5s2.24-5 5-5s5 2.24 5 5s-2.24 5-5 5m.5-4.75l2.86 1.69l-.75 1.22L15 17v-5h1.5z" />
+        </g>
       </svg>
     )
   },
@@ -348,6 +352,51 @@ export const SEMANTIC_ICON_MAP = {
   'run-history': PhosphorIcons.ClockCounterClockwise,
 }
 
+
+/**
+ * Оптическая коррекция размера.
+ *
+ * Замер на плоском фоне (рендер 400 px, доля чернил от бокса) показал разброс
+ * 69–94 %: «Обзор» занимает 69 % квадрата, «Модели» — 94 %. При одинаковом
+ * size они выглядят разнокалиберными, и «Модели» зрительно тяжелее соседей.
+ * Коэффициент подтягивает мелкие и осаживает крупные; масштаб идёт вокруг
+ * центра, поэтому геометрия иконки не ломается.
+ *
+ * Значения получены делением целевого заполнения (81 %) на фактическое.
+ */
+export const OPTICAL_SCALE = {
+  // Навигация
+  overview: 1.17,   // 69 % -> 81 %
+  runs: 0.97,       //  92 % (по высоте) -> 89 %
+  datasets: 1.06,   //  75 % -> 80 %
+  models: 0.86,     //  94 % -> 81 %
+  metrics: 1.08,    //  75 % -> 81 %
+  settings: 1.0,    //  82 % — эталон
+  // KPI и быстрые действия (подложки 30 и 34 px)
+  'ci-pipeline-check': 1.05,
+  'exam-check': 1.05,
+  'ai-scan': 1.0,
+  squaresfour: 1.17,
+}
+
+
+/**
+ * Оптический сдвиг: на сколько процентов своей ширины сдвинуть иконку, чтобы
+ * её «чернила» встали по центру подложки.
+ *
+ * Замер: рендер каждой иконки на плоском фоне, центр пиксельного bbox против
+ * геометриического центра. Phosphor рисует Play со смещением вправо на 9.4 %
+ * (справа заложен визуальный вес острия), ClockCounterClockwise — на 1.5 %
+ * влево. Геометрически они стоят ровно, поэтому дефект виден только глазом.
+ *
+ * Проценты, а не пиксели: CSS считает translateX(%) от ширины элемента,
+ * поэтому компенсация верна при любом size.
+ */
+export const OPTICAL_SHIFT = {
+  Play: -9.38,
+  ClockCounterClockwise: 1.5,
+}
+
 /**
  * Standard Unified Icon Component for CYBRA.
  */
@@ -361,6 +410,7 @@ export default function AppIcon({
   chipRadius = 7,
   className = '',
   style = {},
+  adjust = false,
   ...rest
 }) {
   let IconComponent = DirectIcon
@@ -385,16 +435,41 @@ export default function AppIcon({
     IconComponent = PhosphorIcons.Info || 'span'
   }
 
+  // adjust включает оптическую коррекцию: иконки одного набора должны читаться
+  // как одно семейство, а их «чернила» занимают от 69 до 94 % квадрата.
+  //
+  // Ключ берём либо из name (строковое имя), либо из displayName компонента:
+  // быстрые действия передают icon={Play}, и по name таблица не находится.
+  const opticalKey =
+    typeof name === 'string'
+      ? name
+      : (IconComponent && IconComponent.displayName
+          ? IconComponent.displayName.replace(/Icon$/, '')
+          : null)
+
+  const scale = adjust && opticalKey ? OPTICAL_SCALE[opticalKey] : null
+  const shiftX = opticalKey ? OPTICAL_SHIFT[opticalKey] : null
+  const transforms = []
+  if (scale) transforms.push(`scale(${scale})`)
+  if (shiftX) transforms.push(`translateX(${shiftX}%)`)
+  const scaledStyle = transforms.length
+    ? {
+        transform: transforms.join(' '),
+        transformOrigin: 'center',
+        ...style,
+      }
+    : style
+
   const isCustom = typeof IconComponent === 'function' && Object.values(CustomIcons).includes(IconComponent)
 
   const renderedIcon = isCustom ? (
-    <IconComponent size={size} className={className} style={style} {...rest} />
+    <IconComponent size={size} className={className} style={scaledStyle} {...rest} />
   ) : (
     <IconComponent
       size={size}
       weight={weight}
       className={className}
-      style={{ verticalAlign: 'middle', flexShrink: 0, ...style }}
+      style={{ verticalAlign: 'middle', flexShrink: 0, ...scaledStyle }}
       {...rest}
     />
   )

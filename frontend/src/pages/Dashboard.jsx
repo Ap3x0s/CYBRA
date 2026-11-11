@@ -208,7 +208,9 @@ export default function Dashboard() {
           <div className="quick-list" style={{ flex: 1, justifyContent: 'center' }}>
             {[
               // Each icon mirrors the destination, so the list is scannable
-              // without reading the labels.
+              // without reading the labels. Оптические сдвиги (Play,
+              // ClockCounterClockwise) живут в AppIcon: там они в процентах,
+              // поэтому верны при любом размере.
               { to: '/runs/new', Icon: Play, title: t('Запустить прогон'), sub: t('выбрать модели и наборы') },
               { to: '/models', Icon: ArrowsLeftRight, title: t('Сравнить модели'), sub: t('эндпоинты и группы') },
               { to: '/datasets', Icon: BracketsCurly, title: t('Править датасеты'), sub: t('кейсы и версии') },
@@ -216,7 +218,7 @@ export default function Dashboard() {
             ].map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
-                  <Icon size={20} weight="bold" />
+                  <AppIcon icon={Icon} size={20} adjust />
                 </span>
                 <span>
                   <div className="qi-title">{t(title)}</div>

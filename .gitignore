@@ -41,3 +41,6 @@ scripts/diag_401.py
 scripts/diag_jitter*.py
 scripts/diag_drift*.py
 scripts/add_i18n_bell.py
+scripts/diag_icon*.py
+scripts/fix_icon*.py
+scripts/add_optical_scale.py
