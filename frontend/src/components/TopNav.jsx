@@ -28,7 +28,10 @@ export default function TopNav() {
 
   const render = (item) => (
     <NavLink key={item.to} to={item.to} end={item.end} data-label={t(item.key)}>
-      <AppIcon name={item.icon} size={20} />
+      {/* adjust включает оптическую коррекцию размера: «чернила» иконок
+          занимают от 69 до 94 % квадрата, без выравнивания они выглядят
+          разнокалиберными. */}
+      <AppIcon name={item.icon} size={20} adjust />
       <span className="topnav-label">{t(item.key)}</span>
     </NavLink>
   )
