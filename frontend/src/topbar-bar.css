@@ -107,9 +107,12 @@
 }
 
 .search-toggle {
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
+  /* 34, а не 36: у контейнера border 1px с двух сторон при box-sizing:
+     border-box, поэтому 36-пиксельная кнопка вылезала за внутреннюю область
+     (34) и обрезалась. Лупа резалась именно из-за этого. */
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border: 0;
@@ -122,7 +125,11 @@
 .search-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 
 .search-box input {
-  flex: 1 1 auto;
+  /* basis 0 обязателен: при flex-basis auto поле наследует ширину по
+     умолчанию (~170px) и не даёт контейнеру сжаться до 36 в закрытом
+     состоянии — из-за этого содержимое вылезало и обрезалось. */
+  flex: 1 1 0;
+  width: 0;
   min-width: 0;
   border: 0;
   outline: none;
@@ -390,4 +397,29 @@
   .topbar-center .search-box.is-open {
     width: clamp(200px, calc(100vw - 850px), 340px);
   }
+}
+
+/* В закрытом состоянии контейнер 36 px. Кнопка 34 + рамки 2 = 36 — ровно.
+   Скрываем поле полностью, чтобы оно не создавало scrollWidth и не резало
+   лупу. В открытом — поле возвращается. */
+.search-box:not(.is-open) input {
+  width: 0;
+  flex: 0 0 0;
+  padding: 0;
+  border: 0;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.search-box:not(.is-open) { display: flex; }
+
+/* В закрытом состоянии контейнер — просто квадрат 36: отступы и gap ему не
+   нужны, но именно они давали лишние 34 px scrollWidth и резали лупу.
+   Открытие возвращает отступы плавно. */
+.search-box:not(.is-open) {
+  padding: 0;
+  gap: 0;
+}
+.search-box:not(.is-open) .search-toggle {
+  margin: 0;
 }
