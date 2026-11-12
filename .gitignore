@@ -104,3 +104,6 @@ scripts/apply_nudge_16.py
 scripts/final_measure.py
 scripts/visual_compare_shift.py
 scripts/apply_final_shift.py
+scripts/audit_metric*.py
+scripts/audit_metrics.py
+scripts/drop_adjust.py
