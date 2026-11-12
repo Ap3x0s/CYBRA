@@ -123,6 +123,8 @@
 .cy-select-option.is-active {
   background: rgba(255, 255, 255, 0.07);
 }
+/* Выбранный пункт отличается цветом и весом шрифта — отдельный маркер не
+   нужен: он дублировал то же состояние и визуально перегружал строку. */
 .cy-select-option.is-selected {
   color: var(--accent);
   font-weight: 500;
@@ -140,13 +142,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.cy-select-check {
-  flex: 0 0 auto;
-  color: var(--accent);
-  /* Иконка, а не глиф: выравниваем по центру строки, иначе она садится на
-     baseline текста и кажется приподнятой. */
-  display: block;
 }
 
 /* На узких экранах список не должен вылезать за край. */
