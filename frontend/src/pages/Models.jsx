@@ -3,6 +3,7 @@ import { api } from '../api'
 import { can, useAuth } from '../auth'
 import { Banner, ErrorBox, Field, Pill } from '../components'
 import PageSearch from '../components/PageSearch'
+import Select from '../components/Select'
 import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
 import { useI18n } from '../i18n-context'
@@ -331,13 +332,14 @@ function TargetForm({ endpoints, onDone, onError }) {
       </div>
       <div className="row">
         <Field label={t("Эндпоинт")}>
-          <select className="select" value={form.endpoint_id} onChange={update('endpoint_id')}>
-            {endpoints.map((endpoint) => (
-              <option key={endpoint.id} value={endpoint.id}>
-                {endpoint.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            value={form.endpoint_id}
+            onChange={(v) => setForm((current) => ({ ...current, endpoint_id: v }))}
+            options={endpoints.map((endpoint) => ({
+              value: endpoint.id,
+              label: endpoint.name,
+            }))}
+          />
         </Field>
         <Field label={t("ID модели")} help="Именно то имя, которое принимает сервер.">
           <input className="input" value={form.model_id} onChange={update('model_id')} required />
@@ -351,10 +353,14 @@ function TargetForm({ endpoints, onDone, onError }) {
           <input className="input" value={form.group_name} onChange={update('group_name')} />
         </Field>
         <Field label={t("Параметр лимита")}>
-          <select className="select" value={form.token_parameter} onChange={update('token_parameter')}>
-            <option value="max_tokens">max_tokens</option>
-            <option value="max_completion_tokens">max_completion_tokens</option>
-          </select>
+          <Select
+            value={form.token_parameter}
+            onChange={(v) => setForm((current) => ({ ...current, token_parameter: v }))}
+            options={[
+              { value: 'max_tokens', label: 'max_tokens' },
+              { value: 'max_completion_tokens', label: 'max_completion_tokens' },
+            ]}
+          />
         </Field>
       </div>
       <label className="checkbox" style={{ marginBottom: 14 }}>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { api } from '../api'
 import { ErrorBox, Meter, Pill, pct } from '../components'
 import { BlockSkeleton, PageSkeleton } from '../components/Skeletons'
+import Select from '../components/Select'
 import { useApi } from '../hooks'
 import { useI18n } from '../i18n-context'
 
@@ -133,35 +134,32 @@ export default function Metrics() {
         <div className="row" style={{ marginBottom: 0 }}>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>{t("Метрика")}</label>
-            <select className="select" value={metric} onChange={(event) => setMetric(event.target.value)}>
-              {(catalog.data || []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {t(item.label)}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={metric}
+              onChange={setMetric}
+              options={(catalog.data || []).map((item) => ({
+                value: item.id,
+                label: item.label,
+              }))}
+            />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>{t("Инструмент")}</label>
-            <select className="select" value={tool} onChange={(event) => setTool(event.target.value)}>
-              <option value="">{t("все")}</option>
-              {tools.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={tool}
+              onChange={setTool}
+              options={[{ value: '', label: t('все') },
+                ...tools.map((name) => ({ value: name, label: name }))]}
+            />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>{t("Модель")}</label>
-            <select className="select" value={model} onChange={(event) => setModel(event.target.value)}>
-              <option value="">{t("все")}</option>
-              {models.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={model}
+              onChange={setModel}
+              options={[{ value: '', label: t('все') },
+                ...models.map((name) => ({ value: name, label: name }))]}
+            />
           </div>
         </div>
 

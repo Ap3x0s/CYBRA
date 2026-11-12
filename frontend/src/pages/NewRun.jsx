@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { Banner, ErrorBox, Field } from '../components'
 import { PageSkeleton } from '../components/Skeletons'
+import Select from '../components/Select'
 import { useApi } from '../hooks'
 import { useI18n } from '../i18n-context'
 
@@ -167,18 +168,18 @@ export default function NewRun() {
               </Field>
 
               <Field label={t("Модель-судья")} help={t('Оценивает смысловые критерии. Лучше отдельная от проверяемых.')}>
-                <select
-                  className="select"
+                <Select
                   value={judgeId || ''}
-                  onChange={(event) => setJudgeId(Number(event.target.value))}
-                >
-                  <option value="">{t('— по умолчанию первая выбранная —')}</option>
-                  {targetList.map((target) => (
-                    <option key={target.id} value={target.id}>
-                      {target.label || target.model_id}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => setJudgeId(v === '' ? null : Number(v))}
+                  placeholder={t('— по умолчанию первая выбранная —')}
+                  options={[
+                    { value: '', label: t('— по умолчанию первая выбранная —') },
+                    ...targetList.map((target) => ({
+                      value: target.id,
+                      label: target.label || target.model_id,
+                    })),
+                  ]}
+                />
               </Field>
             </>
           ) : null}
@@ -228,10 +229,14 @@ export default function NewRun() {
             <>
               <div className="row">
                 <Field label={t("Режим движка")} help="mock — офлайн-фикстура для демонстрации, без реальных запросов.">
-                  <select className="select" value={engineMode} onChange={(event) => setEngineMode(event.target.value)}>
-                    <option value="mock">mock — {t('фикстура')}</option>
-                    <option value="subprocess">subprocess — {t('реальный')} run.py</option>
-                  </select>
+                  <Select
+                    value={engineMode}
+                    onChange={setEngineMode}
+                    options={[
+                      { value: 'mock', label: `mock — ${t('фикстура')}` },
+                      { value: 'subprocess', label: `subprocess — ${t('реальный')} run.py` },
+                    ]}
+                  />
                 </Field>
                 <Field label={t("Лимит кейсов")} help="0 — все записи выбранного набора.">
                   <input
