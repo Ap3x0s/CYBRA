@@ -44,3 +44,11 @@ scripts/add_i18n_bell.py
 scripts/diag_icon*.py
 scripts/fix_icon*.py
 scripts/add_optical_scale.py
+scripts/diag_dash*.py
+scripts/diag_eight.py
+scripts/shot_eight.py
+scripts/fix_eight*.py
+scripts/fix_play*.py
+scripts/fix_shift*.py
+scripts/drop_shiftx.py
+scripts/patch_dash8.py

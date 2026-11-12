@@ -372,11 +372,18 @@ export const OPTICAL_SCALE = {
   models: 0.86,     //  94 % -> 81 %
   metrics: 1.08,    //  75 % -> 81 %
   settings: 1.0,    //  82 % — эталон
-  // KPI и быстрые действия (подложки 30 и 34 px)
-  'ci-pipeline-check': 1.05,
-  'exam-check': 1.05,
-  'ai-scan': 1.0,
-  squaresfour: 1.17,
+
+  // KPI на дашборде (подложка 30 px)
+  'ci-pipeline-check': 0.98,   // 83.3 % -> 82 %
+  'exam-check': 0.98,          // 83.3 % -> 82 %
+  'ai-scan': 0.98,             // 83.3 % -> 82 %
+  WarningOctagon: 1.0,         // 81.7 % — эталон
+
+  // Быстрые действия (подложка 34 px). Ключ по displayName для Phosphor.
+  Play: 1.0,                   // 81.7 % — эталон
+  ArrowsLeftRight: 1.2,        // 68.3 % -> 82 %
+  BracketsCurly: 0.88,         // 93.3 % -> 82 %
+  ClockCounterClockwise: 1.05, // 78.3 % -> 82 %
 }
 
 
@@ -393,8 +400,14 @@ export const OPTICAL_SCALE = {
  * поэтому компенсация верна при любом size.
  */
 export const OPTICAL_SHIFT = {
-  Play: -9.38,
-  ClockCounterClockwise: 1.5,
+  // Сдвиг в процентах от собственного размера иконки. Применяется как margin,
+  // поэтому не взаимодействует со scale() и верен на любом size.
+  //
+  // Play: острие справа, центр «веса» левее геометрического — замер дал
+  // +1.93 css px при size 20, то есть +9.65 %; сдвигаем влево.
+  Play: { x: -18.0 },
+  // ArrowsLeftRight: чернила ниже центра на 2.1 % — поднимаем.
+  ArrowsLeftRight: { y: 0.6 },
 }
 
 /**
@@ -448,17 +461,27 @@ export default function AppIcon({
           : null)
 
   const scale = adjust && opticalKey ? OPTICAL_SCALE[opticalKey] : null
-  const shiftX = opticalKey ? OPTICAL_SHIFT[opticalKey] : null
+  const shift = opticalKey ? OPTICAL_SHIFT[opticalKey] : null
   const transforms = []
   if (scale) transforms.push(`scale(${scale})`)
-  if (shiftX) transforms.push(`translateX(${shiftX}%)`)
-  const scaledStyle = transforms.length
-    ? {
-        transform: transforms.join(' '),
-        transformOrigin: 'center',
-        ...style,
-      }
-    : style
+  // Сдвиг применяется как margin ниже — transform его масштабировал бы.
+  const scaledStyle = {
+    ...(transforms.length
+      ? {
+          transform: transforms.join(' '),
+          transformOrigin: 'center',
+          // Без этого масштаб расширяет сам бокс (20 -> 24 px), и «доля,
+          // которую занимает рисунок» не меняется — выравнивание крупности
+          // не работает. fill-box масштабирует содержимое внутри бокса.
+          transformBox: 'fill-box',
+        }
+      : {}),
+    // Сдвиг через margin, а не transform: scale() масштабировал бы и поправку,
+    // и она зависела бы от коэффициента крупности.
+    ...(shift && shift.x ? { marginLeft: `${(shift.x / 100) * size}px` } : {}),
+    ...(shift && shift.y ? { marginTop: `${(shift.y / 100) * size}px` } : {}),
+    ...style,
+  }
 
   const isCustom = typeof IconComponent === 'function' && Object.values(CustomIcons).includes(IconComponent)
 
