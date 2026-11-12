@@ -64,6 +64,12 @@ from .security import (
     verify_password,
 )
 
+DEFAULT_USER_AGENT = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+)
+
+
 router = APIRouter(prefix='/api/v1')
 TOOL_LIST = ('garak', 'promptfoo', 'pyrit', 'harmbench', 'jailbreakbench', 'bipia',
              'agentdojo', 'security-regression')
@@ -269,7 +275,14 @@ def probe_endpoint(endpoint_id: int, request: Request,
         'stream': False,
         **(endpoint.extra_body or {}),
     }
-    headers = {'Content-Type': 'application/json'}
+    # User-Agent обязателен: urllib подставляет `Python-urllib/3.x`, и
+    # Cloudflare (например у api.commandcode.ai) отвечает 403 error 1010 —
+    # блокировкой по подписи клиента, ещё до проверки ключа. С обычным UA
+    # запрос доходит до авторизации, и ошибка становится осмысленной.
+    headers = {
+        'Content-Type': 'application/json',
+        'User-Agent': DEFAULT_USER_AGENT,
+    }
     key = settings.decrypt(endpoint.secret_encrypted)
     if key:
         headers['Authorization'] = 'Bearer ' + key
