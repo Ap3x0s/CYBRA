@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CaretDown } from '../icons'
+import { CaretDown, CheckCircle } from '../icons'
 import { useI18n } from '../i18n-context'
 
 /** Выпадающий список в стиле CYBRA.
@@ -193,7 +193,17 @@ export default function Select({
                 onClick={() => commit(index)}
               >
                 <span className="cy-select-option-label">{t(item.label)}</span>
-                {isSelected ? <span className="cy-select-check" aria-hidden="true">✓</span> : null}
+                {isSelected ? (
+                  /* Иконка из набора Phosphor вместо символа «✓»: текстовый
+                     глиф зависит от шрифта, сидит на baseline и в списке
+                     выглядит как случайный знак, а не как элемент управления. */
+                  <CheckCircle
+                    size={14}
+                    weight="fill"
+                    className="cy-select-check"
+                    aria-hidden="true"
+                  />
+                ) : null}
               </li>
             )
           })}
