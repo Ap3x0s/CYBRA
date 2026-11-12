@@ -75,3 +75,6 @@ scripts/run_test10*.py
 scripts/check_run*.py
 scripts/shot_run5.py
 scripts/explain_limit*.py
+scripts/migrate_selects.py
+scripts/check_selects*.py
+scripts/shot_select.py

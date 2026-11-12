@@ -5,6 +5,7 @@ import { Banner, Empty, ErrorBox, Field, Pill, formatDate } from '../components'
 import { BlockSkeleton, PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
 import { useI18n } from '../i18n-context'
+import Select from '../components/Select'
 
 /** Dataset workbench: browse versions, edit a case (which forks a version), import. */
 export default function Datasets() {
@@ -240,12 +241,16 @@ function CaseEditor({ item, onCancel, onSave }) {
           <input className="input" value={form.category} onChange={update('category')} />
         </Field>
         <Field label={t("Тип")}>
-          <select className="select" value={form.kind} onChange={update('kind')}>
-            <option value="harmful">harmful</option>
-            <option value="benign">benign</option>
-            <option value="injection">injection</option>
-            <option value="utility">utility</option>
-          </select>
+          <Select
+            value={form.kind}
+            onChange={(v) => setForm((current) => ({ ...current, kind: v }))}
+            options={[
+              { value: 'harmful', label: 'harmful' },
+              { value: 'benign', label: 'benign' },
+              { value: 'injection', label: 'injection' },
+              { value: 'utility', label: 'utility' },
+            ]}
+          />
         </Field>
       </div>
       <Field label={t("Промпт")}>
@@ -330,21 +335,21 @@ function DiffPicker({ versions, left, onError }) {
 
   return (
     <>
-      <select
-        className="select"
-        style={{ width: 150 }}
+      <Select
+        width={150}
         value={right}
-        onChange={(event) => setRight(event.target.value)}
-      >
-        <option value="">{t("сравнить с…")}</option>
-        {versions
-          .filter((version) => version.id !== left)
-          .map((version) => (
-            <option key={version.id} value={version.id}>
-              {version.name} v{version.version}
-            </option>
-          ))}
-      </select>
+        onChange={setRight}
+        placeholder={t('сравнить с…')}
+        options={[
+          { value: '', label: t('сравнить с…') },
+          ...versions
+            .filter((version) => version.id !== left)
+            .map((version) => ({
+              value: version.id,
+              label: `${version.name} v${version.version}`,
+            })),
+        ]}
+      />
       <button className="btn ghost small" onClick={compare} disabled={!right}>
         Diff
       </button>

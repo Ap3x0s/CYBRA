@@ -5,6 +5,7 @@ import { Banner, ErrorBox, Field, Pill, formatDate } from '../components'
 import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
 import { useI18n } from '../i18n-context'
+import Select from '../components/Select'
 
 export default function Settings() {
   const { user } = useAuth()
@@ -138,15 +139,15 @@ export default function Settings() {
                   />
                 </Field>
                 <Field label={t("Роль")}>
-                  <select
-                    className="select"
+                  <Select
                     value={form.role}
-                    onChange={(event) => setForm((c) => ({ ...c, role: event.target.value }))}
-                  >
-                    <option value="viewer">viewer — {t('только просмотр')}</option>
-                    <option value="operator">operator — {t('запуск прогонов')}</option>
-                    <option value="admin">admin — {t('полный доступ')}</option>
-                  </select>
+                    onChange={(v) => setForm((c) => ({ ...c, role: v }))}
+                    options={[
+                      { value: 'viewer', label: `viewer — ${t('только просмотр')}` },
+                      { value: 'operator', label: `operator — ${t('запуск прогонов')}` },
+                      { value: 'admin', label: `admin — ${t('полный доступ')}` },
+                    ]}
+                  />
                 </Field>
                 <Field label={t("Пароль")} help={t("Минимум 10 символов.")}>
                   <input
@@ -182,19 +183,19 @@ export default function Settings() {
                     <td>{item.email}</td>
                     <td className="muted">{item.display_name}</td>
                     <td>
-                      <select
-                        className="select"
-                        style={{ width: 130, padding: '4px 8px' }}
+                      <Select
+                        width={130}
                         value={item.role}
-                        onChange={async (event) => {
-                          await api.updateUser(item.id, { role: event.target.value })
+                        onChange={async (v) => {
+                          await api.updateUser(item.id, { role: v })
                           users.reload()
                         }}
-                      >
-                        <option value="viewer">viewer</option>
-                        <option value="operator">operator</option>
-                        <option value="admin">admin</option>
-                      </select>
+                        options={[
+                          { value: 'viewer', label: 'viewer' },
+                          { value: 'operator', label: 'operator' },
+                          { value: 'admin', label: 'admin' },
+                        ]}
+                      />
                     </td>
                     <td>
                       <Pill tone={item.is_active ? 'ok' : 'idle'}>
