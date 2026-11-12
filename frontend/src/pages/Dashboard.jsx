@@ -132,7 +132,9 @@ export default function Dashboard() {
           <div className="kpi" key={t(label)}>
             <div className="kpi-head">
               <span className="kpi-icon">
-                <AppIcon name={iconName} size={20} />
+                {/* adjust выравнивает крупность: замер показал разброс 68–93 %
+                    между восемью иконками дашборда. */}
+                <AppIcon name={iconName} size={20} adjust />
               </span>
               {t(label)}
             </div>
