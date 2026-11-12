@@ -207,15 +207,45 @@ manager = RunManager()
 
 
 # -- result import ------------------------------------------------------
+def _find_session_dir(out_dir: Path) -> Path | None:
+    """Каталог, в котором run.py оставил summary.json.
+
+    run.py создаёт внутри --out ещё один каталог сессии:
+        dest = Path(args.out).resolve() / run_id
+    Поэтому summary.json лежит либо прямо в out_dir (старые версии, mock),
+    либо в единственном вложенном каталоге. Без этого поиска импорт молча не
+    срабатывал: прогон получал PARTIAL и «Engine produced no summary.json»,
+    хотя все данные были на диске.
+    """
+    direct = out_dir / 'summary.json'
+    if direct.exists():
+        return out_dir
+
+    # Каталоги сессий: ровно один уровень вглубь, с summary.json внутри.
+    candidates = [
+        child for child in out_dir.iterdir()
+        if child.is_dir() and (child / 'summary.json').exists()
+    ] if out_dir.exists() else []
+
+    if not candidates:
+        return None
+    # Если сессий несколько (переиспользованный каталог) — берём свежайшую.
+    candidates.sort(key=lambda p: (p / 'summary.json').stat().st_mtime, reverse=True)
+    return candidates[0]
+
+
 def import_results(db: OrmSession, run: Run, spec: dict) -> None:
     """Copy summary.json and records into normalised tables."""
     out_dir = Path(run.out_dir)
-    summary_path = out_dir / 'summary.json'
-    if not summary_path.exists():
+    session_dir = _find_session_dir(out_dir)
+    if session_dir is None:
         run.error = run.error or 'Engine produced no summary.json'
         db.commit()
         return
-    summary = json.loads(summary_path.read_text(encoding='utf-8'))
+    summary = json.loads((session_dir / 'summary.json').read_text(encoding='utf-8'))
+    # summary найден — прошлая ошибка о его отсутствии больше не актуальна.
+    if run.error in ('Engine produced no summary.json',):
+        run.error = ''
 
     # Replace previous steps for idempotent re-import.
     for old in db.scalars(select(RunStep).where(RunStep.run_id == run.id)).all():
@@ -244,11 +274,18 @@ def import_results(db: OrmSession, run: Run, spec: dict) -> None:
                 categories=tool_result.get('categories', {}),
                 requests=tool_result.get('requests', {}),
                 error=tool_result.get('error') or '',
-                artifact_dir=tool_result.get('artifact_dir', ''),
+                # Храним путь вместе с каталогом сессии: иначе по этому полю
+                # нельзя открыть артефакты, потому что summary пишет пути
+                # относительно сессии, а run.out_dir на уровень выше.
+                artifact_dir=str(
+                    session_dir / tool_result['artifact_dir']
+                    if tool_result.get('artifact_dir') else ''
+                ),
             )
             db.add(step)
             db.flush()
-            _import_findings(db, step, out_dir, tool_result)
+            # Пути в summary относительны каталога сессии, а не out_dir.
+            _import_findings(db, step, session_dir, tool_result)
 
     db.commit()
 

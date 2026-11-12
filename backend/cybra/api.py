@@ -502,11 +502,19 @@ def _run_out(db: OrmSession, run: Run, with_steps: bool = True) -> dict:
                 'categories': step.categories or {}, 'requests': step.requests or {},
                 'error': step.error, 'artifact_dir': step.artifact_dir,
             })
+    # Длительность считаем на сервере: started_at и finished_at приходят с
+    # часовым поясом UTC, и повторять эту арифметику в каждом клиенте (список,
+    # деталь, отчёт) значило бы получить три источника правды.
+    duration = None
+    if run.started_at and run.finished_at:
+        duration = round((run.finished_at - run.started_at).total_seconds(), 1)
+
     return {
         'id': run.id, 'run_id': run.run_id, 'label': run.label,
         'engine_mode': run.engine_mode, 'status': run.status,
         'created_at': run.created_at, 'started_at': run.started_at,
-        'finished_at': run.finished_at, 'error': run.error, 'steps': steps,
+        'finished_at': run.finished_at, 'duration_seconds': duration,
+        'error': run.error, 'steps': steps,
     }
 
 

@@ -135,6 +135,10 @@ class SubprocessHandle(EngineHandle):
         self._process = process
         self._request = request
         self._log = log
+        # Отсчёт времени стартует ЗДЕСЬ, сразу после spawn. Раньше он начинался
+        # при первом обращении к _started_at (то есть при первом poll), поэтому
+        # elapsed_seconds показывал меньше реального времени прогона.
+        self._start_monotonic = time.monotonic()
         self._lock = threading.Lock()
         self._progress = Progress()
         self._finished_codes: dict[tuple[str, str], str] = {}
@@ -191,8 +195,8 @@ class SubprocessHandle(EngineHandle):
     # -- lifecycle ------------------------------------------------------
     @property
     def _started_at(self) -> float:
-        if not hasattr(self, '_start_monotonic'):
-            self._start_monotonic = time.monotonic()
+        # Значение задаётся в __init__; отдельного ленивого пути больше нет,
+        # чтобы время не зависело от того, когда пришёл первый опрос.
         return self._start_monotonic
 
     def wait(self, timeout: float | None = None) -> int:

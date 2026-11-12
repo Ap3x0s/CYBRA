@@ -10,6 +10,20 @@ import { useI18n } from '../i18n-context'
 
 const RUNNING = new Set(['PENDING', 'RUNNING'])
 
+/** Длительность прогона человеческим языком: 45 с, 23 мин, 1 ч 12 мин. */
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined) return null
+  const total = Math.round(Number(seconds))
+  if (!Number.isFinite(total) || total < 0) return null
+  if (total < 60) return `${total} с`
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  if (minutes < 60) return rest ? `${minutes} мин ${rest} с` : `${minutes} мин`
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return mins ? `${hours} ч ${mins} мин` : `${hours} ч`
+}
+
 export default function RunDetail() {
   const { id } = useParams()
   const { t } = useI18n()
@@ -60,6 +74,18 @@ export default function RunDetail() {
   if (run.error) return <ErrorBox error={run.error} />
 
   const data = run.data
+  // Длительность: сервер отдаёт duration_seconds, когда прогон завершён.
+  // Для идущего считаем от started_at до текущего момента, чтобы оператор
+  // видел реальный прогресс, а не пустое место.
+  const duration = data
+    ? formatDuration(
+        data.duration_seconds != null
+          ? data.duration_seconds
+          : data.started_at && !data.finished_at
+            ? (Date.now() - new Date(data.started_at).getTime()) / 1000
+            : null,
+      )
+    : null
   const steps = data.steps || []
   const totals = steps.reduce(
     (acc, step) => {
@@ -92,6 +118,14 @@ export default function RunDetail() {
             <span className="muted" style={{ marginLeft: 8 }}>
               {t('начат')} {formatDate(data.started_at)} · {t('завершён')} {formatDate(data.finished_at)}
             </span>
+            {/* Длительность — отдельным чипом рядом с датами. Держим его ВНЕ
+                span с датами: .pill — inline-блок, и внутри текстового span
+                он прилипал к последней дате без отступа. */}
+            {duration ? (
+              <span className="pill idle" style={{ marginLeft: 8 }}>
+                {duration}
+              </span>
+            ) : null}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>

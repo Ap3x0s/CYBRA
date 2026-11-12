@@ -65,3 +65,13 @@ scripts/diag_visual_center.py
 scripts/diag_cloudflare.py
 scripts/check_probe.py
 scripts/fix_user_agent.py
+scripts/fix_import_time.py
+scripts/reimport_test.py
+scripts/fix_time_and_error.py
+scripts/add_duration_ui.py
+scripts/fix_duration_order.py
+scripts/show_caps.py
+scripts/run_test10*.py
+scripts/check_run*.py
+scripts/shot_run5.py
+scripts/explain_limit*.py
