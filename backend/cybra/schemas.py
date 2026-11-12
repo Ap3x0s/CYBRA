@@ -170,6 +170,9 @@ class RunOut(BaseModel):
     created_at: dt.datetime
     started_at: dt.datetime | None
     finished_at: dt.datetime | None
+    # Длительность считает API: клиенту не нужно повторять арифметику с
+    # часовыми поясами, а в отчёте время должно быть одинаковым везде.
+    duration_seconds: float | None = None
     error: str = ''
     steps: list[RunStepOut] = Field(default_factory=list)
 
