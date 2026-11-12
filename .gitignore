@@ -78,3 +78,4 @@ scripts/explain_limit*.py
 scripts/migrate_selects.py
 scripts/check_selects*.py
 scripts/shot_select.py
+scripts/compare_marks.py
