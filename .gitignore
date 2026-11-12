@@ -52,3 +52,13 @@ scripts/fix_play*.py
 scripts/fix_shift*.py
 scripts/drop_shiftx.py
 scripts/patch_dash8.py
+scripts/revert_scale.py
+scripts/fix_centroid_shift.py
+scripts/tune_shift.py
+scripts/measure_response.py
+scripts/iterate_shift.py
+scripts/fix_svg_centering.py
+scripts/fix_residual*.py
+scripts/final_*.py
+scripts/drop_play.py
+scripts/diag_visual_center.py
