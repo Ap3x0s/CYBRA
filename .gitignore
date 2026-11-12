@@ -89,3 +89,6 @@ scripts/measure_whole_icon.py
 scripts/measure_svg_dom.py
 scripts/diag_gap_scale.py
 scripts/rebuild_octagon.py
+scripts/restore_octagon.py
+scripts/shift_whole_icon.py
+scripts/check_icon_sizes.py
