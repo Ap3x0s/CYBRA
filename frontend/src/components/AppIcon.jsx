@@ -23,7 +23,7 @@ export const CustomIcons = {
         style={{ verticalAlign: 'middle', flexShrink: 0, ...style }}
         aria-hidden="true"
       >
-        <g transform="translate(0 0.51)">
+        <g transform="translate(-0.89 -0.28)">
           <rect width="4.5" height="5" x="2.75" y="12.5" rx="1.25" />
           <rect width="4.5" height="5" x="9.75" y="12.5" rx="1.25" />
           <rect width="4.5" height="5" x="16.75" y="12.5" rx="1.25" />
@@ -50,8 +50,10 @@ export const CustomIcons = {
         style={{ verticalAlign: 'middle', flexShrink: 0, ...style }}
         aria-hidden="true"
       >
-        <rect width="16.5" height="18.5" x="3.75" y="2.75" rx="2.5" />
-        <path d="M7.25 8L8.5 9.25l2.25-2.5M7.5 14.5l2.75 2.75m0-2.75L7.5 17.25M13.75 8h2.75m-2.75 7.75h2.75" />
+        <g transform="translate(-0.29 0)">
+          <rect width="16.5" height="18.5" x="3.75" y="2.75" rx="2.5" />
+          <path d="M7.25 8L8.5 9.25l2.25-2.5M7.5 14.5l2.75 2.75m0-2.75L7.5 17.25M13.75 8h2.75m-2.75 7.75h2.75" />
+        </g>
       </svg>
     )
   },
@@ -69,7 +71,9 @@ export const CustomIcons = {
         style={{ verticalAlign: 'middle', flexShrink: 0, ...style }}
         aria-hidden="true"
       >
-        <path d="M9 11h2v2H9zm4 0h2v2h-2zM7 7h10v2H7zM5 9h2v6H5zm2 6h10v2H7zm10-6h2v6h-2zm-6-4h2v2h-2zM4 2h4v2H4zm0 18h4v2H4zM16 2h4v2h-4zm0 18h4v2h-4zM2 4h2v4H2zm0 12h2v4H2zM20 4h2v4h-2zm0 12h2v4h-2z" />
+        <g transform="translate(-0.53 0.25)">
+          <path d="M9 11h2v2H9zm4 0h2v2h-2zM7 7h10v2H7zM5 9h2v6H5zm2 6h10v2H7zm10-6h2v6h-2zm-6-4h2v2h-2zM4 2h4v2H4zm0 18h4v2H4zM16 2h4v2h-4zm0 18h4v2h-4zM2 4h2v4H2zm0 12h2v4H2zM20 4h2v4h-2zm0 12h2v4h-2z" />
+        </g>
       </svg>
     )
   },
@@ -365,25 +369,13 @@ export const SEMANTIC_ICON_MAP = {
  * Значения получены делением целевого заполнения (81 %) на фактическое.
  */
 export const OPTICAL_SCALE = {
-  // Навигация
-  overview: 1.17,   // 69 % -> 81 %
-  runs: 0.97,       //  92 % (по высоте) -> 89 %
-  datasets: 1.06,   //  75 % -> 80 %
-  models: 0.86,     //  94 % -> 81 %
-  metrics: 1.08,    //  75 % -> 81 %
-  settings: 1.0,    //  82 % — эталон
-
-  // KPI на дашборде (подложка 30 px)
-  'ci-pipeline-check': 0.98,   // 83.3 % -> 82 %
-  'exam-check': 0.98,          // 83.3 % -> 82 %
-  'ai-scan': 0.98,             // 83.3 % -> 82 %
-  WarningOctagon: 1.0,         // 81.7 % — эталон
-
-  // Быстрые действия (подложка 34 px). Ключ по displayName для Phosphor.
-  Play: 1.0,                   // 81.7 % — эталон
-  ArrowsLeftRight: 1.2,        // 68.3 % -> 82 %
-  BracketsCurly: 0.88,         // 93.3 % -> 82 %
-  ClockCounterClockwise: 1.05, // 78.3 % -> 82 %
+  // Пусто намеренно. Заказчик: «уменьшать не нужно было, 20 пикселей — хорошо
+  // смотрится на всех моделях». Равномерный кегль читается лучше, чем
+  // подогнанная крупность: разница в 1.7 п.п. уже незаметна, а подгонка
+  // заставляла одну иконку увеличиваться на 20 %, другую уменьшаться на 12 %.
+  //
+  // Таблица оставлена как точка расширения: если понадобится подтянуть
+  // отдельную иконку, достаточно добавить сюда коэффициент.
 }
 
 
@@ -400,14 +392,21 @@ export const OPTICAL_SCALE = {
  * поэтому компенсация верна при любом size.
  */
 export const OPTICAL_SHIFT = {
-  // Сдвиг в процентах от собственного размера иконки. Применяется как margin,
-  // поэтому не взаимодействует со scale() и верен на любом size.
+  // Сдвиг в ПИКСЕЛЯХ при size=20, применяется через transform translate.
   //
-  // Play: острие справа, центр «веса» левее геометрического — замер дал
-  // +1.93 css px при size 20, то есть +9.65 %; сдвигаем влево.
-  Play: { x: -18.0 },
-  // ArrowsLeftRight: чернила ниже центра на 2.1 % — поднимаем.
-  ArrowsLeftRight: { y: 0.6 },
+  // Работает 1:1 только потому, что OPTICAL_SCALE пуст и scale() не попадает
+  // в цепочку transform. Если крупность когда-нибудь включат, эти значения
+  // придётся пересчитать — иначе поправка будет масштабироваться вместе с
+  // иконкой.
+  //
+  // Наши собственные SVG (ci-pipeline-check, exam-check, ai-scan) выровнены
+  // прямо в viewBox: там сдвиг не зависит ни от размера, ни от раскладки.
+  // Play не двигаем: у сплошного треугольника bbox и центроид тянут в
+  // разные стороны. Рамка выпирает вправо на 1.91, но масса смещена
+  // влево (1.00/0.52). Сдвиг в любую сторону улучшает одну метрику и
+  // портит другую, поэтому оставляем как нарисовано — изначальный вид
+  // воспринимается ровным.
+  WarningOctagon: { x: -0.43 },  // центроид смещён вправо
 }
 
 /**
@@ -465,21 +464,23 @@ export default function AppIcon({
   const transforms = []
   if (scale) transforms.push(`scale(${scale})`)
   // Сдвиг применяется как margin ниже — transform его масштабировал бы.
+  // Сдвиг в пикселях, пересчитанный от номинала 20: при другом size он
+  // масштабируется пропорционально, чтобы иконка оставалась визуально
+  // центрированной.
+  if (shift) {
+    const k = size / 20
+    if (shift.x) transforms.push(`translateX(${shift.x * k}px)`)
+    if (shift.y) transforms.push(`translateY(${shift.y * k}px)`)
+  }
+
   const scaledStyle = {
     ...(transforms.length
       ? {
           transform: transforms.join(' '),
           transformOrigin: 'center',
-          // Без этого масштаб расширяет сам бокс (20 -> 24 px), и «доля,
-          // которую занимает рисунок» не меняется — выравнивание крупности
-          // не работает. fill-box масштабирует содержимое внутри бокса.
           transformBox: 'fill-box',
         }
       : {}),
-    // Сдвиг через margin, а не transform: scale() масштабировал бы и поправку,
-    // и она зависела бы от коэффициента крупности.
-    ...(shift && shift.x ? { marginLeft: `${(shift.x / 100) * size}px` } : {}),
-    ...(shift && shift.y ? { marginTop: `${(shift.y / 100) * size}px` } : {}),
     ...style,
   }
 

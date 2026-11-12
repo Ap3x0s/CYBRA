@@ -132,9 +132,9 @@ export default function Dashboard() {
           <div className="kpi" key={t(label)}>
             <div className="kpi-head">
               <span className="kpi-icon">
-                {/* adjust выравнивает крупность: замер показал разброс 68–93 %
-                    между восемью иконками дашборда. */}
-                <AppIcon name={iconName} size={20} adjust />
+                {/* 20 px на всех: заказчик подтвердил, что этот кегль
+                    смотрится ровно. Крупность не подгоняем. */}
+                <AppIcon name={iconName} size={20} />
               </span>
               {t(label)}
             </div>
@@ -211,8 +211,7 @@ export default function Dashboard() {
             {[
               // Each icon mirrors the destination, so the list is scannable
               // without reading the labels. Оптические сдвиги (Play,
-              // ClockCounterClockwise) живут в AppIcon: там они в процентах,
-              // поэтому верны при любом размере.
+              // ClockCounterClockwise) живут в AppIcon.
               { to: '/runs/new', Icon: Play, title: t('Запустить прогон'), sub: t('выбрать модели и наборы') },
               { to: '/models', Icon: ArrowsLeftRight, title: t('Сравнить модели'), sub: t('эндпоинты и группы') },
               { to: '/datasets', Icon: BracketsCurly, title: t('Править датасеты'), sub: t('кейсы и версии') },
@@ -220,7 +219,7 @@ export default function Dashboard() {
             ].map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
-                  <AppIcon icon={Icon} size={20} adjust />
+                  <AppIcon icon={Icon} size={20} />
                 </span>
                 <span>
                   <div className="qi-title">{t(title)}</div>
