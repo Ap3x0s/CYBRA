@@ -85,3 +85,7 @@ scripts/fix_oct_script.py
 scripts/fix_octagon.py
 scripts/shot_oct_grid.py
 scripts/compare_kpi_icons.py
+scripts/measure_whole_icon.py
+scripts/measure_svg_dom.py
+scripts/diag_gap_scale.py
+scripts/rebuild_octagon.py
