@@ -94,3 +94,13 @@ scripts/shift_whole_icon.py
 scripts/check_icon_sizes.py
 scripts/remove_icon_shift.py
 scripts/diag_subpixel.py
+scripts/measure_user_shot.py
+scripts/nudge_half_pixel.py
+scripts/check_dpr1.py
+scripts/probe_nudge.py
+scripts/probe_right.py
+scripts/finalize_octagon.py
+scripts/apply_nudge_16.py
+scripts/final_measure.py
+scripts/visual_compare_shift.py
+scripts/apply_final_shift.py
