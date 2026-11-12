@@ -481,7 +481,13 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
   background: rgba(229, 169, 60, 0.08);
   color: var(--accent);
   flex-shrink: 0;
+  /* line-height:0 обязателен: grid центрирует бокс строки, а не глиф. При
+     обычном line-height (1.5) svg с display:inline сидит на baseline, и
+     строка выше самого значка — из-за этого центр рисунка уезжает вверх
+     относительно центра подложки, хотя сам svg отцентрирован. */
+  line-height: 0;
 }
+.kpi-icon svg { display: block; }
 .kpi-value {
   font-family: var(--font-mono);
   font-size: 30px; font-weight: 600; letter-spacing: -0.04em;
