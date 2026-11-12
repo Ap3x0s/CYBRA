@@ -108,7 +108,16 @@ class Relay:
         payload.update(self.config.get('extra_body' if route == 'target' else 'judge_extra_body', {}))
         endpoint = self.config['endpoint' if route == 'target' else 'judge_endpoint']
         api_key = self.config['key' if route == 'target' else 'judge_key']
-        headers = {'Content-Type': 'application/json'}
+        # Тот же User-Agent, что и в пробе эндпоинта: без него Cloudflare
+        # может отдать 403/1010 ещё до проверки ключа, и прогон упадёт на
+        # каждом кейсе с виду необъяснимой ошибкой.
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            ),
+        }
         if api_key:
             headers['Authorization'] = 'Bearer ' + api_key
         headers.update(self.config.get('headers', {}) if route == 'target' else self.config.get('judge_headers', {}))
