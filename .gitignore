@@ -79,3 +79,9 @@ scripts/migrate_selects.py
 scripts/check_selects*.py
 scripts/shot_select.py
 scripts/compare_marks.py
+scripts/diag_octagon.py
+scripts/diag_oct_inner.py
+scripts/fix_oct_script.py
+scripts/fix_octagon.py
+scripts/shot_oct_grid.py
+scripts/compare_kpi_icons.py

@@ -92,7 +92,7 @@ export default function Dashboard() {
     },
     {
       label: t('Шагов с находками'), value: stats.findings, hint: t('модель × инструмент'),
-      iconName: 'WarningOctagon',
+      iconName: 'warning-octagon',
     },
   ]
 
