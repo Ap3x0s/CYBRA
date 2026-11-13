@@ -113,3 +113,4 @@ scripts/merge_metrics.py
 scripts/fix_chart_grouping.py
 scripts/fix_asr_filter.py
 scripts/check_asr.py
+scripts/fix_duplicate_metric.py
