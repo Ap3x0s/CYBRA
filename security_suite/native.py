@@ -27,10 +27,22 @@ def garak(job):
     garak_python=python_for('garak')
     if not Path(garak_python).exists():
         raise RuntimeError('garak environment missing; run: cybra setup tools garak')
+    # garak по умолчанию гоняет soft_probe_prompt_cap=256 промптов на пробу и
+    # игнорирует наш limit: три пробы давали 768 запросов и почти два часа
+    # работы. Задаём cap через конфиг, чтобы объём соответствовал запрошенному
+    # числу кейсов, и разрешаем параллельные запросы — иначе прогон
+    # не помещается ни в какой разумный бюджет времени.
+    probe_cap=max(1,int(job['limit']))
+    (out/'garak-run.yaml').write_text(
+        'run:\n  soft_probe_prompt_cap: %d\n  generations: 1\n'
+        'system:\n  parallel_requests: 4\n  parallel_attempts: 4\n' % probe_cap,
+        encoding='utf-8')
     cmd=[garak_python,'-m','garak','--target_type','openai.OpenAICompatible',
       '--target_name',job['model'],'--generator_option_file',str(out/'generator.json'),
-      '--spec',job['garak_probes'],'--generations','1','--parallel_attempts','1',
-      '--parallel_requests','1','--seed',str(job['seed']),'--report_prefix',str(out/'garak')]
+      '--spec',job['garak_probes'],'--generations','1','--parallel_attempts','4',
+      '--parallel_requests','4','--seed',str(job['seed']),
+      '--config',str(out/'garak-run.yaml'),
+      '--report_prefix',str(out/'garak')]
     write_json(out/'command.json',cmd)
     with (out/'garak.log').open('w') as log:
         result=subprocess.run(cmd,env=env,stdout=log,stderr=subprocess.STDOUT)
@@ -100,11 +112,11 @@ module.exports = async (output, context) => {
     assertion=assertion.replace('JOB',json.dumps(job),1).replace('RULES',json.dumps(RULES),1).replace('SYSTEM',json.dumps(JUDGE_SYSTEM),1)
     (out/'assertion.js').write_text(assertion,encoding='utf-8')
     (out/'prompt.js').write_text("module.exports=({vars})=>JSON.stringify([{role:'system',content:vars.system},{role:'user',content:vars.prompt}]);\n")
-    config={'description':'Corporate RU/EN v2','prompts':['file://'+str(out/'prompt.js')],
+    config={'description':'Corporate RU/EN v2','prompts':['file://prompt.js'],
       'providers':[{'id':'openai:chat:'+job['model'],'label':job['model'],'config':{
        'apiBaseUrl':job['target_base'],'apiKey':'{{ env.SUITE_RELAY_KEY }}','showThinking':False,
        'temperature':0,'max_tokens':job['max_tokens'],'timeout':job['timeout']*1000}}],
-      'tests':[{'description':c['id'],'vars':c,'assert':[{'type':'javascript','value':'file://'+str(out/'assertion.js')}]} for c in cases]}
+      'tests':[{'description':c['id'],'vars':c,'assert':[{'type':'javascript','value':'file://assertion.js'}]} for c in cases]}
     write_json(out/'config.json',config)
     # npm кладёт рядом три файла: POSIX-скрипт без расширения, .cmd и .ps1.
     # На Windows скрипт без расширения не исполняется (WinError 193), поэтому
@@ -117,12 +129,15 @@ module.exports = async (output, context) => {
         executable=bindir/'promptfoo'
     if not executable.exists():
         raise RuntimeError(f'Promptfoo CLI not found at {executable}')
-    cmd=[str(executable),'eval','-c',str(out/'config.json'),'--max-concurrency','1','--no-cache',
+    cmd=[str(executable),'eval','-c','config.json','--max-concurrency','1','--no-cache',
       '--output',str(out/'native.json'),'--output',str(out/'native.junit.xml')]
     use_shell=os.name=='nt' and str(executable).lower().endswith('.cmd')
     with (out/'promptfoo.log').open('w') as log:
-        result=subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,env=os.environ.copy(),
-          shell=use_shell)
+        # cwd обязателен: Promptfoo резолвит file:// относительно рабочего
+        # каталога конфига. С абсолютным путём он отвечает
+        # «Unsupported file type» — проверено на трёх вариантах assertion.
+        result=subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,
+          env=os.environ.copy(),cwd=str(out),shell=use_shell)
     if not (out/'native.junit.xml').exists():raise RuntimeError(f'Promptfoo exit {result.returncode}; no JUnit export')
     root=ET.parse(out/'native.junit.xml').getroot();nodes=list(root.iter('testcase'))
     if len(nodes)!=len(cases):raise ValueError(f'Expected {len(cases)} cases, received {len(nodes)}')
