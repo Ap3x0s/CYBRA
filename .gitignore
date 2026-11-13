@@ -159,3 +159,4 @@ scripts/topbar_fix3.py
 scripts/topbar_fix4.py
 scripts/topbar_fix5.py
 scripts/topbar_fresh.py
+scripts/topbar_fix*.py
