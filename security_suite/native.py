@@ -15,7 +15,14 @@ def garak(job):
     write_json(out/'generator.json',{'openai':{'OpenAICompatible':{
       'uri':job['target_base'],'temperature':0,'max_tokens':job['max_tokens'],'stop':[]}}})
     env=os.environ.copy();env['OPENAICOMPATIBLE_API_KEY']=env['SUITE_RELAY_KEY']
-    cmd=[sys.executable,'-m','garak','--target_type','openai.OpenAICompatible',
+    # garak живёт в отдельном venv (.tools/garak). Запуск через sys.executable
+    # поднимал основной интерпретатор, где garak не установлен, — процесс
+    # падал, отчёт не создавался.
+    from .setup_tools import python_for
+    garak_python=python_for('garak')
+    if not Path(garak_python).exists():
+        raise RuntimeError('garak environment missing; run: cybra setup tools garak')
+    cmd=[garak_python,'-m','garak','--target_type','openai.OpenAICompatible',
       '--target_name',job['model'],'--generator_option_file',str(out/'generator.json'),
       '--spec',job['garak_probes'],'--generations','1','--parallel_attempts','1',
       '--parallel_requests','1','--seed',str(job['seed']),'--report_prefix',str(out/'garak')]
@@ -94,11 +101,23 @@ module.exports = async (output, context) => {
        'temperature':0,'max_tokens':job['max_tokens'],'timeout':job['timeout']*1000}}],
       'tests':[{'description':c['id'],'vars':c,'assert':[{'type':'javascript','value':'file://'+str(out/'assertion.cjs')}]} for c in cases]}
     write_json(out/'config.json',config)
-    executable=ROOT/'.tools/promptfoo/node_modules/.bin/promptfoo'
+    # npm кладёт рядом три файла: POSIX-скрипт без расширения, .cmd и .ps1.
+    # На Windows скрипт без расширения не исполняется (WinError 193), поэтому
+    # выбираем по платформе, а .cmd запускаем через shell.
+    bindir=ROOT/'.tools/promptfoo/node_modules/.bin'
+    if os.name=='nt':
+        executable=bindir/'promptfoo.cmd'
+        if not executable.exists():executable=bindir/'promptfoo.ps1'
+    else:
+        executable=bindir/'promptfoo'
+    if not executable.exists():
+        raise RuntimeError(f'Promptfoo CLI not found at {executable}')
     cmd=[str(executable),'eval','-c',str(out/'config.json'),'--max-concurrency','1','--no-cache',
       '--output',str(out/'native.json'),'--output',str(out/'native.junit.xml')]
+    use_shell=os.name=='nt' and str(executable).lower().endswith('.cmd')
     with (out/'promptfoo.log').open('w') as log:
-        result=subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,env=os.environ.copy())
+        result=subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,env=os.environ.copy(),
+          shell=use_shell)
     if not (out/'native.junit.xml').exists():raise RuntimeError(f'Promptfoo exit {result.returncode}; no JUnit export')
     root=ET.parse(out/'native.junit.xml').getroot();nodes=list(root.iter('testcase'))
     if len(nodes)!=len(cases):raise ValueError(f'Expected {len(cases)} cases, received {len(nodes)}')
@@ -115,6 +134,35 @@ module.exports = async (output, context) => {
         # Some versions use 1 for failed assertions; only accept with complete parsed rows.
         if result.returncode!=1 or not any(n.find('failure') is not None for n in nodes):
             raise RuntimeError(f'Unexpected Promptfoo exit {result.returncode}')
+
+
+def _run_in_tool_env(tool, job):
+    """Запустить реализацию адаптера интерпретатором инструмента.
+
+    Тяжёлые инструменты (garak, PyRIT, AgentDojo) живут в отдельных venv:
+    они тянут torch и не должны протекать в основное окружение. Импортировать
+    их пакеты напрямую нельзя — процесс упадёт с ModuleNotFoundError.
+    """
+    from .setup_tools import python_for
+    python = python_for(tool)
+    if not Path(python).exists():
+        raise RuntimeError(
+            f'{tool} environment missing; run: cybra setup tools {tool}')
+    cmd = [python, '-m', 'security_suite.native_entry', tool, str(Path(job['out']) / 'job.json')]
+    log_path = Path(job['out']) / f'{tool}.log'
+    env = os.environ.copy()
+    env['PYTHONPATH'] = str(ROOT)
+    env['PYTHONIOENCODING'] = 'utf-8'
+    with log_path.open('w', encoding='utf-8') as log:
+        result = subprocess.run(cmd, cwd=str(ROOT), env=env,
+                                stdout=log, stderr=subprocess.STDOUT)
+    if result.returncode != 0:
+        tail = ''
+        try:
+            tail = log_path.read_text(encoding='utf-8', errors='replace').strip().splitlines()[-1]
+        except (OSError, IndexError):
+            pass
+        raise RuntimeError(f'{tool} failed (exit {result.returncode}): {tail}')
 
 
 async def pyrit_async(job):
@@ -143,11 +191,27 @@ async def pyrit_async(job):
             record(job,c['id'],'multi_turn',verdict.pop('verdict'),prompt=c['messages'],answer=answers,executed_turns=result.executed_turns,**verdict)
         except Exception as e:record(job,c['id'],'multi_turn','ERROR',reason=str(e))
 
-def pyrit(job):
+def pyrit_impl(job):
+    """Реализация PyRIT. Вызывается в окружении .tools/pyrit."""
     asyncio.run(pyrit_async(job))
 
 
+def pyrit(job):
+    """Запуск PyRIT в его собственном интерпретаторе.
+
+    PyRIT импортирует свои пакеты напрямую, а в основном venv их нет: он
+    поставлен в .tools/pyrit. Поэтому запускаем native_entry тем же способом,
+    что и garak.
+    """
+    _run_in_tool_env('pyrit', job)
+
+
 def agentdojo(job):
+    """Запуск AgentDojo в его собственном интерпретаторе."""
+    _run_in_tool_env('agentdojo', job)
+
+
+def agentdojo_impl(job):
     import openai
     from agentdojo.agent_pipeline.agent_pipeline import AgentPipeline, PipelineConfig
     from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM
