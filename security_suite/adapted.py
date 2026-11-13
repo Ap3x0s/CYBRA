@@ -50,10 +50,25 @@ def bipia(job):
     attacks=read_json(ROOT/'datasets/bipia/text_attack_test.json')
     chosen=sample([{'name':k,'text':text} for k,vs in attacks.items() for text in vs], job['bipia_attacks'],job['seed'])
     attack_dict={f"{i}:{a['name']}":a['text'] for i,a in enumerate(chosen)}
+    # BIPIA размножает выборку: каждый контекст даёт len(attack_dict) x позиций
+    # записей, и каждая оценивается дважды (injection + utility). При limit=8
+    # и 4 атаках это 384 записи вместо 8 — прогон занимал час.
+    #
+    # Ограничиваем ИТОГОВОЕ число записей, как в остальных инструментах:
+    # считаем, сколько контекстов нужно, чтобы уложиться в бюджет limit*2
+    # (по две записи на кейс: injection и utility). Позиции и атаки не
+    # трогаем — в них суть проверки.
     count=0
+    per_task=max(1,len(job['bipia_tasks']))
+    budget=max(1,int(job['limit'])*2//per_task)
     for task in job['bipia_tasks']:
         builder=AutoPIABuilder.from_name(task)(seed=job['seed'])
-        contexts=sample(jsonl(ROOT/f'datasets/bipia/{task}/test.jsonl'),job['limit'],job['seed'])
+        raw_contexts=jsonl(ROOT/f'datasets/bipia/{task}/test.jsonl')
+        # Пробный кадр на одном контексте показывает кратность размножения.
+        probe=builder(sample(raw_contexts,1,job['seed']),attack_dict).to_dict(orient='records')
+        multiplier=max(1,len(probe)) if probe else 1
+        want=max(1,budget//multiplier)
+        contexts=sample(raw_contexts,want,job['seed'])
         frame=builder(contexts,attack_dict)
         for i,example in enumerate(frame.to_dict(orient='records')):
             # Upstream single-user template: no fake trusted role for downloaded content.
