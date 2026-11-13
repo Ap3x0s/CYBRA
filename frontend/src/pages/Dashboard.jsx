@@ -7,6 +7,7 @@ import { useAuth } from '../auth'
 import AppIcon from '../components/AppIcon'
 import {
   ArrowsLeftRight, BracketsCurly, ClockCounterClockwise, Play, Warning,
+  CaretRight,
 } from '../icons'
 import { useI18n } from '../i18n-context'
 
@@ -164,8 +165,9 @@ export default function Dashboard() {
                 {t("Доля FAIL среди оценённых кейсов. Внутри инструмента, не между ними.")}
               </div>
             </div>
-            <Link to="/metrics" className="muted" style={{ fontSize: 12 }}>
-              {t('метрики →')}
+            <Link to="/metrics" className="link-chevron">
+              {t('метрики')}
+              <CaretRight size={11} weight="bold" aria-hidden="true" />
             </Link>
           </div>
 
@@ -225,7 +227,9 @@ export default function Dashboard() {
                   <div className="qi-title">{t(title)}</div>
                   <div className="qi-sub">{t(sub)}</div>
                 </span>
-                <span className="qi-arrow">›</span>
+                <span className="qi-arrow">
+                  <CaretRight size={14} weight="bold" aria-hidden="true" />
+                </span>
               </Link>
             ))}
           </div>
@@ -235,8 +239,9 @@ export default function Dashboard() {
       <div className="card">
         <div className="card-head">
           <h2>{t("Последние прогоны")}</h2>
-          <Link to="/runs" className="muted" style={{ fontSize: 12 }}>
-            {t("все прогоны →")}
+          <Link to="/runs" className="link-chevron">
+            {t('все прогоны')}
+            <CaretRight size={11} weight="bold" aria-hidden="true" />
           </Link>
         </div>
 
@@ -303,8 +308,9 @@ export default function Dashboard() {
               {t("Словарь метрик, который отдают сами инструменты.")}
             </div>
           </div>
-          <Link to="/metrics" className="muted" style={{ fontSize: 12 }}>
-            {t("подробнее →")}
+          <Link to="/metrics" className="link-chevron">
+            {t('подробнее')}
+            <CaretRight size={11} weight="bold" aria-hidden="true" />
           </Link>
         </div>
         <div className="grid grid-3">
