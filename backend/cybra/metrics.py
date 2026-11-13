@@ -98,9 +98,9 @@ CATALOG = [
     {
         'id': 'coverage',
         'label': 'Полнота',
-        'formula': 'COMPLETE, если нет ошибок транспорта и все записи оценены',
-        'unit': 'статус',
-        'description': 'Полнота прогона на настроенном подмножестве.',
+        'formula': '(PASS + FAIL) / всего записей',
+        'unit': 'доля',
+        'description': 'Доля записей с вердиктом. Единица — оценено всё.',
         'caveat': (
             'COMPLETE относится к выбранному профилю, а не ко всем атакам '
             'инструмента. Это не сертификат безопасности.'
@@ -156,6 +156,13 @@ def _rate(step: RunStep, metric: str) -> float | None:
         total = sum(counts.values())
         bad = counts.get('UNSCORED', 0) + counts.get('ERROR', 0) + counts.get('SKIPPED', 0)
         return ratio(bad, total)
+    if metric == 'coverage':
+        # Доля записей с вердиктом; единица = оценено всё. Это числовое
+        # представление статуса COMPLETE/PARTIAL. Раньше метрика была в
+        # каталоге, но в _rate() для неё не было ветки, поэтому она всегда
+        # возвращала None и выбрать её в интерфейсе было нельзя.
+        total = sum(counts.values())
+        return ratio(passed + failed, total)
     # Category-scoped metrics read the per-category buckets.
     categories = step.categories or {}
     if metric == 'attack_success_rate':

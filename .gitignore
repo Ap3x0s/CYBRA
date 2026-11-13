@@ -114,3 +114,5 @@ scripts/fix_chart_grouping.py
 scripts/fix_asr_filter.py
 scripts/check_asr.py
 scripts/fix_duplicate_metric.py
+scripts/add_coverage*.py
+scripts/fix_capabilities_test.py
