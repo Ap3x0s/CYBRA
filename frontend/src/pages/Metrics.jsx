@@ -17,62 +17,173 @@ function shortTime(value) {
   })
 }
 
-function LineChart({ series, width = 720, height = 220 }) {
+/* Палитра для линий. Янтарь — основной акцент, остальные подобраны так, чтобы
+   различаться и на тёмном фоне, и в оттенках серого (печать отчёта). */
+const SERIES_COLORS = [
+  'var(--accent)',
+  '#6AA8D8',
+  '#3ECF8E',
+  '#B98BE0',
+  '#E6835B',
+  '#8FA6B8',
+]
+
+/**
+ * График динамики: одна линия на модель.
+ *
+ * Раньше все точки шли одной ломаной, хотя принадлежали разным моделям:
+ * series() сортирует по id прогона и не группирует. Получался ряд, где
+ * значения прыгали 0% → 64% → 0% — это был не тренд одной модели, а
+ * переключение между qwen, gpt-4o и deepseek.
+ *
+ * Группировка — по паре «модель × инструмент». Только по модели нельзя:
+ * в одном прогоне у модели несколько инструментов с разными значениями
+ * (run#1 gpt-4o-demo: harmbench 0.375, jailbreakbench 0.625), и точки на
+ * одном X складывались в вертикальную иглу — это не тренд, а разные метрики.
+ * Сравнивать корректно внутри одного инструмента, поэтому линия — это
+ * конкретная модель на конкретном инструменте.
+ *
+ * Ось X — порядковый номер прогона (общий для всех линий), поэтому точки
+ * сопоставимы по времени между линиями.
+ */
+function LineChart({ series, width = 760, height = 240 }) {
   // LineChart — отдельный компонент, поэтому хук нужен свой: он не наследует
   // t() из Metrics, и без этой строки страница падала с "t is not defined".
   const { t } = useI18n()
   if (!series.length) return <div className="empty">{t("Нет точек для графика.")}</div>
 
-  const padding = { top: 16, right: 16, bottom: 26, left: 42 }
+  // Группируем по паре «модель × инструмент»: только по модели нельзя,
+  // потому что в одном прогоне у модели бывает несколько инструментов с
+  // разными значениями, и точки на одном X образуют вертикальную иглу.
+  const groups = useMemo(() => {
+    const map = new Map()
+    for (const point of series) {
+      const key = `${point.model || '—'} · ${point.tool || '—'}`
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(point)
+    }
+    return [...map.entries()]
+  }, [series])
+
+  // Общая ось X: порядковый номер уникального прогона.
+  const runOrder = useMemo(() => {
+    const seen = []
+    const index = new Map()
+    for (const point of series) {
+      if (!index.has(point.run_pk)) {
+        index.set(point.run_pk, seen.length)
+        seen.push(point)
+      }
+    }
+    return { index, count: seen.length, points: seen }
+  }, [series])
+
+  const padding = { top: 16, right: 16, bottom: 34, left: 42 }
   const innerW = width - padding.left - padding.right
   const innerH = height - padding.top - padding.bottom
   const values = series.map((point) => point.value)
-  const min = Math.min(0, ...values)
+  const min = 0
   const max = Math.max(0.05, ...values)
 
-  const x = (index) =>
-    padding.left + (series.length === 1 ? innerW / 2 : (index / (series.length - 1)) * innerW)
+  const xAt = (runPk) => {
+    const slot = runOrder.index.get(runPk) ?? 0
+    if (runOrder.count <= 1) return padding.left + innerW / 2
+    return padding.left + (slot / (runOrder.count - 1)) * innerW
+  }
   const y = (value) =>
     padding.top + innerH - ((value - min) / (max - min || 1)) * innerH
 
-  const path = series.map((point, index) => `${index ? 'L' : 'M'}${x(index)},${y(point.value)}`).join(' ')
+  // Подписи оси X: первый, последний и, если есть место, середина.
+  const ticks = runOrder.count <= 1
+    ? [runOrder.points[0]]
+    : runOrder.count <= 4
+      ? runOrder.points
+      : [runOrder.points[0],
+         runOrder.points[Math.floor((runOrder.count - 1) / 2)],
+         runOrder.points[runOrder.count - 1]]
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto' }} role="img">
-      {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
-        const value = min + (max - min) * fraction
-        return (
-          <g key={fraction}>
-            <line
-              x1={padding.left}
-              x2={width - padding.right}
-              y1={y(value)}
-              y2={y(value)}
-              stroke="var(--edge-soft)"
-              strokeWidth="1"
-            />
-            <text x={8} y={y(value) + 4} fill="var(--muted-dim)" fontSize="10" fontFamily="var(--font-mono)">
-              {(value * 100).toFixed(0)}%
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto' }} role="img">
+        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
+          const value = min + (max - min) * fraction
+          return (
+            <g key={fraction}>
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y(value)}
+                y2={y(value)}
+                stroke="var(--edge-soft)"
+                strokeWidth="1"
+              />
+              <text x={8} y={y(value) + 4} fill="var(--muted-dim)" fontSize="10" fontFamily="var(--font-mono)">
+                {(value * 100).toFixed(0)}%
+              </text>
+            </g>
+          )
+        })}
+
+        {groups.map(([model, points], groupIndex) => {
+          const color = SERIES_COLORS[groupIndex % SERIES_COLORS.length]
+          const sorted = [...points].sort(
+            (a, b) => (runOrder.index.get(a.run_pk) ?? 0) - (runOrder.index.get(b.run_pk) ?? 0),
+          )
+          const d = sorted
+            .map((point, i) => `${i ? 'L' : 'M'}${xAt(point.run_pk)},${y(point.value)}`)
+            .join(' ')
+          return (
+            <g key={model}>
+              {/* Линия нужна только если у модели больше одной точки: одна
+                  точка — это факт, а не тренд, её достаточно кружком. */}
+              {sorted.length > 1 ? (
+                <path d={d} fill="none" stroke={color} strokeWidth="2"
+                      strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
+              ) : null}
+              {sorted.map((point, i) => (
+                <g key={point.run_pk + '-' + i}>
+                  <circle cx={xAt(point.run_pk)} cy={y(point.value)} r="3.5"
+                          fill={color} stroke="var(--ink-800)" strokeWidth="1" />
+                  <title>
+                    {point.model} · {point.tool} · {pct(point.value)} · {point.run_id}
+                  </title>
+                </g>
+              ))}
+            </g>
+          )
+        })}
+
+        {ticks.map((point, i) => {
+          const anchor = i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle'
+          const xPos = xAt(point.run_pk)
+          return (
+            <text key={'tick-' + point.run_pk} x={xPos} y={height - 12}
+                  fill="var(--muted-dim)" fontSize="10" textAnchor={anchor}>
+              {shortTime(point.at)}
             </text>
-          </g>
-        )
-      })}
-      <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
-      {series.map((point, index) => (
-        <g key={point.run_pk + '-' + index}>
-          <circle cx={x(index)} cy={y(point.value)} r="3.5" fill="var(--accent)" />
-          <title>
-            {point.model} · {point.tool} · {pct(point.value)} · {point.run_id}
-          </title>
-        </g>
-      ))}
-      <text x={padding.left} y={height - 6} fill="var(--muted-dim)" fontSize="10">
-        {shortTime(series[0].at)}
-      </text>
-      <text x={width - padding.right} y={height - 6} fill="var(--muted-dim)" fontSize="10" textAnchor="end">
-        {shortTime(series[series.length - 1].at)}
-      </text>
-    </svg>
+          )
+        })}
+      </svg>
+
+      {/* Легенда: без неё несколько линий неразличимы, а цвет не должен быть
+          единственным носителем смысла — поэтому подписаны модели. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
+        {groups.map(([key], groupIndex) => {
+          const [model, tool] = key.split(' · ')
+          return (
+            <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
+              <span style={{
+                width: 9, height: 9, borderRadius: 2,
+                background: SERIES_COLORS[groupIndex % SERIES_COLORS.length],
+                flex: '0 0 auto',
+              }} />
+              <span className="muted">{model}</span>
+              <span className="dim" style={{ fontSize: 10.5 }}>{tool}</span>
+            </span>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
