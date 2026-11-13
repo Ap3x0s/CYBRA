@@ -7,11 +7,17 @@ from pathlib import Path
 from .common import ROOT, read_json, write_json
 
 def python_for(tool):
+    # Инструменты без собственного окружения работают в основном venv.
+    # BIPIA здесь не случайно: это vendored-библиотека (vendor/bipia) плюс
+    # четыре пакета, поставленных в основной venv. Отдельного .tools/bipia
+    # не существует, поэтому прежняя проверка его наличия в run.py давала
+    # «Dependencies not installed» ещё до запуска адаптера.
     if tool in (
         'promptfoo',
         'harmbench',
         'jailbreakbench',
         'security-regression',
+        'bipia',
     ):
         return sys.executable
 

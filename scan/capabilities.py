@@ -30,7 +30,11 @@ TOOLS = {
 
 def python_for(tool: str) -> str:
     """Mirror security_suite.setup_tools.python_for without importing it."""
-    if tool in ('promptfoo', 'harmbench', 'jailbreakbench', 'security-regression'):
+    # BIPIA в этом списке намеренно: это vendored-библиотека плюс четыре
+    # пакета в основном venv, отдельного .tools/bipia не существует. Без неё
+    # проверка наличия файла в run.py давала «Dependencies not installed».
+    if tool in ('promptfoo', 'harmbench', 'jailbreakbench',
+                'security-regression', 'bipia'):
         return sys.executable
     env = ROOT / '.tools' / tool
     return str(env / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
