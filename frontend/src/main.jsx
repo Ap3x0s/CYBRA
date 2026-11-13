@@ -11,6 +11,7 @@ import './styles.css'
 import './topbar-bar.css'
 import './page-search.css'
 import './select.css'
+import './chart-legend.css'
 
 // Agentation is a development aid, not a product feature, and ships under the
 // PolyForm Shield licence, which is not an open-source licence. It is therefore
