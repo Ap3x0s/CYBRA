@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoginIn(BaseModel):
@@ -65,6 +65,10 @@ class EndpointOut(BaseModel):
     notes: str
     created_at: dt.datetime
 
+    @field_validator('created_at', mode='after')
+    @classmethod
+    def _tz_aware(cls, value):
+        return _as_utc(value)
 
 class TargetIn(BaseModel):
     endpoint_id: int
@@ -108,6 +112,10 @@ class DatasetVersionOut(BaseModel):
     case_count: int = 0
     created_at: dt.datetime
 
+    @field_validator('created_at', mode='after')
+    @classmethod
+    def _tz_aware(cls, value):
+        return _as_utc(value)
 
 class DatasetCaseOut(BaseModel):
     id: int
@@ -161,6 +169,20 @@ class RunStepOut(BaseModel):
     artifact_dir: str
 
 
+def _as_utc(value: dt.datetime | None) -> dt.datetime | None:
+    """Пометить наивное время как UTC.
+
+    SQLite не хранит tzinfo, поэтому из БД приходит наивный datetime с
+    UTC-семантикой. Если отдать его как есть, Pydantic напишет строку без
+    суффикса Z, и браузер (по ES5) прочтёт её как локальное время — метка
+    уедет на смещение пояса. Наивное время у нас всегда UTC, поэтому
+    проставляем зону явно.
+    """
+    if value is None:
+        return None
+    return value.replace(tzinfo=dt.timezone.utc) if value.tzinfo is None else value
+
+
 class RunOut(BaseModel):
     id: int
     run_id: str
@@ -176,6 +198,10 @@ class RunOut(BaseModel):
     error: str = ''
     steps: list[RunStepOut] = Field(default_factory=list)
 
+    @field_validator('created_at', 'started_at', 'finished_at', mode='after')
+    @classmethod
+    def _tz_aware(cls, value):
+        return _as_utc(value)
 
 class FindingOut(BaseModel):
     id: int

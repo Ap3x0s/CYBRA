@@ -6,6 +6,8 @@ a document can never drift apart.
 """
 from __future__ import annotations
 
+import datetime as dt
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
@@ -129,6 +131,20 @@ HARMFUL_CATEGORIES = {
 }
 
 
+def _utc_iso(value) -> str:
+    """ISO-8601 с зоной.
+
+    Наивное время из SQLite у нас всегда UTC. Без явной зоны браузер по ES5
+    прочёл бы строку как локальное время и сдвинул график на смещение пояса
+    (для MSK — на 3 часа назад).
+    """
+    if value is None:
+        return ''
+    if getattr(value, 'tzinfo', None) is None:
+        value = value.replace(tzinfo=dt.timezone.utc)
+    return value.isoformat()
+
+
 def _is_harmful(key: str) -> bool:
     """Относится ли категория к вредоносному запросу (для ASR)."""
     low = key.lower()
@@ -229,7 +245,7 @@ def series(db: OrmSession, *, model: str | None, tool: str | None,
             'metric': metric,
             'value': round(value, 4),
             'completeness': step.completeness,
-            'at': (run.finished_at or run.created_at).isoformat(),
+            'at': _utc_iso(run.finished_at or run.created_at),
         })
         if len(points) >= limit:
             break
