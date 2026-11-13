@@ -50,6 +50,11 @@ function LineChart({ series, width = 760, height = 240 }) {
   // LineChart — отдельный компонент, поэтому хук нужен свой: он не наследует
   // t() из Metrics, и без этой строки страница падала с "t is not defined".
   const { t } = useI18n()
+  // Наведение подсвечивает один ряд, клик — фильтрует. Пустой selected
+  // означает «показаны все»: так пользователь видит полную картину, пока сам
+  // не решил сузить.
+  const [hovered, setHovered] = useState(null)
+  const [selected, setSelected] = useState(() => new Set())
   if (!series.length) return <div className="empty">{t("Нет точек для графика.")}</div>
 
   // Группируем по паре «модель × инструмент»: только по модели нельзя,
@@ -64,6 +69,36 @@ function LineChart({ series, width = 760, height = 240 }) {
     }
     return [...map.entries()]
   }, [series])
+
+  /* Видимость ряда.
+     Приоритет: наведение важнее выбора — пользователь может вести курсор по
+     легенде, не сбрасывая фильтр. Приглушённые линии остаются на месте (не
+     исчезают), чтобы сохранялась опора для сравнения: видно, что ряд есть и
+     какой у него уровень. Полностью скрываются только те, что отфильтрованы
+     кликом. */
+  const hasSelection = selected.size > 0
+  const isDimmed = (key) => {
+    if (hovered) return hovered !== key
+    if (hasSelection) return !selected.has(key)
+    return false
+  }
+  // Скрываем только при активном фильтре и без наведения. Наведение
+  // временно «показывает» ряд, чтобы его можно было рассмотреть перед
+  // выбором, но после клика подсветка снимается — иначе выбранный ряд
+  // выглядел бы скрытым.
+  const isHidden = (key) => hasSelection && !selected.has(key) && hovered !== key
+
+  function toggleSelected(key) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+    // Снимаем наведение: после клика состояние определяется только фильтром,
+    // иначе курсор, оставшийся на пункте, «возвращал» бы скрытые ряды.
+    setHovered(null)
+  }
 
   // Общая ось X: порядковый номер уникального прогона.
   const runOrder = useMemo(() => {
@@ -124,8 +159,11 @@ function LineChart({ series, width = 760, height = 240 }) {
           )
         })}
 
-        {groups.map(([model, points], groupIndex) => {
+        {groups.map(([key, points], groupIndex) => {
+          if (isHidden(key)) return null
           const color = SERIES_COLORS[groupIndex % SERIES_COLORS.length]
+          const dim = isDimmed(key)
+          const active = hovered === key || (hasSelection && selected.has(key))
           const sorted = [...points].sort(
             (a, b) => (runOrder.index.get(a.run_pk) ?? 0) - (runOrder.index.get(b.run_pk) ?? 0),
           )
@@ -133,16 +171,26 @@ function LineChart({ series, width = 760, height = 240 }) {
             .map((point, i) => `${i ? 'L' : 'M'}${xAt(point.run_pk)},${y(point.value)}`)
             .join(' ')
           return (
-            <g key={model}>
-              {/* Линия нужна только если у модели больше одной точки: одна
-                  точка — это факт, а не тренд, её достаточно кружком. */}
+            <g
+              key={key}
+              style={{ cursor: 'pointer', transition: 'opacity 160ms ease' }}
+              opacity={dim ? 0.14 : 1}
+              onMouseEnter={() => setHovered(key)}
+              onMouseLeave={() => setHovered(null)}
+              onClick={() => toggleSelected(key)}
+            >
+              {/* При наведении линия становится чуть толще и ярче: этого
+                  достаточно, чтобы выделить её среди соседних, не меняя
+                  палитру. */}
               {sorted.length > 1 ? (
-                <path d={d} fill="none" stroke={color} strokeWidth="2"
+                <path d={d} fill="none" stroke={color}
+                      strokeWidth={active ? 3 : 2}
                       strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
               ) : null}
               {sorted.map((point, i) => (
                 <g key={point.run_pk + '-' + i}>
-                  <circle cx={xAt(point.run_pk)} cy={y(point.value)} r="3.5"
+                  <circle cx={xAt(point.run_pk)} cy={y(point.value)}
+                          r={active ? 4.5 : 3.5}
                           fill={color} stroke="var(--ink-800)" strokeWidth="1" />
                   <title>
                     {point.model} · {point.tool} · {pct(point.value)} · {point.run_id}
@@ -165,23 +213,67 @@ function LineChart({ series, width = 760, height = 240 }) {
         })}
       </svg>
 
-      {/* Легенда: без неё несколько линий неразличимы, а цвет не должен быть
-          единственным носителем смысла — поэтому подписаны модели. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
+      {/* Легенда — это фильтр, а не подпись: наведение подсвечивает ряд,
+          клик оставляет только его (можно несколько). Подписи сохранены,
+          потому что цвет не должен быть единственным носителем смысла. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
         {groups.map(([key], groupIndex) => {
           const [model, tool] = key.split(' · ')
+          const color = SERIES_COLORS[groupIndex % SERIES_COLORS.length]
+          const isSelected = selected.has(key)
+          const isHovered = hovered === key
+          const off = hasSelection && !isSelected
           return (
-            <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
+            <button
+              key={key}
+              type="button"
+              className="chart-legend-item"
+              aria-pressed={isSelected}
+              title={isSelected ? t('Убрать из фильтра') : t('Показать только этот ряд')}
+              onMouseEnter={() => setHovered(key)}
+              onMouseLeave={() => setHovered(null)}
+              onFocus={() => setHovered(key)}
+              onBlur={() => setHovered(null)}
+              onClick={() => toggleSelected(key)}
+              style={{
+                // Янтарная подложка у выбранного — та же логика, что у чипов
+                // навигации: акцент показывает активное состояние.
+                background: isSelected
+                  ? 'rgba(229, 169, 60, 0.13)'
+                  : isHovered
+                    ? 'rgba(255, 255, 255, 0.06)'
+                    : 'transparent',
+                borderColor: isSelected
+                  ? 'rgba(229, 169, 60, 0.5)'
+                  : isHovered
+                    ? 'var(--edge)'
+                    : 'transparent',
+                opacity: off ? 0.45 : 1,
+              }}
+            >
               <span style={{
                 width: 9, height: 9, borderRadius: 2,
-                background: SERIES_COLORS[groupIndex % SERIES_COLORS.length],
+                background: color,
                 flex: '0 0 auto',
+                // Точка у выбранного получает свечение — второй признак
+                // состояния помимо рамки.
+                boxShadow: isSelected ? `0 0 0 3px ${color}22` : 'none',
               }} />
               <span className="muted">{model}</span>
               <span className="dim" style={{ fontSize: 10.5 }}>{tool}</span>
-            </span>
+            </button>
           )
         })}
+        {hasSelection ? (
+          <button
+            type="button"
+            className="chart-legend-item chart-legend-reset"
+            onClick={() => setSelected(new Set())}
+            title={t('Показать все ряды')}
+          >
+            {t('Сбросить')}
+          </button>
+        ) : null}
       </div>
     </div>
   )
