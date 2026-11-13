@@ -46,7 +46,24 @@ const SERIES_COLORS = [
  * Ось X — порядковый номер прогона (общий для всех линий), поэтому точки
  * сопоставимы по времени между линиями.
  */
-function LineChart({ series, width = 760, height = 240 }) {
+/**
+ * Короткое имя модели для узких мест (бокс, легенда).
+ *
+ * В данных модель хранится с префиксом провайдера:
+ * "deepseek/deepseek-v4.1-flash". В боксе шириной 208 px это занимает всю
+ * строку. Убираем префикс только если после слеша осталось осмысленное имя,
+ * иначе оставляем как есть — иначе "openai/gpt-4o-demo" превратится в
+ * непонятное "gpt-4o-demo", а "qwen-demo" без префикса вообще не
+ * встретится.
+ */
+function shortModel(model) {
+  if (!model) return '—'
+  const slash = model.lastIndexOf('/')
+  if (slash > 0 && slash < model.length - 1) return model.slice(slash + 1)
+  return model
+}
+
+function LineChart({ series, definition, width = 760, height = 240 }) {
   // LineChart — отдельный компонент, поэтому хук нужен свой: он не наследует
   // t() из Metrics, и без этой строки страница падала с "t is not defined".
   const { t } = useI18n()
@@ -54,6 +71,9 @@ function LineChart({ series, width = 760, height = 240 }) {
   // означает «показаны все»: так пользователь видит полную картину, пока сам
   // не решил сузить.
   const [hovered, setHovered] = useState(null)
+  // Точка под курсором — для направляющей-уголка и мини-бокса. Нужны обе
+  // координаты для линий, а также модель, инструмент и значение для подписи.
+  const [hoveredPoint, setHoveredPoint] = useState(null)
   const [selected, setSelected] = useState(() => new Set())
   if (!series.length) return <div className="empty">{t("Нет точек для графика.")}</div>
 
@@ -113,12 +133,15 @@ function LineChart({ series, width = 760, height = 240 }) {
     return { index, count: seen.length, points: seen }
   }, [series])
 
-  const padding = { top: 16, right: 16, bottom: 34, left: 42 }
+  // Верх увеличен: над осью теперь стоит название метрики.
+  const padding = { top: 26, right: 16, bottom: 34, left: 42 }
   const innerW = width - padding.left - padding.right
   const innerH = height - padding.top - padding.bottom
-  const values = series.map((point) => point.value)
+  // Шкала всегда 0-100 %, а не «максимум данных». Метрики в каталоге —
+  // доли, и при авто-масштабе значение 75 % упиралось в верх, читаясь как
+  // предел. Фиксированная шкала честнее: половина высоты всегда половина.
   const min = 0
-  const max = Math.max(0.05, ...values)
+  const max = 1
 
   const xAt = (runPk) => {
     const slot = runOrder.index.get(runPk) ?? 0
@@ -138,9 +161,64 @@ function LineChart({ series, width = 760, height = 240 }) {
          runOrder.points[runOrder.count - 1]]
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto' }} role="img">
-        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
+    // position:relative — якорь для плашки, которая позиционируется
+    // абсолютно уже в пикселях экрана, а не в единицах viewBox.
+    <div style={{ position: 'relative' }}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ width: '100%', height: 'auto' }}
+        role="img"
+        onMouseMove={(event) => {
+          // Координаты курсора приводим к системе viewBox: SVG растянут по
+          // ширине карточки, а расчёты ведутся в исходных единицах.
+          const box = event.currentTarget.getBoundingClientRect()
+          if (!box.width) return
+          const localX = ((event.clientX - box.left) / box.width) * width
+          const localY = ((event.clientY - box.top) / box.height) * height
+          if (localX < padding.left || localX > width - padding.right) {
+            setHoveredPoint(null)
+            return
+          }
+          // Ближайший прогон по горизонтали — попадать в маркер не нужно.
+          let nearest = null
+          let bestDist = Infinity
+          for (const p of runOrder.points) {
+            const dist = Math.abs(xAt(p.run_pk) - localX)
+            if (dist < bestDist) { bestDist = dist; nearest = p }
+          }
+          if (!nearest) { setHoveredPoint(null); return }
+          // Ряд выбираем по близости к курсору по вертикали: раньше брался
+          // самый высокий, и уголок «прилипал» к пику, даже когда мышь вела
+          // по нижней линии. Подсвеченный в легенде ряд имеет приоритет.
+          const candidates = groups
+            .filter(([key]) => !isHidden(key))
+            .flatMap(([, pts]) => pts
+              .filter((pt) => pt.run_pk === nearest.run_pk)
+              .map((pt) => ({ pt, key: `${pt.model || '—'} · ${pt.tool || '—'}` })))
+          if (!candidates.length) { setHoveredPoint(null); return }
+          const preferred = hovered
+            ? candidates.find((c) => c.key === hovered)
+            : null
+          const chosen = preferred
+            ? preferred
+            : candidates.reduce((a, b) => (
+                Math.abs(y(b.pt.value) - localY) < Math.abs(y(a.pt.value) - localY)
+                  ? b : a
+              ))
+          const pick = chosen.pt
+          setHoveredPoint({
+            runPk: pick.run_pk,
+            value: pick.value,
+            model: pick.model,
+            tool: pick.tool,
+            at: pick.at,
+            color: SERIES_COLORS[groups.findIndex(([k]) => k === chosen.key)
+              % SERIES_COLORS.length],
+          })
+        }}
+        onMouseLeave={() => setHoveredPoint(null)}
+      >
+        {[0, 0.25, 0.5, 0.75, 1].map((fraction, i) => {
           const value = min + (max - min) * fraction
           return (
             <g key={fraction}>
@@ -151,13 +229,63 @@ function LineChart({ series, width = 760, height = 240 }) {
                 y2={y(value)}
                 stroke="var(--edge-soft)"
                 strokeWidth="1"
+                // Базовая линия (0 %) чуть заметнее остальных: она задаёт
+                // отсчёт и без неё сетка выглядит «плавающей».
+                opacity={i === 0 ? 0.9 : 0.45}
               />
-              <text x={8} y={y(value) + 4} fill="var(--muted-dim)" fontSize="10" fontFamily="var(--font-mono)">
-                {(value * 100).toFixed(0)}%
+              <text x={padding.left - 8} y={y(value) + 3.5}
+                    fill="var(--muted-dim)" fontSize="10"
+                    fontFamily="var(--font-mono)" textAnchor="end">
+                {(value * 100).toFixed(0)}
               </text>
             </g>
           )
         })}
+        {/* Единица измерения вынесена в строку подписи под графиком: над
+            осью она налезала на верхнюю отметку и читалась как артефакт. */}
+
+        {/* Название метрики — внутри области графика, у левого верхнего
+            края. Так подпись относится к вертикальной оси, но не висит
+            отдельной полосой под графиком. */}
+        {definition ? (
+          <text
+            x={4}
+            y={padding.top - 9}
+            fill="var(--muted-dim)"
+            fontSize="9"
+            fontFamily="var(--font-body)"
+            letterSpacing="0.02em"
+          >
+            {t(definition.label)}
+          </text>
+        ) : null}
+
+        {/* Направляющая-уголок от точки: вниз до дат и влево до значений.
+            Выше и правее точки линий нет — смотреть там нечего, а лишние
+            штрихи мешают читать плотный график. Так за один взгляд видно и
+            дату прогона, и величину. */}
+        {hoveredPoint ? (
+          <g pointerEvents="none" opacity="0.28">
+            <line
+              x1={xAt(hoveredPoint.runPk)}
+              x2={xAt(hoveredPoint.runPk)}
+              y1={y(hoveredPoint.value)}
+              y2={padding.top + innerH}
+              stroke="var(--text)"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            <line
+              x1={padding.left}
+              x2={xAt(hoveredPoint.runPk)}
+              y1={y(hoveredPoint.value)}
+              y2={y(hoveredPoint.value)}
+              stroke="var(--text)"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+          </g>
+        ) : null}
 
         {groups.map(([key, points], groupIndex) => {
           if (isHidden(key)) return null
@@ -176,25 +304,33 @@ function LineChart({ series, width = 760, height = 240 }) {
               style={{ cursor: 'pointer', transition: 'opacity 160ms ease' }}
               opacity={dim ? 0.14 : 1}
               onMouseEnter={() => setHovered(key)}
-              onMouseLeave={() => setHovered(null)}
+              onMouseLeave={() => { setHovered(null); setHoveredPoint(null) }}
               onClick={() => toggleSelected(key)}
             >
               {/* При наведении линия становится чуть толще и ярче: этого
                   достаточно, чтобы выделить её среди соседних, не меняя
                   палитру. */}
+              {/* Заливка под активной линией: даёт объём и отделяет
+                  выбранный ряд от соседних, не меняя палитру. */}
+              {sorted.length > 1 && active ? (
+                <path
+                  d={`${d} L${xAt(sorted[sorted.length - 1].run_pk)},${y(min)} `
+                     + `L${xAt(sorted[0].run_pk)},${y(min)} Z`}
+                  fill={color}
+                  opacity="0.07"
+                />
+              ) : null}
               {sorted.length > 1 ? (
                 <path d={d} fill="none" stroke={color}
-                      strokeWidth={active ? 3 : 2}
-                      strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
+                      strokeWidth={active ? 3.2 : 2.2}
+                      strokeLinejoin="round" strokeLinecap="round"
+                      opacity={active ? 1 : 0.92} />
               ) : null}
               {sorted.map((point, i) => (
                 <g key={point.run_pk + '-' + i}>
                   <circle cx={xAt(point.run_pk)} cy={y(point.value)}
-                          r={active ? 4.5 : 3.5}
-                          fill={color} stroke="var(--ink-800)" strokeWidth="1" />
-                  <title>
-                    {point.model} · {point.tool} · {pct(point.value)} · {point.run_id}
-                  </title>
+                          r={active ? 4.05 : 3.15}
+                          fill={color} stroke="var(--ink-800)" strokeWidth="1.5" />
                 </g>
               ))}
             </g>
@@ -205,18 +341,109 @@ function LineChart({ series, width = 760, height = 240 }) {
           const anchor = i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle'
           const xPos = xAt(point.run_pk)
           return (
-            <text key={'tick-' + point.run_pk} x={xPos} y={height - 12}
+            <text key={'tick-' + point.run_pk} x={xPos} y={height - 16}
                   fill="var(--muted-dim)" fontSize="10" textAnchor={anchor}>
               {shortTime(point.at)}
             </text>
           )
         })}
+
+        {/* Подпись горизонтальной оси — вплотную под последней датой,
+            выровнена по её правому краю. Так она стоит на краю самой оси, а
+            не в отдельной полосе под графиком. */}
+        <text
+          x={width - padding.right}
+          y={height - 4}
+          fill="var(--muted-dim)"
+          fontSize="8.5"
+          fontFamily="var(--font-body)"
+          letterSpacing="0.02em"
+          textAnchor="end"
+          opacity="0.8"
+        >
+          {t('дата прогона')}
+        </text>
       </svg>
+
+      {/* Плашка живёт вне SVG: внутри foreignObject её размеры умножались на
+          коэффициент растяжения viewBox, и заданные 132x44 превращались в
+          235x86 на экране. Здесь px — это px. */}
+      {hoveredPoint ? (
+        <div
+          style={{
+            position: 'absolute',
+            // Позиция в процентах от геометрии viewBox: так она остаётся
+            // верной при любой ширине карточки.
+            left: `${(xAt(hoveredPoint.runPk) / width) * 100}%`,
+            top: `${(y(hoveredPoint.value) / height) * 100}%`,
+            transform: (xAt(hoveredPoint.runPk) / width) > 0.72
+              ? 'translate(-100%, -50%) translateX(-10px)'
+              : 'translate(0, -50%) translateX(10px)',
+            pointerEvents: 'none',
+            zIndex: 3,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4.3,
+              padding: '7px 11px',
+              borderRadius: 6,
+              background: 'rgba(20, 20, 23, 0.97)',
+              border: '1px solid var(--edge)',
+              boxShadow: '0 5px 16px rgba(0, 0, 0, 0.5)',
+              lineHeight: 1.2,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: hoveredPoint.color, flex: '0 0 auto',
+              }} />
+              <span style={{ fontSize: 13.9, color: 'var(--text)' }}>
+                {shortModel(hoveredPoint.model)}
+              </span>
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'baseline',
+              justifyContent: 'space-between', gap: 10,
+            }}>
+              <span style={{
+                fontSize: 11.8, color: 'var(--muted-dim)',
+                fontFamily: 'var(--font-mono)',
+              }}>
+                {hoveredPoint.tool}
+              </span>
+              <span style={{
+                fontSize: 17,
+                fontWeight: 600,
+                color: 'var(--accent)',
+                // Начертание заголовков, а не моноширинное: одно число не
+                // нужно выравнивать по колонке, а body-шрифт выглядит
+                // собраннее. Табличные цифры не дают числу дёргаться.
+                fontFamily: 'var(--font-body)',
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '-0.02em',
+              }}>
+                {pct(hoveredPoint.value)}
+              </span>
+            </div>
+            <div style={{ fontSize: 11.8, color: 'var(--muted-dim)' }}>
+              {shortTime(hoveredPoint.at)}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Легенда — это фильтр, а не подпись: наведение подсвечивает ряд,
           клик оставляет только его (можно несколько). Подписи сохранены,
-          потому что цвет не должен быть единственным носителем смысла. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          потому что цвет не должен быть единственным носителем смысла.
+          Отступ сверху меньше, чем у блока метрики: легенда относится к
+          графикам, а строка выше — описание данных. Группировка отступом
+          показывает, что это разные вещи. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2, marginBottom: -2 }}>
         {groups.map(([key], groupIndex) => {
           const [model, tool] = key.split(' · ')
           const color = SERIES_COLORS[groupIndex % SERIES_COLORS.length]
@@ -381,9 +608,8 @@ export default function Metrics() {
       <div className="card">
         <div className="card-head">
           <h2>{t("Динамика")}</h2>
-          <span className="dim mono-sm">{(series.data || []).length} {t('точек')}</span>
         </div>
-        {series.loading ? <BlockSkeleton rows={5} height={220} /> : <LineChart series={series.data || []} />}
+        {series.loading ? <BlockSkeleton rows={5} height={220} /> : <LineChart series={series.data || []} definition={definition} />}
       </div>
 
       <div className="card">
