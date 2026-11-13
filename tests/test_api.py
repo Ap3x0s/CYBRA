@@ -90,7 +90,16 @@ def test_capabilities_listed(client, admin):
     rows = client.get('/api/v1/capabilities').json()
     names = {row['tool'] for row in rows}
     assert {'harmbench', 'jailbreakbench', 'bipia'} <= names
-    assert any(row['install_hint'] for row in rows)
+
+    # Контракт, а не состояние машины: раньше тест требовал непустой
+    # install_hint хотя бы у одного инструмента. Но hint появляется ТОЛЬКО у
+    # неустановленных, поэтому после установки всех восьми тест падал, хотя
+    # API работал верно. Проверяем инвариант: поля есть всегда, а hint связан
+    # с доступностью.
+    for row in rows:
+        assert 'tool' in row and 'available' in row
+        assert 'install_hint' in row
+        assert (row['install_hint'] is None) == bool(row['available']), row
 
 
 def test_metrics_catalog_explains_every_metric(client, admin):
