@@ -249,15 +249,25 @@ button { font-family: inherit; }
 table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.data th {
   text-align: left; font-weight: 500; color: var(--muted);
-  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 8px 10px; border-bottom: 1px solid var(--edge);
+  /* Шрифт явно задан: до этого th.num подхватывал моноширинный из общего
+     правила для числовых ячеек, и один заголовок в строке выбивался
+     начертанием — строка выглядела рваной. */
+  font-family: var(--font-body);
+  font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+  line-height: 1.4;
+  padding: 12px 10px; border-bottom: 1px solid var(--edge);
   white-space: nowrap;
+  vertical-align: bottom;
 }
 table.data td { padding: 10px; border-bottom: 1px solid var(--edge-soft); vertical-align: middle; }
 table.data tr:last-child td { border-bottom: none; }
 table.data tbody tr { transition: background 120ms var(--ease); }
 table.data tbody tr:hover { background: var(--ink-600); }
-table.data td.num, table.data th.num { text-align: right; font-family: var(--font-mono); }
+/* Числовые ЯЧЕЙКИ — моноширинный (цифры выравниваются по разрядам).
+   Заголовки — обычным: у них нет разрядов, а смена начертания внутри одной
+   строки шапки читается как дефект вёрстки. */
+table.data td.num { text-align: right; font-family: var(--font-mono); }
+table.data th.num { text-align: right; }
 table.data tbody tr.clickable { cursor: pointer; }
 
 /* ---------------------------------------------------------------- pills */
@@ -290,8 +300,22 @@ table.data tbody tr.clickable { cursor: pointer; }
   background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600;
 }
 .btn.primary:hover:not(:disabled) { background: #efb65a; }
-.btn.ghost { background: transparent; border-color: var(--edge); color: var(--muted); }
-.btn.ghost:hover:not(:disabled) { color: var(--text); background: var(--ink-600); }
+/* Второстепенная кнопка — «невидимка»: в покое рамки нет, она появляется
+   при наведении. Это единый принцип с .link-chevron и со ссылками-действиями:
+   тихо, пока на них не смотрят. Постоянная рамка у трёх кнопок в ряд
+   создавала визуальный шум, хотя действия второстепенные. */
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn.ghost:hover:not(:disabled),
+.btn.ghost:focus-visible:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--edge);
+}
+.btn.ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-dim); }
 .btn.danger { border-color: var(--danger); color: var(--danger); background: var(--danger-surface); }
 .btn.small { min-height: 28px; padding: 0 10px; font-size: 12px; border-radius: 7px; }
 
@@ -506,6 +530,50 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 
 /* ---------------------------------------------------------------- quick actions */
 .quick-list { display: flex; flex-direction: column; }
+/* Ссылка-действие с шевроном (вариант A из превью, выбран заказчиком).
+   В покое ведёт себя как текст; при наведении получает мягкую подложку —
+   так ссылка остаётся тихой, но становится явной при взаимодействии. */
+.link-chevron {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px 3px 6px;
+  margin: -3px -7px -3px -6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 140ms var(--ease), color 140ms var(--ease),
+    border-color 140ms var(--ease);
+}
+
+.link-chevron:hover,
+.link-chevron:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--edge);
+  color: var(--text);
+  outline: none;
+}
+
+.link-chevron:focus-visible {
+  border-color: var(--accent-deep);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+/* Шеврон мельче основного текста и чуть приглушён: он подсказывает
+   направление, но не спорит с подписью. */
+.link-chevron svg {
+  opacity: 0.7;
+  transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+}
+
+.link-chevron:hover svg {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
 .quick-item {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 8px;
@@ -523,7 +591,14 @@ input[type='file']::file-selector-button:hover { background: var(--ink-500); }
 }
 .quick-item .qi-title { font-size: 12.5px; font-weight: 500; }
 .quick-item .qi-sub { color: var(--muted-dim); font-size: 11px; }
-.quick-item .qi-arrow { margin-left: auto; color: var(--muted-dim); }
+/* Уголок быстрых действий: SVG 15px вместо типографского «›» ~11px.
+   Наследует цвет, поэтому правило задаёт только раскладку. */
+.quick-item .qi-arrow {
+  margin-left: auto; display: inline-flex; align-items: center;
+  color: var(--muted-dim); transition: color 120ms var(--ease),
+    transform 120ms var(--ease);
+}
+.quick-item:hover .qi-arrow { color: var(--text); transform: translateX(2px); }
 
 /* ---------------------------------------------------------------- bar chart */
 .bars {
@@ -663,6 +738,8 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
 .skel-grid-4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .skel-grid-2-1 { grid-template-columns: 1.9fr 1fr; }
 .skel-grid-1-2 { grid-template-columns: minmax(260px, 320px) 1fr; align-items: start; }
+/* Равные колонки — для страниц с сеткой grid-2 (настройки). */
+.skel-grid-2 { grid-template-columns: 1fr 1fr; align-items: start; }
 .skel-card {
   background: var(--ink-700);
   border-radius: var(--radius-lg);
@@ -727,3 +804,25 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   .report-page { padding: 0; }
   .no-print { display: none !important; }
 }
+
+/* -------------------------------------------------- buttons on paper pages
+   Отчёт печатается на светлом фоне, а .btn.ghost рассчитан на тёмную тему:
+   --muted и --text там светлые, и на бумаге текст становится почти
+   невидимым (2.1:1 при норме 4.5:1), а при наведении — белым на белом.
+   Здесь собственные цвета и состояния, тёмная тема не затрагивается. */
+.btn.btn-paper {
+  background: transparent;
+  border-color: #D8D2C8;
+  color: #4A453E;
+}
+.btn.btn-paper:hover:not(:disabled) {
+  background: #fff;
+  border-color: #B8B0A2;
+  color: #14141A;
+}
+.btn.btn-paper:focus-visible:not(:disabled) {
+  outline: none;
+  border-color: #B07E22;
+  box-shadow: 0 0 0 3px rgba(176, 126, 34, 0.18);
+}
+.btn.btn-paper.small { min-height: 28px; padding: 0 12px; font-size: 12px; border-radius: 7px; }
