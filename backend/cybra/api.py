@@ -611,6 +611,15 @@ def run_report(run_pk: int, fmt: str = Query('json', pattern='^(json|md|html)$')
     if run is None:
         raise HTTPException(404, 'Прогон не найден')
     out_dir = Path(run.out_dir)
+    # run.py создаёт внутри --out ещё один каталог сессии, поэтому отчёт может
+    # лежать на уровень глубже. Без этого поиска страница отчёта отдавала 404
+    # «Отчёт ещё не готов», хотя файл был на диске. Та же логика уже
+    # применяется при импорте результатов (_find_session_dir).
+    if not (out_dir / 'report.html').exists():
+        nested = [c for c in out_dir.glob('*')
+                  if c.is_dir() and (c / 'report.html').exists()] if out_dir.exists() else []
+        if len(nested) == 1:
+            out_dir = nested[0]
     if fmt == 'md' and (out_dir / 'report.md').exists():
         return FileResponse(out_dir / 'report.md', filename=f'{run.run_id}.md')
     if fmt == 'html' and (out_dir / 'report.html').exists():
