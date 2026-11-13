@@ -109,3 +109,5 @@ scripts/audit_metrics.py
 scripts/drop_adjust.py
 scripts/probe_new_tools*.py
 scripts/fix_native*.py
+scripts/merge_metrics.py
+scripts/fix_chart_grouping.py
