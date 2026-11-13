@@ -13,7 +13,12 @@ from .common import ROOT, JUDGE_SYSTEM, RULES, balanced, grade, jsonl, record, s
 def garak(job):
     out=Path(job['out'])
     write_json(out/'generator.json',{'openai':{'OpenAICompatible':{
-      'uri':job['target_base'],'temperature':0,'max_tokens':job['max_tokens'],'stop':[]}}})
+      'uri':job['target_base'],'temperature':0,'max_tokens':job['max_tokens'],
+      # stop обязателен пустым: garak по умолчанию ставит ['#', ';'], а часть
+      # шлюзов отвергает массив из двух элементов с ошибкой
+      # «expected array to have >=1 items». Пустой массив означает «не
+      # ограничивать», и это принимают все.
+      'stop':[],'suppressed_params':['stop']}}})
     env=os.environ.copy();env['OPENAICOMPATIBLE_API_KEY']=env['SUITE_RELAY_KEY']
     # garak живёт в отдельном venv (.tools/garak). Запуск через sys.executable
     # поднимал основной интерпретатор, где garak не установлен, — процесс
@@ -93,13 +98,13 @@ module.exports = async (output, context) => {
 };
 '''
     assertion=assertion.replace('JOB',json.dumps(job),1).replace('RULES',json.dumps(RULES),1).replace('SYSTEM',json.dumps(JUDGE_SYSTEM),1)
-    (out/'assertion.cjs').write_text(assertion,encoding='utf-8')
-    (out/'prompt.cjs').write_text("module.exports=({vars})=>JSON.stringify([{role:'system',content:vars.system},{role:'user',content:vars.prompt}]);\n")
-    config={'description':'Corporate RU/EN v2','prompts':['file://'+str(out/'prompt.cjs')],
+    (out/'assertion.js').write_text(assertion,encoding='utf-8')
+    (out/'prompt.js').write_text("module.exports=({vars})=>JSON.stringify([{role:'system',content:vars.system},{role:'user',content:vars.prompt}]);\n")
+    config={'description':'Corporate RU/EN v2','prompts':['file://'+str(out/'prompt.js')],
       'providers':[{'id':'openai:chat:'+job['model'],'label':job['model'],'config':{
        'apiBaseUrl':job['target_base'],'apiKey':'{{ env.SUITE_RELAY_KEY }}','showThinking':False,
        'temperature':0,'max_tokens':job['max_tokens'],'timeout':job['timeout']*1000}}],
-      'tests':[{'description':c['id'],'vars':c,'assert':[{'type':'javascript','value':'file://'+str(out/'assertion.cjs')}]} for c in cases]}
+      'tests':[{'description':c['id'],'vars':c,'assert':[{'type':'javascript','value':'file://'+str(out/'assertion.js')}]} for c in cases]}
     write_json(out/'config.json',config)
     # npm кладёт рядом три файла: POSIX-скрипт без расширения, .cmd и .ps1.
     # На Windows скрипт без расширения не исполняется (WinError 193), поэтому

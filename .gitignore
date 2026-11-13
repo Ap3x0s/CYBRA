@@ -116,3 +116,7 @@ scripts/check_asr.py
 scripts/fix_duplicate_metric.py
 scripts/add_coverage*.py
 scripts/fix_capabilities_test.py
+scripts/run_all8.py
+scripts/diag_garak*.py
+scripts/fix_garak_promptfoo.py
+scripts/fix_bipia_env.py
