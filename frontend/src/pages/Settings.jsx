@@ -18,7 +18,7 @@ export default function Settings() {
   const [form, setForm] = useState({ email: '', password: '', display_name: '', role: 'operator' })
   const [pwd, setPwd] = useState({ current_password: '', new_password: '' })
 
-  if (users.loading || caps.loading) return <PageSkeleton variant="default" />
+  if (users.loading || caps.loading) return <PageSkeleton variant="settings" />
 
   async function createUser(event) {
     event.preventDefault()

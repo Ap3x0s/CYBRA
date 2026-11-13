@@ -76,6 +76,52 @@ function Table({ rows = 5 }) {
   )
 }
 
+/** Форма: подпись + поле, повторённые нужное число раз, затем кнопка. */
+function Form({ fields = 2, button = true, labels = true }) {
+  return (
+    <div style={{ display: 'grid', gap: labels ? 14 : 10 }}>
+      {Array.from({ length: fields }).map((_, index) => (
+        <div key={index} style={{ display: 'grid', gap: 7 }}>
+          <Box w={index === 0 ? 96 : 88} h={9} />
+          <Box w="100%" h={34} r={7} />
+        </div>
+      ))}
+      {button ? <Box w={132} h={32} r={7} style={{ marginTop: 4 }} /> : null}
+    </div>
+  )
+}
+
+/** Таблица: шапка с несколькими ячейками и строки под неё. */
+function Rows({ rows = 8, cols = [120, 60, 70, 80] }) {
+  return (
+    <div style={{ display: 'grid', gap: 0 }}>
+      <div
+        style={{
+          display: 'flex', gap: 18, paddingBottom: 10,
+          borderBottom: '1px solid var(--edge)',
+        }}
+      >
+        {cols.map((w, index) => (
+          <Box key={index} w={w} h={8} />
+        ))}
+      </div>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div
+          key={r}
+          style={{
+            display: 'flex', gap: 18, alignItems: 'center',
+            padding: '13px 0', borderBottom: '1px solid var(--edge-soft)',
+          }}
+        >
+          {cols.map((w, index) => (
+            <Box key={index} w={index === 0 ? w : w - 10} h={9} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function PageSkeleton({ variant = 'default' }) {
   if (variant === 'dashboard') {
     return (
@@ -133,6 +179,49 @@ export function PageSkeleton({ variant = 'default' }) {
     )
   }
 
+  if (variant === 'settings') {
+    // Повторяет реальную раскладку страницы настроек: сверху равные колонки
+    // (форма пароля слева, таблица окружения справа), ниже — форма нового
+    // пользователя и таблица пользователей. Равные колонки, а не 1fr/320px
+    // как в skel-grid-1-2: в настройках сетка именно grid-2.
+    return (
+      <div className="fade-in">
+        <Head lines={1} />
+
+        <div className="skel-grid skel-grid-2">
+          <div className="skel-card">
+            <Box w={150} h={13} />
+            <div style={{ marginTop: 18 }}>
+              <Form fields={2} />
+            </div>
+          </div>
+          <div className="skel-card">
+            <Box w={90} h={13} />
+            <div style={{ marginTop: 18 }}>
+              <Rows rows={8} />
+              <Box w="100%" h={46} r={7} style={{ marginTop: 16 }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="skel-grid skel-grid-2">
+          <div className="skel-card">
+            <Box w={160} h={13} />
+            <div style={{ marginTop: 18 }}>
+              <Form fields={3} labels={false} />
+            </div>
+          </div>
+          <div className="skel-card">
+            <Box w={130} h={13} />
+            <div style={{ marginTop: 18 }}>
+              <Rows rows={3} cols={[110, 90, 70, 80]} />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (variant === 'form') {
     return (
       <div className="fade-in">
@@ -145,11 +234,15 @@ export function PageSkeleton({ variant = 'default' }) {
     )
   }
 
+  // Фолбэк тоже через сетку: две карточки подряд без контейнера слипались,
+  // потому что отступ живёт на .skel-grid, а не на .skel-card.
   return (
     <div className="fade-in">
       <Head lines={1} />
-      <Card height={220} rows={4} />
-      <Card height={220} rows={4} />
+      <div className="skel-grid">
+        <Card height={220} rows={4} />
+        <Card height={220} rows={4} />
+      </div>
     </div>
   )
 }
