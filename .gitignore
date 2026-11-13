@@ -120,3 +120,4 @@ scripts/run_all8.py
 scripts/diag_garak*.py
 scripts/fix_garak_promptfoo.py
 scripts/fix_bipia_env.py
+scripts/fix_bipia_limit.py
