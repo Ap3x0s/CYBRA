@@ -23,7 +23,7 @@ export const CustomIcons = {
         style={{ verticalAlign: 'middle', flexShrink: 0, ...style }}
         aria-hidden="true"
       >
-        <g transform="translate(-0.89 -0.28)">
+        <g transform="translate(0 -0.06)">
           <rect width="4.5" height="5" x="2.75" y="12.5" rx="1.25" />
           <rect width="4.5" height="5" x="9.75" y="12.5" rx="1.25" />
           <rect width="4.5" height="5" x="16.75" y="12.5" rx="1.25" />
