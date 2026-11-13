@@ -105,15 +105,59 @@
   flex: 0 0 auto;
 }
 
+/* --- непрочитанные уведомления ------------------------------------------
+   Значок всегда янтарный — это его штатный цвет в нашей палитре. Раньше
+   .icon-btn в покое был серым (--muted), и колокольчик терялся среди прочих
+   кнопок шапки.
+
+   Признак непрочитанного — ТОЛЬКО белая точка в углу. Ни рамки, ни фона, ни
+   свечения: заказчик просил, чтобы белый кружок выделялся на фоне янтарного
+   значка, а не рядом с обведённым боксом. Обводка делала кнопку отдельным
+   элементом и перетягивала внимание с самой точки. */
+
+/* Базовая кнопка уведомлений: янтарный значок, фон и рамка как у соседей. */
+/* Колокольчик повторяет оформление кнопки языка — они стоят рядом и должны
+   читаться как одна группа. Значок янтарный в любом состоянии: он обозначает
+   «сигнал», а не навигацию. */
+.icon-btn.bell-btn {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.icon-btn.bell-btn:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Белая точка — единственный маркер непрочитанного. Крупнее прежней (было
+   5px), потому что теперь она несёт всю функцию индикатора: блик по краю
+   янтарного значка помогает ей читаться на светлой подложке. */
+.icon-btn .fresh-badge {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 0 0 1.5px var(--ink-800), 0 0 5px rgba(255, 255, 255, 0.55);
+}
+
+/* Прямоугольный бокс профиля — как в референсе. Была капсула с полным
+   скруглением (999px), самой «круглой» вещью в шапке: она выбивалась из
+   ряда прямоугольных кнопок с радиусом 9px. Теперь 8px, ширина по
+   содержимому, высота как у соседей. */
 .profile-btn {
   display: flex;
   align-items: center;
-  gap: 9px;
-  height: 38px;
-  padding: 0 10px 0 4px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.028);
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 5px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.032);
   color: var(--text);
   cursor: pointer;
   transition: background 150ms var(--ease), border-color 150ms var(--ease);
@@ -133,8 +177,9 @@
 /* Аватар в полосе: янтарная подложка и кольцо — так он читается как личность,
    а не как ещё одна серая кнопка среди уведомлений и языка. */
 .topbar .profile-btn .avatar {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   background: rgba(229, 169, 60, 0.13);
   border: 1px solid rgba(229, 169, 60, 0.3);
   color: var(--accent);
@@ -143,22 +188,14 @@
   letter-spacing: 0.02em;
 }
 
-.profile-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.15;
-  max-width: 150px;
-  overflow: hidden;
-  gap: 1px;
-}
 .profile-name {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
+  max-width: 140px;
+  line-height: 1.2;
 }
 .profile-role {
   font-size: 9px;
@@ -172,13 +209,15 @@
 .profile-btn.is-open .profile-caret { color: var(--muted); }
 
 /* --- меню аккаунта ------------------------------------------------------- */
+/* Шапка меню профиля с мягкой подложкой. Убирали — стало хуже: верх бокса
+   сливался со списком действий, и граница между «кто это» и «что можно
+   сделать» пропадала. Градиент к низу сходит на нет, поэтому не выглядит
+   второй заливкой, а работает как мягкий якорь для блока с личностью. */
 .account-head {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 12px 14px;
-  /* Мягкая подложка отделяет шапку от списка действий: раньше строка висела
-     на голом фоне, и граница между «кто это» и «что можно сделать» терялась. */
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
   border-radius: 9px;
   margin: 2px 2px 6px;
@@ -264,16 +303,25 @@
 
 /* Открытая кнопка должна быть визуально отличима от просто наведённой:
    иначе непонятно, чьё меню на экране. */
+/* Открытая кнопка должна отличаться от наведённой, иначе непонятно, чьё меню
+   на экране. Держим это только рамкой и лёгкой подложкой — без инсет-тени,
+   которая давала двойной контур. */
 .topbar .icon-btn.is-open,
 .topbar .lang-btn.is-open {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.085);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.22);
 }
-.topbar .icon-btn.is-open svg,
 .topbar .lang-btn.is-open .lang-code { color: var(--text); }
+/* Значки при открытом меню остаются янтарными: смена цвета на белый ломала
+   связь с состоянием «сигнал». */
+.topbar .icon-btn.is-open svg,
+.topbar .lang-btn.is-open svg { color: var(--accent); }
 
-/* Кнопка языка: иконка-переводчик + код текущего языка. */
+/* Кнопка языка: иконка-переводчик + код текущего языка.
+   Заливка и рамка — как у пунктов навигации: лёгкая подложка плюс видимая
+   линия, отделяющая элемент от общего фона полосы. Прозрачный фон (было в
+   прошлой версии) растворял кнопку в шапке. */
 .topbar .lang-btn {
   min-width: 58px;
   padding: 0 9px;
@@ -281,8 +329,18 @@
   justify-content: center;
   flex: 0 0 auto;
   color: var(--muted);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  transition: background 150ms var(--ease), border-color 150ms var(--ease),
+    color 150ms var(--ease);
 }
-.topbar .lang-btn:hover { color: var(--text); }
+.topbar .lang-btn svg { color: var(--accent); }
+.topbar .lang-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.topbar .lang-btn:hover svg { color: var(--accent); }
 .topbar .lang-btn .lang-code {
   display: inline-block;
   flex: 0 0 auto;

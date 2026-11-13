@@ -30,6 +30,17 @@ export default function Topbar() {
   const { t } = useI18n()
   const [panel, setPanel] = useState(null) // 'bell' | 'account' | 'lang' | null
   const wrapRef = useRef(null)
+  // Снимок id уведомлений, которые человек уже видел. Хранится в localStorage,
+  // чтобы индикатор не загорался заново при каждой перезагрузке страницы:
+  // «непрочитано» — это свойство события, а не сессии браузера.
+  const [seenIds, setSeenIds] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem('cybra.seen-alerts')
+      return raw ? new Set(JSON.parse(raw)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
 
   const initials = (user?.display_name || user?.email || 'AD').slice(0, 2).toUpperCase()
   const name = user?.display_name || user?.email || ''
@@ -55,6 +66,22 @@ export default function Topbar() {
   const alerts = (runs.data || []).filter((run) =>
     ['PARTIAL', 'ERROR', 'CANCELLED'].includes(run.status),
   )
+
+  // Новые — те, что появились после прошлого открытия меню.
+  const freshAlerts = alerts.filter((run) => !seenIds.has(run.id))
+  const hasFresh = freshAlerts.length > 0
+
+  /** Запомнить текущий набор как просмотренный и погасить индикатор. */
+  function markAlertsSeen() {
+    const ids = new Set(alerts.map((run) => run.id))
+    setSeenIds(ids)
+    try {
+      window.localStorage.setItem('cybra.seen-alerts', JSON.stringify([...ids]))
+    } catch {
+      // Приватный режим или запрещённое хранилище: индикатор просто не
+      // запомнится между перезагрузками, но интерфейс продолжит работать.
+    }
+  }
 
   /** Единственная точка переключения поповеров — гарантирует «один за раз». */
   function togglePanel(which) {
@@ -85,13 +112,25 @@ export default function Topbar() {
 
         <div style={{ position: 'relative' }}>
           <button
-            className={`icon-btn${panel === 'bell' ? ' is-open' : ''}`}
-            aria-label={t('Уведомления') + (alerts.length ? `: ${alerts.length}` : '')}
+            className={`icon-btn bell-btn${panel === 'bell' ? ' is-open' : ''}`}
+            aria-label={
+              t('Уведомления')
+              + (hasFresh ? `: ${t('новых')} ${freshAlerts.length}` : '')
+            }
             aria-expanded={panel === 'bell'}
-            onClick={() => togglePanel('bell')}
+            onClick={() => {
+              togglePanel('bell')
+              // Отметку ставим при открытии, а не при закрытии: иначе значок
+              // остаётся белым, пока меню открыто, и человек не понимает,
+              // прочитал он уведомление или нет.
+              if (panel !== 'bell') markAlertsSeen()
+            }}
           >
+            {/* Значок всегда янтарный — это его штатный цвет. Признак
+                непрочитанного — только белая точка в углу: обводка и
+                свечение перетягивали внимание с самой точки. */}
             <Bell size={15} weight="bold" />
-            {alerts.length ? <span className="dot" /> : null}
+            {hasFresh ? <span className="fresh-badge" aria-hidden="true" /> : null}
           </button>
 
           {panel === 'bell' ? (
@@ -145,10 +184,9 @@ export default function Topbar() {
             onClick={() => togglePanel('account')}
           >
             <span className="avatar">{initials}</span>
-            <span className="profile-meta">
-              <span className="profile-name">{name}</span>
-              <span className="profile-role">{user?.role}</span>
-            </span>
+            {/* Роль убрана из кнопки: она дублировала строку ниже в меню и
+                растягивала капсулу по высоте. */}
+            <span className="profile-name">{name}</span>
             <CaretDown size={11} weight="bold" className="profile-caret" />
           </button>
 
@@ -189,7 +227,11 @@ export default function Topbar() {
                   </span>
                 </button>
               ) : null}
-              <div className="popover-sep" />
+              {/* Разделитель перед «Выйти» убран: он визуально разрывал
+                  меню профиля на две несвязанные части. Между блоком
+                  личности и действиями разделитель остаётся — там он
+                  осмыслен, а здесь действие «выйти» такое же, как
+                  остальные. */}
               <button className="popover-item danger" onClick={logout}>
                 <span className="popover-row">
                   <SignOut size={14} weight="bold" />

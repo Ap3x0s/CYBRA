@@ -154,3 +154,8 @@ scripts/tip_scale_up.py
 scripts/tip_step1.py
 scripts/tip_step2.py
 scripts/unify_links.py
+scripts/topbar_fix2.py
+scripts/topbar_fix3.py
+scripts/topbar_fix4.py
+scripts/topbar_fix5.py
+scripts/topbar_fresh.py
