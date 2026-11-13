@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -81,8 +82,24 @@ def _version(tool: str) -> str | None:
         return None
 
 
-def capabilities() -> list[dict]:
-    """Return a JSON-serialisable status list for every tool."""
+# Кэш ответа: версии инструментов меняются только при установке, а опрос
+# стоит ~0.6 с (по подпроцессу на инструмент). Без кэша каждый заход на
+# страницу настроек запускал четыре интерпретатора ради строки «0.17.0».
+_CACHE: dict = {'at': 0.0, 'value': None}
+_CACHE_TTL = 300.0  # 5 минут
+
+
+def capabilities(refresh: bool = False) -> list[dict]:
+    """Return a JSON-serialisable status list for every tool.
+
+    Результат кэшируется на _CACHE_TTL секунд. refresh=True пересчитывает
+    немедленно — нужно после установки инструмента.
+    """
+    now = time.monotonic()
+    if (not refresh and _CACHE['value'] is not None
+            and now - _CACHE['at'] < _CACHE_TTL):
+        return _CACHE['value']
+
     result = []
     for tool, (kind, name, hint) in TOOLS.items():
         ready = _installed(tool)
@@ -94,6 +111,9 @@ def capabilities() -> list[dict]:
             'version': _version(tool) if ready else None,
             'install_hint': None if ready else hint,
         })
+
+    _CACHE['at'] = time.monotonic()
+    _CACHE['value'] = result
     return result
 
 
