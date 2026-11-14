@@ -168,3 +168,4 @@ scripts/prep_metrics_run.py
 scripts/max_run_config.py
 scripts/merge_pyrit.py
 scripts/extract_garak.py
+scripts/fix_report_bar.py

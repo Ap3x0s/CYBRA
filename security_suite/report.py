@@ -173,7 +173,16 @@ td.tool { font-weight: 500; }
 .chip.error    { background: #FAF0ED; color: #A8321E; }
 
 /* Полоса доли провалов: значение читается глазом, а не только числом. */
-.bar-track { width: 100%; min-width: 70px; height: 6px; background: #EDE8DF; border-radius: 3px; }
+/* Ячейка «полоска + число»: полоска тянется, процент прижат вправо
+   и не переносится, чтобы строка таблицы оставалась ровной. */
+.bar-cell { display: flex; align-items: center; gap: 8px; min-width: 118px; }
+.bar-cell .bar-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px; color: #14141A; white-space: nowrap;
+  min-width: 38px; text-align: right;
+}
+.bar-cell .bar-none { color: #8A8580; font-size: 11px; }
+.bar-track { flex: 1; min-width: 60px; height: 6px; background: #EDE8DF; border-radius: 3px; }
 .bar-fill { height: 6px; background: #B07E22; border-radius: 3px; }
 .bar-fill.high { background: #A8321E; }
 .bar-fill.zero { background: #D8D2C8; }
@@ -210,29 +219,51 @@ pre {
 }
 """
 
+    # Статусы полноты по-русски. Термины COMPLETE/PARTIAL взяты из нашего
+    # словаря метрик, но в отчёте для руководства английские слова читаются
+    # как сбой локализации. Исходный термин сохраняем в title: при наведении
+    # видно точное значение из контракта, аудитор не теряет однозначность.
+    STATUS_RU = {
+        'COMPLETE': ('полно', 'complete'),
+        'PARTIAL': ('частично', 'partial'),
+        'ERROR': ('ошибка', 'error'),
+        'CANCELLED': ('отменён', 'error'),
+    }
+
     def chip(status: str) -> str:
         """Статус-чип. Текст дублирует цвет — важно для чёрно-белой печати."""
-        key = status.strip().lower()
-        cls = {'complete': 'complete', 'полно': 'complete',
-               'partial': 'partial', 'частично': 'partial'}.get(key, 'error')
-        return f'<span class="chip {cls}">{html.escape(status)}</span>'
+        key = status.strip().upper()
+        label, cls = STATUS_RU.get(key, (status, 'error'))
+        return (f'<span class="chip {cls}" title="{html.escape(status)}">'
+                f'{html.escape(label)}</span>')
 
-    def bar(share: float) -> str:
-        """Полоса доли провалов.
+    def bar(share: float, known: bool = True) -> str:
+        """Полоса доли провалов с числом справа.
+
+        Полоска показывает пропорцию, но точное значение по ней не прочесть.
+        Поэтому процент стоит рядом: глаз сначала видит соотношение, потом
+        уточняет цифрой.
 
         При нуле полоса нулевой ширины не видна вовсе — выглядело как
         отсутствие данных, а не как «ноль провалов». Поэтому для нуля
-        рисуем серую точку-минимум: она показывает, что измерение было, и
-        его результат — ноль.
+        рисуем серую точку-минимум.
+
+        known=False означает «оценивать было нечего» (нет ни PASS, ни FAIL):
+        тогда вместо 0.0 % ставим прочерк, иначе ноль наблюдений выглядел бы
+        как измеренный ноль провалов.
         """
+        if not known:
+            return '<div class="bar-cell"><span class="bar-none">—</span></div>'
         share = max(0.0, min(1.0, share))
-        if share <= 0:
-            return ('<div class="bar-track"><div class="bar-fill zero" '
-                    'style="width:6px"></div></div>')
-        width = share * 100
-        cls = 'high' if share >= 0.5 else ''
-        return (f'<div class="bar-track"><div class="bar-fill {cls}" '
-                f'style="width:{width:.1f}%"></div></div>')
+        cls = 'high' if share >= 0.5 else ('zero' if share <= 0 else '')
+        width = 6 if share <= 0 else share * 100
+        return (
+            '<div class="bar-cell">'
+            f'<div class="bar-track"><div class="bar-fill {cls}" '
+            f'style="width:{width:.1f}%"></div></div>'
+            f'<span class="bar-value">{share * 100:.1f}%</span>'
+            '</div>'
+        )
 
     # Метаданные собираем фильтром: пустые поля раньше оставляли в строке
     # разделители-сироты вида "id ·  · режим", что читалось как сбой отчёта.
@@ -327,7 +358,7 @@ pre {
                 f'<td class="num">{c["FAIL"]}</td>'
                 f'<td class="num">{c["ERROR"]}</td>'
                 f'<td class="num">{c.get("UNSCORED", 0) + c.get("SKIPPED", 0)}</td>'
-                f'<td>{bar(rate)}</td></tr>')
+                f'<td>{bar(rate, known=bool(scored))}</td></tr>')
         parts.append('</table>')
 
         # Разбивка по категориям. Категории лежат внутри каждого инструмента,
