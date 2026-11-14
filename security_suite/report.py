@@ -9,6 +9,19 @@ def esc(value):
 
 def consolidate(run_dir):
     root=Path(run_dir);manifest=read_json(root/'manifest.json')
+    # Старые прогоны (до появления model_dirs) не содержали карту каталогов,
+    # но структура на диске та же: подкаталог на модель. Восстанавливаем её
+    # по факту, иначе отчёт для архивных прогонов падал с KeyError.
+    if 'model_dirs' not in manifest:
+        dirs={}
+        for child in sorted(root.glob('*')):
+            if not child.is_dir():
+                continue
+            for model in manifest.get('models', []):
+                slug=model.lower().replace('/', '_').replace(' ', '-')
+                if child.name.startswith(slug.split('-')[0]):
+                    dirs.setdefault(model, child.name)
+        manifest['model_dirs']=dirs
     by_model={};all_records=[]
     for model,mdir in manifest['model_dirs'].items():
         tools=[];model_rows=[]

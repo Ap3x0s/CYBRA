@@ -620,10 +620,22 @@ def run_report(run_pk: int, fmt: str = Query('json', pattern='^(json|md|html)$')
                   if c.is_dir() and (c / 'report.html').exists()] if out_dir.exists() else []
         if len(nested) == 1:
             out_dir = nested[0]
+    # media_type обязателен: без него FileResponse ставит
+    # application/octet-stream, и Obsidian с VS Code не распознают формат.
+    # charset обязателен: без него кодировка угадывается, и русский текст
+    # в редакторе превращается в кракозябры.
     if fmt == 'md' and (out_dir / 'report.md').exists():
-        return FileResponse(out_dir / 'report.md', filename=f'{run.run_id}.md')
+        return FileResponse(
+            out_dir / 'report.md',
+            media_type='text/markdown; charset=utf-8',
+            filename=f'{run.run_id}.md',
+        )
     if fmt == 'html' and (out_dir / 'report.html').exists():
-        return FileResponse(out_dir / 'report.html', filename=f'{run.run_id}.html')
+        return FileResponse(
+            out_dir / 'report.html',
+            media_type='text/html; charset=utf-8',
+            filename=f'{run.run_id}.html',
+        )
     summary = out_dir / 'summary.json'
     if summary.exists():
         return JSONResponse(json.loads(summary.read_text(encoding='utf-8')))

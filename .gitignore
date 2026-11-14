@@ -171,3 +171,5 @@ scripts/extract_garak.py
 scripts/fix_report_bar.py
 scripts/fix_react_report.py
 scripts/fix_print_breaks.py
+scripts/fix_md_download.py
+scripts/fix_md_paths.py
