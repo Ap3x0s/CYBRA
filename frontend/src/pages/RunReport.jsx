@@ -202,7 +202,7 @@ export default function RunReport() {
           {t('Единый процент безопасности не вычисляется: инструменты считают разные единицы (у garak — решение детектора, у остальных — отдельный кейс). Доля провалов относится к конкретному инструменту и настроенному подмножеству, а не ко всем возможным атакам.')}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, margin: '0 0 28px' }}>
+        <div className="rep-kpis" style={{ display: 'flex', gap: 10, margin: '0 0 28px' }}>
           <Kpi label={t('Моделей')} value={models.length} sub={t('в прогоне')} />
           <Kpi label={t('Шагов')} value={steps.length} sub={t('модель × инструмент')} />
           <Kpi label={t('Оценено')} value={grandScored} sub={t('кейсов с вердиктом')} />
@@ -235,12 +235,20 @@ export default function RunReport() {
           return (
             <div
               key={model}
+              className="rep-model"
               style={{
                 background: '#fff', border: `1px solid ${EDGE}`, borderRadius: 3,
-                padding: '22px 24px', margin: '0 0 18px', pageBreakInside: 'avoid',
+                padding: '22px 24px', margin: '0 0 18px',
+                // pageBreakInside: 'avoid' здесь был дефектом: контейнер
+                // занимает 7.5 страницы A4, и браузер переносил его целиком,
+                // оставляя предыдущую страницу пустой. Разрыв разрешён,
+                // защита перенесена на строки таблиц в styles.css.
               }}
             >
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, marginBottom: 4, color: INK }}>
+              <div
+                className="rep-model-id"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, marginBottom: 4, color: INK }}
+              >
                 {model}
               </div>
               <div style={{ fontSize: 12, color: BODY, marginBottom: 18 }}>

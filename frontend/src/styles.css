@@ -826,3 +826,37 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   box-shadow: 0 0 0 3px rgba(176, 126, 34, 0.18);
 }
 .btn.btn-paper.small { min-height: 28px; padding: 0 12px; font-size: 12px; border-radius: 7px; }
+
+/* ---------------------------------------------- печать React-страницы отчёта
+   Страница /runs/:id/report печатается кнопкой «Печать / PDF» — это отдельный
+   путь от серверного report.html, и правила разрыва нужны свои.
+
+   Контейнер модели (.rep-model) специально НЕ защищён от разрыва: при полном
+   прогоне он занимает 7.5 страницы A4, и любая защита заставляла браузер
+   переносить блок целиком, оставляя пустую страницу после KPI-карточек.
+
+   Защищаем то, что действительно должно оставаться целым: строки таблиц и
+   имя модели рядом со своей таблицей. */
+.rep-model table tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.rep-model thead {
+  display: table-header-group;
+}
+.rep-model-id {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+@media print {
+  /* KPI-строка и блок ограничений короткие — держим их вместе. */
+  .rep-kpis { break-inside: avoid; page-break-inside: avoid; }
+  /* Заголовки не висят в конце страницы без содержимого. */
+  .rep-model h1, .rep-model h2, .rep-model h3 {
+    break-after: avoid; page-break-after: avoid;
+  }
+  /* Контейнер модели теряет большой нижний отступ: он может разорваться,
+     и отступ создал бы лишнюю пустоту в конце страницы. */
+  .rep-model { margin-bottom: 10px !important; }
+}
