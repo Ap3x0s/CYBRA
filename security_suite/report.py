@@ -134,13 +134,21 @@ h1 { font-size: 27px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.02e
 .kpi-value.bad { color: #A8321E; }
 
 /* Секция модели */
+/* Контейнер модели НЕ защищён от разрыва: его высота при полном прогоне
+   достигает 765 мм (7.5 страницы A4), и page-break-inside: avoid заставлял
+   браузер переносить блок целиком — перед таблицей появлялась пустая
+   страница. Разрыв внутри разрешён, но строки таблиц и заголовок остаются
+   целыми (см. правила ниже). */
 .model {
   background: #fff; border: 1px solid #E6E1D8; border-radius: 3px;
-  padding: 22px 24px; margin: 0 0 18px; page-break-inside: avoid;
+  padding: 22px 24px; margin: 0 0 18px;
 }
 .model-id {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 15px; font-weight: 600; margin-bottom: 4px;
+  /* Имя модели должно оставаться рядом со своей таблицей: иначе оно
+     повисает в конце страницы без данных. */
+  break-after: avoid; page-break-after: avoid;
 }
 .verdict { font-size: 12px; color: #4A453E; margin-bottom: 18px; }
 .verdict b { color: #14141A; }
@@ -157,6 +165,12 @@ th {
   font-weight: 700; border-bottom: 1.5px solid #14141A; white-space: nowrap;
 }
 td { padding: 8px 9px; border-bottom: 1px solid #EDE8DF; vertical-align: middle; }
+/* Строка не рвётся между страницами, но таблица продолжается: именно это
+   нужно для длинных разбивок по категориям. */
+tr { break-inside: avoid; page-break-inside: avoid; }
+/* Шапка таблицы повторяется на каждой странице, иначе продолжение читается
+   как таблица без заголовков. */
+thead { display: table-header-group; }
 tr:last-child td { border-bottom: none; }
 td.num, th.num { text-align: right; font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
 td.tool { font-weight: 500; }
@@ -214,8 +228,18 @@ pre {
   body { background: #fff; padding: 0; font-size: 11.5px; }
   .wrap { max-width: none; }
   .model, .limits, .kpi { border-color: #D8D2C8; }
-  .kpis { page-break-inside: avoid; }
+  /* Компактные блоки держим вместе: KPI-строка и врезка ограничений
+     короткие и на страницу помещаются. */
+  .kpis { page-break-inside: avoid; break-inside: avoid; }
+  .limits { page-break-inside: avoid; break-inside: avoid; }
+  /* Контейнер модели при печати не должен добавлять зазор: он может
+     разорваться, и отступ создал бы лишнюю пустоту в конце страницы. */
+  .model { margin-bottom: 10px; }
+  /* Раскрытые дампы записей в печать не идут: они раздувают файл до
+     мегабайт и не нужны на бумаге. */
   details { display: none; }
+  /* Заголовки не висят в конце страницы без содержимого. */
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
 }
 """
 

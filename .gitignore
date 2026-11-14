@@ -170,3 +170,4 @@ scripts/merge_pyrit.py
 scripts/extract_garak.py
 scripts/fix_report_bar.py
 scripts/fix_react_report.py
+scripts/fix_print_breaks.py
