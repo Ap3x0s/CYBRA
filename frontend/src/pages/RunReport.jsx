@@ -26,42 +26,72 @@ const ACCENT = '#B07E22'
 const BAD = '#A8321E'
 const GOOD = '#1F7A4D'
 
+/**
+ * Статусы полноты по-русски.
+ *
+ * COMPLETE/PARTIAL — термины из нашего словаря метрик, но в отчёте для
+ * руководства английские слова читаются как сбой локализации. Исходное
+ * значение остаётся в title: при наведении видно точный термин из
+ * контракта, аудитор не теряет однозначность.
+ */
+const STATUS_LABELS = {
+  COMPLETE: { label: 'полно', bg: '#E4F0E9', fg: GOOD },
+  PARTIAL: { label: 'частично', bg: '#F6F1E6', fg: '#8A6216' },
+  ERROR: { label: 'ошибка', bg: '#FAF0ED', fg: BAD },
+  CANCELLED: { label: 'отменён', bg: '#FAF0ED', fg: BAD },
+}
+
 /** Чип полноты. Текст дублирует цвет — важно для чёрно-белой печати. */
 function Chip({ status }) {
-  const key = String(status || '').toLowerCase()
-  const palette = key.startsWith('complete')
-    ? { bg: '#E4F0E9', fg: GOOD }
-    : key.startsWith('partial')
-      ? { bg: '#F6F1E6', fg: '#8A6216' }
-      : { bg: '#FAF0ED', fg: BAD }
+  const key = String(status || '').toUpperCase()
+  const entry = STATUS_LABELS[key] || { label: status, bg: '#FAF0ED', fg: BAD }
   return (
     <span
+      title={status}
       style={{
         display: 'inline-block', padding: '2px 8px', borderRadius: 3,
-        background: palette.bg, color: palette.fg,
+        background: entry.bg, color: entry.fg,
         fontSize: 9.5, fontWeight: 600, letterSpacing: '.04em',
         textTransform: 'uppercase', whiteSpace: 'nowrap',
       }}
     >
-      {status}
+      {entry.label}
     </span>
   )
 }
 
 /**
- * Полоса доли провалов.
+ * Полоса доли провалов с числом справа.
  *
- * При нуле полоса нулевой ширины исчезает и читается как «нет данных».
- * Поэтому для нуля рисуется серая точка-минимум: измерение было, результат
- * — ноль.
+ * Полоска показывает пропорцию, но точное значение по ней не прочесть —
+ * поэтому процент стоит рядом.
+ *
+ * При нуле полоса нулевой ширины исчезает и читается как «нет данных»,
+ * поэтому рисуется серая точка-минимум.
+ *
+ * known=false означает «оценивать было нечего»: тогда прочерк, а не 0.0%.
+ * Ноль наблюдений не равен измеренному нулю провалов.
  */
-function Bar({ value }) {
+function Bar({ value, known = true }) {
+  if (!known) {
+    return <span style={{ color: MUTED, fontSize: 11 }}>—</span>
+  }
   const share = Math.max(0, Math.min(1, Number(value) || 0))
   const width = share <= 0 ? 6 : Math.max(3, share * 100)
   const color = share <= 0 ? '#D8D2C8' : share >= 0.5 ? BAD : ACCENT
   return (
-    <div style={{ width: '100%', minWidth: 70, height: 6, background: '#EDE8DF', borderRadius: 3 }}>
-      <div style={{ width: `${width}%`, height: 6, background: color, borderRadius: 3 }} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 118 }}>
+      <div style={{ flex: 1, minWidth: 60, height: 6, background: '#EDE8DF', borderRadius: 3 }}>
+        <div style={{ width: `${width}%`, height: 6, background: color, borderRadius: 3 }} />
+      </div>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, color: INK,
+          whiteSpace: 'nowrap', minWidth: 38, textAlign: 'right',
+        }}
+      >
+        {(share * 100).toFixed(1)}%
+      </span>
     </div>
   )
 }
@@ -244,9 +274,10 @@ export default function RunReport() {
                         <td style={TD_NUM}>{counts.ERROR || 0}</td>
                         <td style={TD_NUM}>{(counts.UNSCORED || 0) + (counts.SKIPPED || 0)}</td>
                         <td style={TD}>
-                          {step.failed_check_rate === null
-                            ? <span style={{ color: MUTED }}>—</span>
-                            : <Bar value={step.failed_check_rate} />}
+                          <Bar
+                            value={step.failed_check_rate}
+                            known={Boolean((counts.PASS || 0) + (counts.FAIL || 0))}
+                          />
                         </td>
                       </tr>
                     )
