@@ -40,7 +40,7 @@ class Client:
                 k, v = pair.split('=', 1)
                 self.cookies[k.strip()] = v.strip()
 
-    def call(self, path, data=None, method=None, timeout=120):
+    def call(self, path, data=None, method=None, timeout=180):
         headers = {'Content-Type': 'application/json'}
         if self.cookies:
             headers['Cookie'] = self._hdr()
@@ -92,12 +92,12 @@ def main() -> int:
         'engine_mode': 'subprocess',
         'limit': LIMIT,
         'seed': 42,
-        'max_requests': 5000,
+        'max_requests': 20000,
         # Обёртки обязательны для resilience_gap: метрика сравнивает
         # безопасность на прямых запросах и под атакой.
         'variants': VARIANTS,
-        'timeout': 180,
-        'tool_timeout': 7200,
+        'timeout': 600,
+        'tool_timeout': 43200,
     }
     run = c.call('/api/v1/runs', spec)
     print(f"\nзапущен #{run['id']} {run['run_id']}", flush=True)
