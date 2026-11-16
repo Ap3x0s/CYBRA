@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../auth'
 import { ErrorBox } from '../components'
-import { ArrowRight } from '../icons'
 import { SlTextField } from '../sl-ui/react'
 import { useI18n } from '../i18n-context'
 import markUrl from '../assets/cybra-mark.png'
@@ -69,12 +68,10 @@ export default function Login() {
               onChange={setPassword}
             />
           </div>
-          {/* Стрелка вместо щита: щит в кнопке входа дублировал смысл
-              заголовка и читался как «защита», а не «перейти дальше».
-              Стрелка — стандартный аффорданс перехода. */}
+          {/* Стрелка убрана по просьбе заказчика: кнопка с текстом и без
+              значка выглядит спокойнее и не отвлекает от формы. */}
           <button className="btn primary login-submit" type="submit" disabled={busy}>
             {busy ? t('Проверка…') : t('Войти')}
-            <ArrowRight size={16} weight="bold" />
           </button>
         </form>
       </div>

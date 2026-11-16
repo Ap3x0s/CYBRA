@@ -722,7 +722,16 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   border-radius: 18px; padding: 30px;
   box-shadow: 0 30px 80px -40px #000;
   animation: rise 480ms var(--ease) both;
+  /* Оптическая, а не геометрическая центровка.
+     Карточка состоит из «лёгкой» шапки (лого + заголовок + лид, 191 px)
+     и «тяжёлой» формы. При центровке всей карточки как блока блок полей
+     оказывался на 52 px ниже середины окна — это и было заметно глазом.
+     Отрицательное поле снизу поднимает карточку так, чтобы середина
+     полей Email/Пароль совпала с серединой окна. Margin снаружи карточки
+     не виден, поэтому приём не меняет её внешний вид, только положение. */
+  margin-bottom: 105px;
 }
+.login-card > form { margin: 0; }
 
 /* Шапка карточки входа — единая центрированная композиция.
    Раньше логотип, заголовок и подзаголовок были прижаты влево; карточка
@@ -751,23 +760,15 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   max-width: 32ch;
 }
 
-/* Кнопка входа: значок перехода справа от текста, а не слева.
-   Стрелка работает как аффорданс «перейти дальше» и не спорит с текстом. */
+/* Кнопка входа: только текст, без значка.
+   Стрелка и щит по очереди оказывались лишними: щит дублировал смысл
+   заголовка, стрелка спорила с текстом кнопки. Пустая кнопка читается
+   спокойнее и не отвлекает от формы. */
 .login-submit {
   width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-}
-.login-submit svg {
-  transition: transform 160ms var(--ease);
-}
-.login-submit:hover:not(:disabled) svg {
-  transform: translateX(2px);
-}
-@media (prefers-reduced-motion: reduce) {
-  .login-submit:hover:not(:disabled) svg { transform: none; }
 }
 
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
