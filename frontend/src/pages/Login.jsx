@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../auth'
 import { ErrorBox } from '../components'
-import { ShieldCheck } from '../icons'
+import { ArrowRight } from '../icons'
 import { SlTextField } from '../sl-ui/react'
 import { useI18n } from '../i18n-context'
 import markUrl from '../assets/cybra-mark.png'
@@ -31,25 +31,30 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <div className="brand brand-login">
-          <img className="brand-logo-lg" src={markUrl} alt="" aria-hidden="true" />
-          <div className="brand-text-lg">
-            <img className="brand-word-img-lg" src={wordmarkUrl} alt="CYBRA" />
-            <div className="brand-sub">security benchmark</div>
+        {/* Шапка карточки по центру: логотип, заголовок и подзаголовок как
+            одна композиция. Раньше фирменный знак был прижат влево, а под
+            ним шёл текст тоже слева — карточка читалась перекошенной. */}
+        <header className="login-head">
+          <div className="brand brand-login">
+            <img className="brand-logo-lg" src={markUrl} alt="" aria-hidden="true" />
+            <div className="brand-text-lg">
+              <img className="brand-word-img-lg" src={wordmarkUrl} alt="CYBRA" />
+              <div className="brand-sub">cybersecurity benchmarks</div>
+            </div>
           </div>
-        </div>
 
-        <h1 style={{ fontSize: 20, marginBottom: 6 }}>{t("Вход в консоль")}</h1>
-        <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 22 }}>
-          {t("Прогон бенчмарков безопасности моделей и отчёты для ИБ.")}
-        </p>
+          <h1>{t('Вход в консоль')}</h1>
+          <p className="login-lead">
+            {t('Прогон бенчмарков безопасности моделей и отчёты для ИБ.')}
+          </p>
+        </header>
 
         <ErrorBox error={error} />
 
         <form onSubmit={onSubmit}>
           <div style={{ marginBottom: 16 }}>
             <SlTextField
-              label="Email"
+              label={t('Email')}
               type="email"
               value={email}
               onChange={setEmail}
@@ -58,15 +63,18 @@ export default function Login() {
           </div>
           <div style={{ marginBottom: 20 }}>
             <SlTextField
-              label={t("Пароль")}
+              label={t('Пароль')}
               type="password"
               value={password}
               onChange={setPassword}
             />
           </div>
-          <button className="btn primary" type="submit" style={{ width: '100%' }} disabled={busy}>
-            <ShieldCheck size={16} weight="bold" />
+          {/* Стрелка вместо щита: щит в кнопке входа дублировал смысл
+              заголовка и читался как «защита», а не «перейти дальше».
+              Стрелка — стандартный аффорданс перехода. */}
+          <button className="btn primary login-submit" type="submit" disabled={busy}>
             {busy ? t('Проверка…') : t('Войти')}
+            <ArrowRight size={16} weight="bold" />
           </button>
         </form>
       </div>

@@ -117,7 +117,7 @@ export default function Topbar() {
             alt="CYBRA"
             draggable="false"
           />
-          <div className="brand-sub">security benchmark</div>
+          <div className="brand-sub">cybersecurity benchmarks</div>
         </div>
       </div>
 

@@ -723,6 +723,53 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   box-shadow: 0 30px 80px -40px #000;
   animation: rise 480ms var(--ease) both;
 }
+
+/* Шапка карточки входа — единая центрированная композиция.
+   Раньше логотип, заголовок и подзаголовок были прижаты влево; карточка
+   читалась перекошенной, потому что справа оставалась пустота. */
+.login-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0;
+  margin-bottom: 24px;
+}
+.login-head .brand-login {
+  margin-bottom: 20px;
+}
+.login-head h1 {
+  font-size: 20px;
+  line-height: 1.3;
+  margin: 0 0 8px;
+}
+.login-lead {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 32ch;
+}
+
+/* Кнопка входа: значок перехода справа от текста, а не слева.
+   Стрелка работает как аффорданс «перейти дальше» и не спорит с текстом. */
+.login-submit {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.login-submit svg {
+  transition: transform 160ms var(--ease);
+}
+.login-submit:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-submit:hover:not(:disabled) svg { transform: none; }
+}
+
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 .fade-in { animation: rise 380ms var(--ease) both; }

@@ -2,6 +2,7 @@
 // Package: @phosphor-icons/react (MIT). https://github.com/phosphor-icons/homepage
 export {
   ArrowClockwise,
+  ArrowRight,
   ArrowSquareOut,
   ArrowsClockwise,
   ArrowsLeftRight,

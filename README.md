@@ -1,6 +1,6 @@
 # CYBRA
 
-**Cyber Benchmark for testing the security of your models.**
+**Cybersecurity benchmarks for testing the security of your LLM/AI models.**
 
 CYBRA runs eight independent LLM security benchmarks against any
 OpenAI-compatible model and consolidates the results into one report with an
