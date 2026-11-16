@@ -1,16 +1,18 @@
-# Происхождение данных и лицензии
+# Data provenance and licenses
 
-Все официальные файлы включены в архив; скачивание датасетов при запуске не требуется. Зависимости инструментов устанавливаются отдельно. Контрольные суммы файлов архива находятся в `CHECKSUMS.sha256`, использованных данных — также в manifest каждого запуска.
+> Russian version: [docs/ru/DATA_SOURCES.md](ru/DATA_SOURCES.md).
 
-| Набор | Файлы | Объём и использование |
+All official files are included in the archive; no dataset downloads are required at run time. Tool dependencies are installed separately. The checksums of the archive files are in `CHECKSUMS.sha256`, and those of the data used are also in the manifest of each run.
+
+| Dataset | Files | Volume and usage |
 |---|---|---|
-| Авторский корпоративный | `datasets/corporate.jsonl` | 48: direct injection 12, indirect injection 12, secret leak 8, harmful 8, benign 8; 24 RU и 24 EN |
-| Авторский multi-turn | `datasets/multiturn.jsonl` | 8 диалогов по 3 хода |
-| HarmBench test | `datasets/harmbench.csv` | 320 строк в исходном файле; используются 159 standard + 81 contextual, исключены 80 copyright |
+| Author's corporate | `datasets/corporate.jsonl` | 48: direct injection 12, indirect injection 12, secret leak 8, harmful 8, benign 8; 24 RU and 24 EN |
+| Author's multi-turn | `datasets/multiturn.jsonl` | 8 dialogues of 3 turns each |
+| HarmBench test | `datasets/harmbench.csv` | 320 lines in the source file; 159 standard + 81 contextual are used, 80 copyright ones excluded |
 | JBB Behaviors | `datasets/jbb-harmful-behaviors.csv`, `jbb-benign-behaviors.csv` | 100 harmful + 100 benign |
-| BIPIA | `datasets/bipia/email/test.jsonl`, `table/test.jsonl`, `text_attack_test.json` | 50 email, 100 table, 75 текстов атак в 15 группах |
+| BIPIA | `datasets/bipia/email/test.jsonl`, `table/test.jsonl`, `text_attack_test.json` | 50 email, 100 table, 75 attack texts in 15 groups |
 
-## Закреплённые источники
+## Pinned sources
 
 - [bipia](https://github.com/microsoft/BIPIA): `a004b69ec0dd446e0afd461d98cb5e96e120a5d0`.
 - [harmbench](https://github.com/centerforaisafety/HarmBench): `8e1604d1171fe8a48d8febecd22f600e462bdcdd`.
@@ -21,8 +23,8 @@
 - [garak](https://github.com/NVIDIA/garak): `93aa9cdec309ec4170559676f1826ea2a679920c`.
 - [promptfoo](https://github.com/promptfoo/promptfoo): `0.123.0`.
 
-Исходный HarmBench CSV: `data/behavior_datasets/harmbench_behaviors_text_test.csv` в закреплённом репозитории. BIPIA: `benchmark/<task>/test.jsonl` и `benchmark/text_attack_test.json`; оригинальные Python builders включены без изменения в `vendor/bipia/`. JBB CSV получены из набора JBB-Behaviors указанной ревизии.
+The source HarmBench CSV: `data/behavior_datasets/harmbench_behaviors_text_test.csv` in the pinned repository. BIPIA: `benchmark/<task>/test.jsonl` and `benchmark/text_attack_test.json`; the original Python builders are included unchanged in `vendor/bipia/`. The JBB CSVs are derived from the JBB-Behaviors dataset of the specified revision.
 
-`licenses/` содержит upstream license texts. Garak — Apache-2.0; перечисленные исходные репозитории остальных инструментов поставляют MIT-тексты. Лицензии зависимостей и исходных материалов внутри датасетов могут иметь отдельные условия; лицензия оркестратора их не заменяет. JBB dataset license сохранена отдельно.
+`licenses/` contains upstream license texts. Garak is Apache-2.0; the listed source repositories of the other tools ship MIT texts. The licenses of dependencies and source materials inside the datasets may have separate terms; the orchestrator's license does not replace them. The JBB dataset license is preserved separately.
 
-Авторские данные и код описаны в `NOTICE.md`. Созданные RU/EN сценарии не выдаются за встроенные датасеты Promptfoo/PyRIT: эти фреймворки имеют собственные наборы и примеры, но в данной конфигурации подключены наши фиксированные регрессионные сценарии.
+The author's data and code are described in `NOTICE.md`. The created RU/EN scenarios are not passed off as built-in Promptfoo/PyRIT datasets: these frameworks have their own suites and examples, but in this configuration our fixed regression scenarios are wired in.

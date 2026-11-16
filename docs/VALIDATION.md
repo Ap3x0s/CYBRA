@@ -1,20 +1,22 @@
-# Проверка работоспособности проекта
+# Project health verification
 
-Дата: 2026-09-15. Проверено локально: Python 3.12.14, Node.js 24.19.0, npm 11.9.0, uv 0.12.11, Linux x86_64. Установленные Python-зависимости закреплены в `locks/`; Node-зависимости — в `package-lock.json`. Исходные версии garak, PyRIT и AgentDojo установлены и импортированы, CLI Promptfoo выполнен.
+> Russian version: [docs/ru/VALIDATION.md](ru/VALIDATION.md).
 
-## Выполненные проверки
+Date: 2026-09-15. Verified locally: Python 3.12.14, Node.js 24.19.0, npm 11.9.0, uv 0.12.11, Linux x86_64. The installed Python dependencies are pinned in `locks/`; the Node dependencies — in `package-lock.json`. The source versions of garak, PyRIT and AgentDojo are installed and imported, and the Promptfoo CLI has been executed.
 
-1. Девять unittest-проверок транспорта, отчётов и оценки: авторизация локального relay, отдельные бюджеты target/judge, модельный алиас, пустые/обрезанные ответы, неправильный JSON/схема судьи, отсутствующий инструмент, несовпадение model/tool в отчёте, экранирование HTML и безопасное имя каталога. Все прошли.
-2. Все семь реальных адаптеров последовательно выполнены для списка из двух API-алиасов `safe leaky` на локальном тестовом сервере. По каждому алиасу получено семь COMPLETE-статусов и консолидированные отчёты.
-3. Дополнительный прогон стандартных трёх probes garak: 513 target-запросов и 770 решений детекторов на алиас. Оба алиаса завершены.
-4. Все 48 авторских тестов выполнены нативным Promptfoo для каждого алиаса. Сервер `leaky` возвращает секрет и marker: получены ожидаемые 32 FAIL на marker/canary-проверках и 16 PASS от тестового судьи. Экспорт JSON и JUnit прочитан автоматически.
-5. BIPIA проверен на всех 150 поставленных контекстах, с одним из официальных текстов атаки в трёх позициях: 450 target-запросов, 900 judge-запросов и 900 нормализованных security/utility-проверок на алиас. Оба алиаса завершены.
+## Checks performed
 
-**Это проверка исполнения и консолидации, а не оценка безопасности реальных моделей.** Тестовый сервер всегда возвращает заранее заданные ответы; тестовый судья всегда отвечает PASS с явной пометкой fixture. В частности, имя `safe` не является результатом аттестации, а PASS на harmful/benign/BIPIA в этих прогонах не имеет содержательной ценности. У AgentDojo модель-заглушка не выполняет реальные многошаговые задачи; goal checks могут фиксировать провал baseline, что ожидаемо.
+1. Nine unittest checks of the transport, reports and scoring: local relay authorization, separate target/judge budgets, the model alias, empty/truncated responses, invalid judge JSON/schema, a missing tool, a model/tool mismatch in the report, HTML escaping and a safe directory name. All passed.
+2. All seven real adapters were run sequentially against the list of two API aliases `safe leaky` on the local test server. For each alias, seven COMPLETE statuses and consolidated reports were obtained.
+3. An additional run of the standard three garak probes: 513 target requests and 770 detector decisions per alias. Both aliases completed.
+4. All 48 author's tests were executed by native Promptfoo for each alias. The `leaky` server returns the secret and the marker: the expected 32 FAILs on marker/canary checks and 16 PASSes from the test judge were obtained. The JSON and JUnit export was read automatically.
+5. BIPIA was checked against all 150 supplied contexts, with one of the official attack texts in three positions: 450 target requests, 900 judge requests and 900 normalized security/utility checks per alias. Both aliases completed.
 
-Реальные LiteLLM/OpenWebUI и ваши модели не проверялись: адреса и ключи не предоставлены. Не проверялись также полные пространства атак, реальные внешние инструменты OpenWebUI и все платформы установки. Закреплённые окружения созданы при разработке; чистая повторная установка из итогового ZIP не выполнялась.
+**This is a check of execution and consolidation, not an assessment of the security of real models.** The test server always returns predefined responses; the test judge always answers PASS with an explicit fixture label. In particular, the name `safe` is not an attestation result, and a PASS on harmful/benign/BIPIA in these runs has no substantive value. With AgentDojo, the stub model does not perform real multi-step tasks; goal checks may record a baseline failure, which is expected.
 
-## Повторить проверку без доступа к вашим моделям
+The real LiteLLM/OpenWebUI and your models were not verified: addresses and keys were not provided. The full attack spaces, the real OpenWebUI external tools and all installation platforms were not verified either. The pinned environments were created during development; a clean reinstall from the final ZIP was not performed.
+
+## Reproducing the verification without access to your models
 
 ```bash
 python3 run.py setup
@@ -22,9 +24,9 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 tests/integration.py
 ```
 
-Интеграционный тест поднимает локальный сервер сам и вызывает настоящие адаптеры. Он не требует ключей target/judge. По умолчанию используется малая выборка, один probe garak и два модельных алиаса. Зависимости предварительно должны быть установлены.
+The integration test brings up the local server itself and calls the real adapters. It does not require target/judge keys. By default it uses a small sample, one garak probe and two model aliases. The dependencies must be installed beforehand.
 
-Повторить дополнительный прогон:
+To repeat the additional run:
 
 ```bash
 python3 tests/integration.py \
@@ -33,4 +35,4 @@ python3 tests/integration.py \
   --out validation-final
 ```
 
-В интеграционном тесте BIPIA ограничен одной атакой, а AgentDojo — одним user task и одним injection task. Рабочие бюджеты и выборка основного `run.py` описаны в README.
+In the integration test, BIPIA is limited to one attack, and AgentDojo to one user task and one injection task. The working budgets and the sample of the main `run.py` are described in the README.

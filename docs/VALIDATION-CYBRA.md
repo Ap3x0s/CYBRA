@@ -1,76 +1,78 @@
-# Проверка CYBRA: что подтверждено, а что нет
+# CYBRA verification: what is confirmed and what is not
 
-Документ фиксирует, что реально проверено на этой машине, а что осталось
-непроверенным. Нужен, чтобы отчёт лиду не выдавал желаемое за факт.
+> Russian version: [docs/ru/VALIDATION-CYBRA.md](ru/VALIDATION-CYBRA.md).
 
-## Проверено
+This document records what has actually been verified on this machine and what has
+remained unverified. It exists so that the report to the lead does not present wishes as facts.
 
-| Что | Как | Результат |
+## Verified
+
+| What | How | Result |
 |---|---|---|
-| Backend API | `pytest tests/test_api.py` | авторизация, CSRF, версионирование датасетов, полный прогон |
-| Ядро отчётов | `pytest tests/test_core.py` | консолидация, экранирование, парные метрики |
-| Scan-слой | `pytest tests/test_scan.py` | контракт артефактов, отмена, capabilities |
-| Метрики | `pytest tests/test_metrics_new.py` | 15 тестов на `resilience_gap`, `utility_under_attack`, `agent_false_block_rate` |
-| Весь набор | `pytest tests/ -q` | **40 тестов, все проходят** |
-| Линт | `ruff check backend scan` | без замечаний |
-| Сборка SPA | `npm run build` | Vite, без ошибок |
-| Запуск приложения | uvicorn + curl | health 200, SPA отдаётся, API 401 без сессии |
-| Авторизация | curl + браузер | логин, CSRF-токен, роли |
-| Тяжёлые инструменты | `python -m cybra setup --tools …` | garak, PyRIT, AgentDojo, Promptfoo установлены в `.tools/` |
-| Реальные прогоны | UI + `run.py` | 19 прогонов в БД, включая прогон на 8 бенчмарках |
-| Метрики на реальных данных | `/metrics/series` | 11 метрик, включая три новые |
-| Отчёт | `/runs/{id}/report?fmt=md` и `pdf` | Markdown и HTML, печать без разрыва таблиц |
-| Версионирование датасетов | браузер, e2e | правка кейса → новая версия с родителем |
-| Все экраны UI | Playwright + скриншоты | 9 экранов, ошибок в консоли нет |
-| Dockerfile | статическая проверка | COPY-источники, USER, HEALTHCHECK |
-| CI | GitHub Actions | тесты и линтер на push и PR |
+| Backend API | `pytest tests/test_api.py` | authorization, CSRF, dataset versioning, a full run |
+| Reporting core | `pytest tests/test_core.py` | consolidation, escaping, paired metrics |
+| Scan layer | `pytest tests/test_scan.py` | artifact contract, cancellation, capabilities |
+| Metrics | `pytest tests/test_metrics_new.py` | 15 tests for `resilience_gap`, `utility_under_attack`, `agent_false_block_rate` |
+| The whole suite | `pytest tests/ -q` | **40 tests, all pass** |
+| Lint | `ruff check backend scan` | no findings |
+| SPA build | `npm run build` | Vite, no errors |
+| Application launch | uvicorn + curl | health 200, SPA is served, API 401 without a session |
+| Authorization | curl + browser | login, CSRF token, roles |
+| Heavy tools | `python -m cybra setup --tools …` | garak, PyRIT, AgentDojo, Promptfoo are installed in `.tools/` |
+| Real runs | UI + `run.py` | 19 runs in the DB, including a run on 8 benchmarks |
+| Metrics on real data | `/metrics/series` | 11 metrics, including the three new ones |
+| Report | `/runs/{id}/report?fmt=md` and `pdf` | Markdown and HTML, printing without breaking tables apart |
+| Dataset versioning | browser, e2e | editing a case → a new version with a parent |
+| All UI screens | Playwright + screenshots | 9 screens, no errors in the console |
+| Dockerfile | static check | COPY sources, USER, HEALTHCHECK |
+| CI | GitHub Actions | tests and linter on push and PR |
 
-## Не проверено
+## Not verified
 
-**Сборка Docker-образа.** Docker Desktop на машине разработки не поднимает
-движок: `com.docker.service` в состоянии Stopped, `docker ps` возвращает 500 по
-API. Dockerfile проверен статически и включён в CI, где сборка и smoke-тест
-выполнятся на чистом раннере.
+**Docker image build.** Docker Desktop on the development machine does not bring up
+the engine: `com.docker.service` is in the Stopped state, `docker ps` returns 500 via
+the API. The Dockerfile has been checked statically and is included in CI, where the build and the smoke test
+will run on a clean runner.
 
-**Официальные leaderboard scores.** HarmBench и JailbreakBench используют
-официальные данные, но не свои штатные классификаторы и оптимизаторы атак.
-BIPIA использует штатные builders, но не штатные evaluators. Поэтому полученные
-значения — результат нашего судьи, а не официальная метрика бенчмарка.
+**Official leaderboard scores.** HarmBench and JailbreakBench use the official data,
+but not their own stock classifiers and attack optimizers.
+BIPIA uses the stock builders, but not the stock evaluators. Therefore the values
+obtained are the result of our judge, not the official benchmark metric.
 
-**Качество судьи.** Согласованность судьи с человеческой разметкой не
-измерялась. ASR — это вердикт модели-судьи, а не измеренная истина. Все FAIL и
-случайную выборку PASS следует просматривать вручную.
+**Judge quality.** The judge's agreement with human labeling has not been
+measured. ASR is the verdict of a judge model, not measured truth. All FAILs and
+a random sample of PASSes should be reviewed manually.
 
-**exe-сборка.** PyInstaller-конфигурация не создавалась: exe — второй канал
-доставки, сначала делается docker-путь.
+**exe build.** A PyInstaller configuration has not been created: the exe is the second delivery
+channel, the docker path is made first.
 
-## Как воспроизвести проверку
+## How to reproduce the verification
 
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e backend pytest httpx ruff
 
-# весь набор
+# the whole suite
 .venv/bin/pytest tests/ -q
 .venv/bin/ruff check backend scan
 
 # UI
 cd frontend && npm install && npm run build && cd ..
 
-# сервер + демо-данные
+# server + demo data
 python -m cybra --engine mock &
 python scripts/seed_demo.py admin@cybra.local "$CYBRA_PASSWORD"
 
-# скриншоты (нужен Chrome)
+# screenshots (Chrome required)
 pip install playwright
 python scripts/shot_docs.py admin@cybra.local "$CYBRA_PASSWORD"
 ```
 
-Пароль передаётся через переменную окружения `CYBRA_PASSWORD`: в скриптах
-значения нет, в репозитории его тоже больше нет.
+The password is passed via the `CYBRA_PASSWORD` environment variable: there is no
+value in the scripts, and it is no longer in the repository either.
 
-## Ограничения методики
+## Methodology limitations
 
-Отчёт не покрывает ACL, изоляцию арендаторов, обход авторизации, RAG-индексацию,
-браузер и внешние side effects. `COMPLETE` относится к выбранному профилю, а не
-ко всем атакам инструмента. Подробнее — `docs/METHODOLOGY.md`.
+The report does not cover ACL, tenant isolation, authorization bypass, RAG indexing,
+the browser, or external side effects. `COMPLETE` refers to the selected profile, not
+to all attacks of the tool. For details — `docs/METHODOLOGY.md`.

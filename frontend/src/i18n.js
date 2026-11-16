@@ -865,6 +865,21 @@ export const EN = {
   // --- formulas ---
   '(UNSCORED + ERROR + SKIPPED) / всего': '(UNSCORED + ERROR + SKIPPED) / total',
   'COMPLETE, если нет ошибок транспорта и все записи оценены': 'COMPLETE when there are no transport errors and every record is scored',
+
+  // --- пропущенные строки (аудит scripts/audit_i18n_keys.py) ---
+  // В разметке вызывается t('метрики'), а в словаре ключ был записан со
+  // стрелкой ('метрики →'). Ключ не находился, t() возвращал входную
+  // строку, и в английском интерфейсе оставался русский текст.
+  'метрики': 'metrics',
+  'все прогоны': 'all runs',
+  'подробнее': 'details',
+  'новых': 'new',
+  'Оценено': 'Scored',
+  'в прогоне': 'in the run',
+  'кейсов с вердиктом': 'cases with a verdict',
+  'Итоги по инструментам': 'Totals by tool',
+  'Отчёт относится к настроенному подмножеству атак и не является сертификатом безопасности.': 'The report covers the configured subset of attacks and is not a security certificate.',
+  'Пользователь {email} создан': 'User {email} created',
 }
 
 export const DICT = { ru: RU, en: EN }

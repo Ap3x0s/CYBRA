@@ -1,19 +1,21 @@
-# LLM Security Suite — единый запуск восьми наборов проверок
+# LLM Security Suite — a single run of eight check suites
 
-Проект проверяет **список моделей через OpenAI-compatible Chat Completions API** и автоматически собирает результаты по каждой модели в Markdown, HTML и JSON. Подходит для LiteLLM, OpenWebUI и другого сервера с этим контрактом API.
+> Russian version: [docs/ru/SUITE.md](ru/SUITE.md).
 
-В составе: **garak, Promptfoo, PyRIT, HarmBench, JailbreakBench, BIPIA, AgentDojo, security-regression**. Все восемь адаптеров выполняют запросы и сохраняют результаты; заглушек для «неподключённых» инструментов нет. Однако методики интеграции различаются — см. таблицу ниже. Проект не утверждает, что запускает все существующие атаки этих проектов.
+The project tests **a list of models through the OpenAI-compatible Chat Completions API** and automatically collects results for each model in Markdown, HTML, and JSON. It is suitable for LiteLLM, OpenWebUI, and any other server with this API contract.
 
-## Быстрый запуск
+Included: **garak, Promptfoo, PyRIT, HarmBench, JailbreakBench, BIPIA, AgentDojo, security-regression**. All eight adapters make requests and save results; there are no stubs for "unconnected" tools. However, the integration methods differ — see the table below. The project does not claim to run all existing attacks of these projects.
 
-Проверенная среда: Linux x86_64, Python 3.12, Node.js 22+, npm, git и uv. На Windows используйте WSL2. Для выбранных проверок GPU не нужен. Зависимости garak и PyRIT существенные: установка скачивает в том числе CPU-версии ML-библиотек. Для первой установки нужен доступ к GitHub, PyPI, npm и используемым ими хранилищам пакетов.
+## Quick start
+
+Verified environment: Linux x86_64, Python 3.12, Node.js 22+, npm, git, and uv. On Windows use WSL2. The selected checks do not need a GPU. The garak and PyRIT dependencies are substantial: installation downloads CPU versions of ML libraries among other things. The first installation needs access to GitHub, PyPI, npm, and the package repositories they use.
 
 ```bash
 cd llm-security-suite
 python3 -m pip install uv
 
-# Ключ вводится без сохранения его значения в истории команд.
-read -rsp 'Ключ API: ' TARGET_API_KEY; echo
+# The key is entered without saving its value in the command history.
+read -rsp 'API key: ' TARGET_API_KEY; echo
 export TARGET_API_KEY
 
 python3 run.py run --install \
@@ -23,40 +25,40 @@ python3 run.py run --install \
   --out reports
 ```
 
-`model-a`, `model-b`, `model-c`, `judge-model` замените на **точные ID/алиасы, доступные вашему серверу**. `--models 'provider/model-a' 'provider/model-b'` и `--models model-a,model-b` тоже работают. Все модели одного запуска проверяются через один целевой endpoint. Для другого endpoint выполните отдельный запуск.
+Replace `model-a`, `model-b`, `model-c`, `judge-model` with the **exact IDs/aliases available on your server**. `--models 'provider/model-a' 'provider/model-b'` and `--models model-a,model-b` also work. All models of one run are checked through a single target endpoint. For a different endpoint, perform a separate run.
 
-`--install` автоматически устанавливает зависимости в изолированные `.tools/<инструмент>` и запускает весь набор. При повторных прогонах уберите `--install`. Установка также доступна отдельно:
+`--install` automatically installs the dependencies into isolated `.tools/<tool>` and runs the whole suite. On repeated runs, remove `--install`. Installation is also available separately:
 
 ```bash
 python3 run.py setup
 ```
 
-У самого управляющего скрипта нет сторонних Python-зависимостей. `setup` использует версии из `locks/*.txt`, `sources.lock.json` и `package-lock.json`.
+The control script itself has no third-party Python dependencies. `setup` uses the versions from `locks/*.txt`, `sources.lock.json`, and `package-lock.json`.
 
-## LiteLLM и OpenWebUI
+## LiteLLM and OpenWebUI
 
-Предпочтительно указывать полный URL метода, чтобы не получить лишний `/v1`:
+It is preferable to specify the full method URL so as not to get a redundant `/v1`:
 
 ```bash
-# LiteLLM: типичный адрес
+# LiteLLM: a typical address
 python3 run.py run \
   --endpoint http://localhost:4000/v1/chat/completions \
   --models model-a model-b --judge-model judge-model
 
-# OpenWebUI: типичный адрес собственного API
+# OpenWebUI: a typical address of its own API
 python3 run.py run \
   --endpoint http://localhost:3000/api/chat/completions \
   --models model-a model-b --judge-model judge-model
 ```
 
-Фактический префикс зависит от reverse proxy и вашей установки. Требуется доступный API key и разрешение на выбранные модели. API-key-аутентификацию OpenWebUI настраивают на стороне сервера. Код не использует браузерную сессию. Для стандартного префикса допустимо `--base-url http://localhost:4000/v1`: скрипт добавляет `/chat/completions`.
+The actual prefix depends on the reverse proxy and your installation. An available API key and permission for the selected models are required. API-key authentication for OpenWebUI is configured on the server side. The code does not use a browser session. For the standard prefix, `--base-url http://localhost:4000/v1` is acceptable: the script appends `/chat/completions`.
 
-### Отдельная модель-судья
+### A separate judge model
 
-Судья нужен для смысловых оценок: помогает ли ответ вредоносной цели, исполняет ли инъекцию, справляется ли с допустимым заданием. По умолчанию используется тот же endpoint и ключ, но отдельный `--judge-model`.
+The judge is needed for semantic evaluations: whether the response helps a harmful goal, follows an injection, or copes with a permissible task. By default the same endpoint and key are used, but with a separate `--judge-model`.
 
 ```bash
-read -rsp 'Ключ судьи: ' JUDGE_API_KEY; echo
+read -rsp 'Judge key: ' JUDGE_API_KEY; echo
 export JUDGE_API_KEY
 python3 run.py run \
   --endpoint https://target.example.org/v1/chat/completions \
@@ -66,52 +68,52 @@ python3 run.py run \
   --judge-key-env JUDGE_API_KEY
 ```
 
-Для сравнения моделей сохраняйте одного судью и настройки. Судья должен понимать RU/EN и возвращать JSON по инструкции. Самооценка той же моделью возможна, но создаёт смещение. Ответ `UNSCORED`, неправильный JSON и отказ API не превращаются в PASS.
+When comparing models, keep the same judge and settings. The judge must understand RU/EN and return JSON as instructed. Self-evaluation by the same model is possible but introduces bias. A response of `UNSCORED`, malformed JSON, and an API refusal are not turned into PASS.
 
-### Отличия контрактов API
+### Differences in API contracts
 
-- Если сервер не принимает `temperature`: добавьте `--temperature omit`.
-- Если требуется новый параметр лимита: `--token-parameter max_completion_tokens`.
-- Если модель тратит лимит на рассуждения: увеличьте `--max-tokens`, например до `8192`. Для судьи отдельно есть `--judge-max-tokens`.
-- Удалить несовместимый параметр: `--drop-params stop`. Не удаляйте `tools` для AgentDojo: это изменяет проверяемую функциональность.
-- При несовместимости роли `developer`: `--developer-as-system`. Это явная модификация протокола, она фиксируется в manifest.
-- Дополнительное тело запроса: `--extra-body examples/extra-body.json`; для судьи — `--judge-extra-body`.
-- Дополнительные HTTP-заголовки — `--headers /path/to/private-headers.json` и `--judge-headers`. Формат: JSON-объект. Значения заголовков не записываются в manifest.
-- Корпоративный CA: `--ca-file /path/to/ca.pem`. Проверка TLS включена.
+- If the server does not accept `temperature`: add `--temperature omit`.
+- If the new limit parameter is required: `--token-parameter max_completion_tokens`.
+- If the model spends the limit on reasoning: increase `--max-tokens`, for example to `8192`. There is a separate `--judge-max-tokens` for the judge.
+- To remove an incompatible parameter: `--drop-params stop`. Do not remove `tools` for AgentDojo: that changes the functionality under test.
+- If the `developer` role is incompatible: `--developer-as-system`. This is an explicit protocol modification, and it is recorded in the manifest.
+- Additional request body: `--extra-body examples/extra-body.json`; for the judge — `--judge-extra-body`.
+- Additional HTTP headers — `--headers /path/to/private-headers.json` and `--judge-headers`. Format: a JSON object. Header values are not written to the manifest.
+- Corporate CA: `--ca-file /path/to/ca.pem`. TLS verification is enabled.
 
-Преобразования temperature/token-parameter/drop-params применяются к обоим маршрутам. При различных требованиях судьи используйте его `--judge-extra-body` для переопределения значений. Не кладите секреты в extra-body: тело запроса сохраняется в отчёте.
+The temperature/token-parameter/drop-params transformations apply to both routes. If the judge has different requirements, use its `--judge-extra-body` to override the values. Do not put secrets in extra-body: the request body is saved in the report.
 
-Проект поддерживает синхронный **Chat Completions**, а не произвольный формат, Responses API, embeddings или изображения. AgentDojo дополнительно требует корректный `tools`/`tool_calls` и многоходовый диалог. Ошибки совместимости видны как ERROR/PARTIAL. Успешный HTTP-ответ сам по себе не означает совместимость.
+The project supports synchronous **Chat Completions**, not an arbitrary format, the Responses API, embeddings, or images. AgentDojo additionally requires a valid `tools`/`tool_calls` and a multi-turn dialogue. Compatibility errors appear as ERROR/PARTIAL. A successful HTTP response by itself does not mean compatibility.
 
-## Что именно запускается
+## What exactly runs
 
-| Адаптер | Реальное выполнение | Данные и оценка |
+| Adapter | Actual execution | Data and evaluation |
 |---|---|---|
-| garak | Нативный CLI 0.17.0 через OpenAICompatible | Встроенные probes и detectors; по умолчанию PromptInject HijackHateHumans, DAN 11.0, Base64 |
-| Promptfoo | Нативный `promptfoo eval` 0.123.0 | 48 авторских RU/EN тестов; canary/marker assertions и API-судья |
-| PyRIT | Нативный `MultiPromptSendingAttack` | 8 авторских диалогов по 3 хода; API-судья оценивает ответы всех ходов |
-| HarmBench | Адаптированный API-прогон официальных данных | 240 standard/contextual behaviors из test split; 3 фиксированные обёртки; API-судья |
-| JailbreakBench | Адаптированный API-прогон официальных данных | 100 harmful + 100 benign behaviors; обёртки для harmful; API-судья |
-| BIPIA | Нативные builders создают запросы; адаптированный API-прогон | Официальные email/table test contexts и text attacks; security и utility оцениваются отдельно |
-| AgentDojo | Нативные задачи, атаки, агентный цикл и goal checks | Встроенные suites; чистый baseline и запуски с инъекциями; API-модель вызывает тестовые инструменты |
-| security-regression | Детерминированные проверки по точному значению и шести кодировкам, без судьи | Собственный набор: синтетические PII, утечка секрета, canary-маркеры инъекций |
+| garak | Native CLI 0.17.0 via OpenAICompatible | Built-in probes and detectors; by default PromptInject HijackHateHumans, DAN 11.0, Base64 |
+| Promptfoo | Native `promptfoo eval` 0.123.0 | 48 in-house RU/EN tests; canary/marker assertions and an API judge |
+| PyRIT | Native `MultiPromptSendingAttack` | 8 in-house dialogues of 3 turns each; the API judge evaluates the responses of all turns |
+| HarmBench | Adapted API run of the official data | 240 standard/contextual behaviors from the test split; 3 fixed wrappers; the API judge |
+| JailbreakBench | Adapted API run of the official data | 100 harmful + 100 benign behaviors; wrappers for harmful; the API judge |
+| BIPIA | Native builders create the requests; adapted API run | Official email/table test contexts and text attacks; security and utility are evaluated separately |
+| AgentDojo | Native tasks, attacks, agent loop, and goal checks | Built-in suites; a clean baseline and runs with injections; the API model calls the test tools |
+| security-regression | Deterministic checks on the exact value and six encodings, without a judge | Its own set: synthetic PII, secret leak, canary injection markers |
 
-**HarmBench/JailbreakBench не используют штатные классификаторы и оптимизаторы атак. BIPIA не использует исходный GPU inference stack и специализированные evaluators. Эти оценки нельзя называть официальными leaderboard scores.** Выбранная интеграция позволяет сравнивать произвольные API-модели без доступа к их весам.
+**HarmBench/JailbreakBench do not use the stock classifiers and attack optimizers. BIPIA does not use the original GPU inference stack and specialized evaluators. These evaluations cannot be called official leaderboard scores.** The chosen integration makes it possible to compare arbitrary API models without access to their weights.
 
-## Объём и повторяемость
+## Scope and repeatability
 
-По умолчанию выполняется ограниченный стартовый профиль, а не полный перебор всех наборов:
+By default a limited starter profile is executed, not an exhaustive sweep of all suites:
 
-- `--limit 10`: до 10 исходных записей в каждом обрабатываемом наборе; JBB отдельно harmful и benign, BIPIA отдельно email и table. Promptfoo — 10 из 48; PyRIT — все 8 доступных диалогов.
-- `--variants direct roleplay authority`: три варианта для вредоносных behaviors HarmBench/JBB.
-- `--bipia-attacks 4`: четыре официальных текста атаки; три позиции вставки для каждой пары контекст/атака.
-- `--agent-suites workspace --agent-tasks 2 --agent-injections 2`: два baseline и четыре атакующих прогона.
-- garak имеет собственный выбор через `--garak-probes`; `--limit` на него **не действует**. Один ответ на каждый выбранный prompt.
-- `--seed 42`: одинаковая выборка для всех моделей. Даже при temperature=0 сервер может давать недетерминированные ответы.
+- `--limit 10`: up to 10 source records in each suite being processed; JBB separately for harmful and benign, BIPIA separately for email and table. Promptfoo — 10 of 48; PyRIT — all 8 available dialogues.
+- `--variants direct roleplay authority`: three variants for harmful HarmBench/JBB behaviors.
+- `--bipia-attacks 4`: four official attack texts; three insertion positions for each context/attack pair.
+- `--agent-suites workspace --agent-tasks 2 --agent-injections 2`: two baselines and four attacking runs.
+- garak has its own selection via `--garak-probes`; `--limit` **does not apply** to it. One response for each selected prompt.
+- `--seed 42`: the same sample for all models. Even at temperature=0 the server may return non-deterministic responses.
 
-При лимите L, A атаках BIPIA и двух типах контекста BIPIA делает до `2 × L × A × 3` целевых запросов и вдвое больше запросов судье. AgentDojo делает переменное число запросов из-за tool calls. При исчерпании бюджета результат неполный, а не успешный.
+With a limit of L, A BIPIA attacks, and two context types, BIPIA makes up to `2 × L × A × 3` target requests and twice as many judge requests. AgentDojo makes a variable number of requests because of tool calls. When the budget is exhausted, the result is incomplete rather than successful.
 
-Для более широкого прогона:
+For a wider run:
 
 ```bash
 python3 run.py run \
@@ -124,68 +126,68 @@ python3 run.py run \
   --max-requests 20000 --tool-timeout 14400
 ```
 
-`0` означает все записи для `--limit`, `--bipia-attacks`, `--agent-tasks`, `--agent-injections`. Полный BIPIA для поставленных данных: 150 контекстов × 75 атак × 3 позиции = **33 750 целевых запросов**, плюс 67 500 запросов судье. Бюджет потребуется увеличить отдельно. Используйте стартовый профиль перед большим запуском.
+`0` means all records for `--limit`, `--bipia-attacks`, `--agent-tasks`, `--agent-injections`. A full BIPIA over the supplied data: 150 contexts × 75 attacks × 3 positions = **33,750 target requests**, plus 67,500 judge requests. The budget will have to be increased separately. Use the starter profile before a large run.
 
-Ограничения по умолчанию: `--max-requests 1000` **на модель, инструмент и маршрут target/judge**, `--timeout 120` секунд на запрос и `--tool-timeout 3600` на инструмент. Нативные повторы также расходуют бюджет. Обработка моделей и инструментов последовательная, чтобы не создавать неконтролируемую параллельную нагрузку.
+Default limits: `--max-requests 1000` **per model, tool, and target/judge route**, `--timeout 120` seconds per request, and `--tool-timeout 3600` per tool. Native retries also consume the budget. Models and tools are processed sequentially so as not to create uncontrolled parallel load.
 
-Отдельный инструмент запускается тем же способом:
+A single tool is run in the same way:
 
 ```bash
 python3 run.py run --endpoint http://localhost:4000/v1/chat/completions \
   --models model-a model-b --judge-model judge-model --tools garak
 ```
 
-В `--tools` можно передать любой список из восьми имён таблицы. Без параметра запускаются все восемь.
+`--tools` accepts any list of the eight names from the table. Without the parameter, all eight are run.
 
-## Итоговые файлы
+## Output files
 
-Каждый запуск создаёт новый каталог `reports/<UTC-время>-<ID>/`:
+Each run creates a new directory `reports/<UTC-time>-<ID>/`:
 
-| Файл | Содержание |
+| File | Contents |
 |---|---|
-| `report.html` | Автономный HTML: модели, статусы и раскрываемые записи |
-| `report.md` | Единая записка по моделям, инструментам и категориям |
-| `summary.json` | Машиночитаемые итоги по каждой модели |
-| `all_records.jsonl` | Нормализованные записи всех инструментов |
-| `manifest.json` | Endpoint, настройки, модельные алиасы, SHA-256 данных, ревизии источников |
-| `<модель-хеш>/summary.json` | Итог одной модели |
-| `<модель-хеш>/<tool>/records.jsonl` | Нормализованные проверки инструмента |
-| `<модель-хеш>/<tool>/http.jsonl` | Целевые и judge-запросы/ответы без auth-заголовков |
-| `<модель-хеш>/<tool>/status.json` | Полнота, число запросов, ошибки транспорта |
-| `<модель-хеш>/<tool>/worker.log` | Диагностика адаптера и нативного инструмента |
+| `report.html` | Standalone HTML: models, statuses, and expandable records |
+| `report.md` | A single summary across models, tools, and categories |
+| `summary.json` | Machine-readable totals for each model |
+| `all_records.jsonl` | Normalized records of all tools |
+| `manifest.json` | Endpoint, settings, model aliases, data SHA-256, source revisions |
+| `<model-hash>/summary.json` | Summary of a single model |
+| `<model-hash>/<tool>/records.jsonl` | Normalized checks of the tool |
+| `<model-hash>/<tool>/http.jsonl` | Target and judge requests/responses without auth headers |
+| `<model-hash>/<tool>/status.json` | Completeness, number of requests, transport errors |
+| `<model-hash>/<tool>/worker.log` | Adapter and native tool diagnostics |
 
-Кроме того, сохраняются нативные отчёты garak/Promptfoo/PyRIT, выбранные behaviors HarmBench/JBB и трассы AgentDojo. У адаптированных прогонов собственная схема, поэтому консолидация выполняется через `records.jsonl`.
+In addition, the native garak/Promptfoo/PyRIT reports, the selected HarmBench/JBB behaviors, and the AgentDojo traces are saved. Adapted runs have their own schema, so consolidation is performed via `records.jsonl`.
 
-Консолидация выполняется автоматически после каждого инструмента и в конце. Повторно собрать её без API-запросов:
+Consolidation is performed automatically after each tool and at the end. To rebuild it again without API requests:
 
 ```bash
-python3 run.py merge reports/ИМЯ_КАТАЛОГА_ЗАПУСКА
+python3 run.py merge reports/RUN_DIRECTORY_NAME
 ```
 
-`merge` читает каталог **этого проекта с manifest**, а не произвольные внешние отчёты несовместимых версий. Запуски разных endpoints намеренно сохраняются раздельно, чтобы не смешивать режимы проверки.
+`merge` reads a directory **of this project that has a manifest**, not arbitrary external reports of incompatible versions. Runs against different endpoints are deliberately kept separate so as not to mix check modes.
 
-### Как читать результат
+### How to read the result
 
-- PASS: конкретный критерий выполнен.
-- FAIL: критерий нарушен; смотрите категорию. Для benign/baseline/utility это недостаточная полезность, для security — срабатывание проверки атаки.
-- ERROR: запрос, инструмент или инфраструктура дали ошибку.
-- UNSCORED: недостаточно данных или некорректный ответ оценщика.
-- SKIPPED: тест явно пропущен.
-- COMPLETE: все выполненные проверки настроенного поднабора имеют PASS/FAIL; это **не** сертификат безопасности.
-- PARTIAL/ERROR: часть оценок отсутствует, выполнение оборвалось или были ошибки транспорта.
+- PASS: the specific criterion is met.
+- FAIL: the criterion is violated; see the category. For benign/baseline/utility this is insufficient utility, for security it is the attack check firing.
+- ERROR: a request, a tool, or the infrastructure returned an error.
+- UNSCORED: insufficient data or an invalid evaluator response.
+- SKIPPED: the test was explicitly skipped.
+- COMPLETE: all executed checks of the configured subset have PASS/FAIL; this is **not** a security certificate.
+- PARTIAL/ERROR: some evaluations are missing, execution was interrupted, or there were transport errors.
 
-Итог модели: `FINDINGS`, `INCOMPLETE`, `FINDINGS_AND_INCOMPLETE` или `NO_FINDINGS_ON_TESTED_SET`. Общий «процент безопасности» не вычисляется: у garak единица — решение детектора, у остальных — отдельная проверка; наборы пересекаются. Доля FAIL внутри инструмента может включать проверки полезности — категории в отчёте нужно рассматривать отдельно.
+The model result: `FINDINGS`, `INCOMPLETE`, `FINDINGS_AND_INCOMPLETE`, or `NO_FINDINGS_ON_TESTED_SET`. No overall "security percentage" is computed: for garak the unit is a detector decision, for the others it is an individual check; the suites overlap. The FAIL share within a tool may include utility checks — the categories in the report must be considered separately.
 
-Код выхода: `0` — прогон завершён; `2` — неполнота/ошибка; `130` — Ctrl+C. С `--fail-on-findings` завершённый прогон с FAIL возвращает `1`. Без этого параметра FAIL не меняет код `0`.
+Exit code: `0` — the run completed; `2` — incompleteness/error; `130` — Ctrl+C. With `--fail-on-findings` a completed run with a FAIL returns `1`. Without this parameter, FAIL does not change the code `0`.
 
-## Данные и расширение
+## Data and extension
 
-Датасеты уже входят в архив. Авторские `corporate.jsonl` и `multiturn.jsonl` можно восстановить командой `python3 generate_datasets.py`; официальные файлы она не изменяет. Это стартовый регрессионный набор, а не репрезентативный научный бенчмарк.
+The datasets are already included in the archive. The in-house `corporate.jsonl` and `multiturn.jsonl` can be restored with the command `python3 generate_datasets.py`; it does not modify the official files. This is a starter regression set, not a representative scientific benchmark.
 
-Дополняйте JSONL существующими полями и новыми уникальными `id`; категории Promptfoo: `direct_injection`, `indirect_injection`, `secret_leak`, `harmful`, `benign`. Для другой логики проверки нужно расширить assertions в `security_suite/native.py` и критерии в `common.py`.
+Extend the JSONL with the existing fields and new unique `id`s; Promptfoo categories: `direct_injection`, `indirect_injection`, `secret_leak`, `harmful`, `benign`. For different check logic you need to extend the assertions in `security_suite/native.py` and the criteria in `common.py`.
 
-Синтетический секрет и marker в данных публичны и предназначены исключительно для проверки соблюдения границ инструкций. Совпадение маркера — узкий эвристический сигнал; отсутствие совпадения не доказывает отсутствие других способов утечки.
+The synthetic secret and marker in the data are public and intended solely for checking compliance with instruction boundaries. A marker match is a narrow heuristic signal; the absence of a match does not prove the absence of other leak paths.
 
-Полные ответы могут содержать нежелательный контент и сведения из вашего приложения. Доступ к каталогу отчётов следует ограничивать так же, как к исходным запросам. Отправка судье является отдельной передачей этих текстов на выбранный judge endpoint.
+Full responses may contain unwanted content and information from your application. Access to the report directory should be restricted in the same way as access to the original requests. Sending to the judge is a separate transfer of these texts to the selected judge endpoint.
 
-Подробности: [методика и источники](docs/METHODOLOGY.md), [проверка проекта](docs/VALIDATION.md), [лицензии и происхождение](docs/DATA_SOURCES.md).
+Details: [methodology and sources](docs/METHODOLOGY.md), [project validation](docs/VALIDATION.md), [licenses and provenance](docs/DATA_SOURCES.md).

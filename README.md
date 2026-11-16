@@ -1,52 +1,60 @@
 # CYBRA
 
-**Консоль проверки безопасности LLM.** Прогоняет восемь бенчмарков по любой
-OpenAI-совместимой модели и сводит результаты в стандартизированные метрики с
-расшифровкой — без CLI-флагов и без правки JSONL руками.
+**Cyber Benchmark for testing the security of your models.**
 
-Проект для ИБ-администратора, а не для разработчика: указал endpoint и модели,
-выбрал инструменты и датасеты, нажал «Запустить», получил отчёт.
+CYBRA runs eight independent LLM security benchmarks against any
+OpenAI-compatible model and consolidates the results into one report with an
+explanation behind every number — no CLI flags, no hand-editing JSONL.
 
-![Главная страница CYBRA](docs/media/console.png)
+Built for the security engineer who owns the model, not for the researcher who
+writes the harness: add an endpoint, pick the models, press **Run**, get a report
+you can hand to leadership.
 
-## Что внутри
+> Also available in [Russian](README.ru.md).
 
-| Слой | Что делает |
+![CYBRA dashboard](docs/media/console.png)
+
+## What's inside
+
+| Layer | Responsibility |
 |---|---|
-| `security_suite/` | Ядро оценок: 8 адаптеров, судья, relay с бюджетом запросов. Существующий проверенный код. |
-| `scan/` | Супервизор: запускает прогон, следит за прогрессом, отменяет, определяет доступные инструменты. |
-| `backend/` | FastAPI + SQLite: авторизация, CRUD, живой прогресс, версионирование датасетов, 11 метрик. |
-| `frontend/` | React SPA: тёмная консоль и светлый печатный отчёт. |
+| `security_suite/` | Evaluation core: 8 adapters, judge, relay with a request budget. Pre-existing, already-validated code. |
+| `scan/` | Supervisor: spawns a run, tracks progress, cancels, detects available tools. |
+| `scan/` surface | Exposes capabilities so the UI can show an honest "not installed" state instead of failing mid-run. |
+| `backend/` | FastAPI + SQLite: auth, CRUD, live progress, dataset versioning, 11 metrics. |
+| `frontend/` | React SPA: dark console and a light printable report. |
 
-Инструменты: **garak, Promptfoo, PyRIT, HarmBench, JailbreakBench, BIPIA,
-AgentDojo, Security Regression**.
+**Benchmarks:** garak, Promptfoo, PyRIT, HarmBench, JailbreakBench, BIPIA,
+AgentDojo, Security Regression.
 
-## Экраны
+**Metrics:** 11 — see [Metrics](#metrics) below.
+
+## Screens
 
 | | |
 |---|---|
-| ![Вход](docs/media/login.png) | ![Прогоны](docs/media/runs.png) |
-| **Вход** — тёмная карточка, фирменный знак | **Прогоны** — список с фильтрами и статусами |
-| ![Детали прогона](docs/media/run-detail.png) | ![Отчёт](docs/media/report.png) |
-| **Детали прогона** — шаги, категории, вердикты | **Отчёт** — сводка для печати и PDF |
-| ![Метрики](docs/media/metrics.png) | ![Модели](docs/media/models.png) |
-| **Метрики** — 11 показателей с расшифровкой | **Модели** — эндпоинты и модели |
-| ![Датасеты](docs/media/datasets.png) | ![Новый прогон](docs/media/new-run.png) |
-| **Датасеты** — кейсы и версии | **Новый прогон** — выбор инструментов |
+| ![Sign in](docs/media/login.png) | ![Runs](docs/media/runs.png) |
+| **Sign in** — dark card, brand mark | **Runs** — filters and verdict statuses |
+| ![Run detail](docs/media/run-detail.png) | ![Report](docs/media/report.png) |
+| **Run detail** — steps, categories, verdicts | **Report** — printable summary |
+| ![Metrics](docs/media/metrics.png) | ![Models](docs/media/models.png) |
+| **Metrics** — 11 indicators with definitions | **Models** — endpoints and models |
+| ![Datasets](docs/media/datasets.png) | ![New run](docs/media/new-run.png) |
+| **Datasets** — cases and versions | **New run** — pick benchmarks |
 
-## Быстрый старт
+## Quick start
 
-### Docker (единственный контейнер)
+### Docker (single container)
 
 ```bash
 docker build -f docker/Dockerfile -t cybra/cybra .
 docker run -p 8000:8000 -v cybra-data:/data cybra/cybra
 ```
 
-Открыть http://localhost:8000. При первом старте печатается логин и пароль
-администратора — смените его в «Настройках».
+Open http://localhost:8000. On first start the admin login and password are
+printed to the log — change them in **Settings**.
 
-### Из исходников
+### From source
 
 ```bash
 python -m venv .venv && .venv/bin/activate     # Windows: .venv\Scripts\activate
@@ -56,129 +64,145 @@ cd frontend && npm install && npm run build && cd ..
 python -m cybra --host 127.0.0.1 --port 8000
 ```
 
-Разработка UI с hot-reload: `cd frontend && npm run dev` (проксирует `/api`
-на 8000).
+UI development with hot reload: `cd frontend && npm run dev` (proxies `/api`
+to port 8000).
 
-### Режим демонстрации
+### Demo mode
 
-Без реального API и без тяжёлых инструментов:
+No real API and no heavy tooling required:
 
 ```bash
 python -m cybra --engine mock
 ```
 
-Прогон работает против встроенной фикстуры. Вердикты синтетические, интерфейс
-и отчёты помечены предупреждением.
+Runs against a built-in fixture. Verdicts are synthetic and the UI and reports
+are marked accordingly.
 
-## Тяжёлые инструменты
+## Heavy benchmarks
 
-`garak`, `PyRIT`, `AgentDojo` и `Promptfoo` не входят в образ и не упаковываются
-в exe: они тянут torch или Node-бинарь на гигабайты. CYBRA проверяет их наличие
-и показывает честный статус в интерфейсе вместо падения посреди прогона.
+`garak`, `PyRIT`, `AgentDojo` and `Promptfoo` are not bundled into the image or
+the exe: they pull torch or a Node binary measured in gigabytes. CYBRA detects
+what is present and shows an honest status in the UI instead of crashing
+mid-run.
 
 ```bash
 python -m cybra setup --tools garak pyrit agentdojo promptfoo
 ```
 
-Каждый инструмент ставится в изолированное окружение `.tools/<имя>`. Логи
-установки сохраняются, повторный запуск идемпотентен.
+Each benchmark installs into an isolated `.tools/<name>` environment. Install
+logs are kept and re-running is idempotent.
 
-## Как это работает
+## How a run works
 
-1. `POST /api/v1/runs` с профилем, моделями и инструментами.
-2. `scan/` запускает `run.py` дочерним процессом и читает файловый контракт.
-3. Прогресс публикуется в `GET /runs/{id}/progress` (опрос из UI).
-4. По завершении `summary.json` и `records.jsonl` импортируются в БД.
-5. UI показывает матрицу «модель × инструмент» и отчёт для печати.
+1. `POST /api/v1/runs` with a profile, models and tool selection.
+2. `scan/` spawns `run.py` as a child process and reads its file contract.
+3. Progress is published at `GET /runs/{id}/progress` (polled by the UI).
+4. On completion `summary.json` and `records.jsonl` are imported into the database.
+5. The UI renders the model × benchmark matrix and a printable report.
 
-Ядро оценок намеренно не переписывалось: судья и критерии PASS/FAIL уже
-проверены против реальных моделей, а их повторная реализация изменила бы смысл
-вердиктов.
+The evaluation core is deliberately not rewritten: the judge and PASS/FAIL
+criteria have already been validated against real models, and reimplementing
+them would change what the verdicts mean.
 
-## Датасеты и версии
+## Datasets and versions
 
-Два канала редактирования, как требовалось:
+Two editing paths, as required:
 
-- **через UI** — правка кейса в рабочем месте датасетов;
-- **конфигурацией** — загрузка `jsonl/json/yaml/csv`; файл можно держать в git
-  рядом с репозиторием.
+- **through the UI** — edit a case in the dataset workspace;
+- **by configuration** — upload `jsonl/json/yaml/csv`; keep the file in git next
+  to the repository.
 
-Версия неизменяема. Любая правка создаёт новую версию со ссылкой на родителя,
-поэтому старый прогон всегда воспроизводим. Есть diff версий и экспорт.
+Versions are immutable. Any edit creates a new version pointing at its parent,
+so an old run is always reproducible. Version diff and export are included.
 
-## Метрики
+## Metrics
 
-Одиннадцать метрик: `attack_success_rate`, `failed_check_rate`,
-`refusal_rate`, `benign_utility_rate`, `injection_follow_rate`, `leak_rate`,
-`unscored_rate`, `coverage`, `resilience_gap`, `utility_under_attack`,
-`agent_false_block_rate`.
+Eleven metrics, each with a formula, a meaning and an explicit caveat:
 
-| Что показывает | Метрика |
+| What it shows | Metric |
 |---|---|
-| Успех атак | `attack_success_rate` |
-| Доля провалов | `failed_check_rate` |
-| Избыточные отказы | `refusal_rate` |
-| Полезность на допустимом | `benign_utility_rate` |
-| Следование инъекциям | `injection_follow_rate` |
-| Утечки секрета | `leak_rate` |
-| Не оценено (доверие к отчёту) | `unscored_rate` |
-| Полнота | `coverage` |
-| Просадка под атакой | `resilience_gap` |
-| Полезность под инъекцией | `utility_under_attack` |
-| Блокировка законных действий агента | `agent_false_block_rate` |
+| Attack success | `attack_success_rate` |
+| Share of failed checks | `failed_check_rate` |
+| Over-refusals | `refusal_rate` |
+| Utility on benign input | `benign_utility_rate` |
+| Following injected instructions | `injection_follow_rate` |
+| Secret leakage | `leak_rate` |
+| Not scored (report confidence) | `unscored_rate` |
+| Completeness | `coverage` |
+| Safety drop under attack wrappers | `resilience_gap` |
+| Utility under injection | `utility_under_attack` |
+| Blocked legitimate agent actions | `agent_false_block_rate` |
 
-Каждое число в UI снабжено формулировкой и ограничением. Полный словарь —
-[docs/METHODOLOGY.md](docs/METHODOLOGY.md) и [docs/metrics.md](docs/metrics.md).
+The full vocabulary is in [docs/METHODOLOGY.md](docs/METHODOLOGY.md) and
+[docs/metrics.md](docs/metrics.md).
 
-Единый «процент безопасности» не вычисляется: у garak единица — решение
-детектора, у остальных — отдельный кейс, и складывать их значило бы сравнивать
-несопоставимое.
+**No single "security score" is computed.** For garak the unit is a detector
+judgement; for the others it is an individual case. Combining them into one
+number would present incomparable quantities as comparable.
 
-## Роли
+### Benchmarks vs metrics
 
-| Роль | Права |
+These are two different counts and both are correct:
+
+- **8 benchmarks** are the tools that generate test cases and verdicts
+  (`security_suite/common.py`, constant `TOOLS`);
+- **11 metrics** are the formulas computed over those verdicts
+  (`backend/cybra/metrics.py`, constant `CATALOG`).
+
+Six of the eleven are different filters over the same PASS/FAIL stream; only
+`resilience_gap`, `utility_under_attack` and `agent_false_block_rate` add
+independent signal.
+
+## Roles
+
+| Role | Permissions |
 |---|---|
-| `viewer` | смотрит прогоны и отчёты |
-| `operator` | запускает прогоны, правит эндпоинты и датасеты |
-| `admin` | управляет пользователями и удаляет эндпоинты |
+| `viewer` | reads runs and reports |
+| `operator` | starts runs, edits endpoints and datasets |
+| `admin` | manages users, deletes endpoints |
 
-Пароли — argon2, сессии в HttpOnly-cookie, CSRF-токен на изменяющих запросах,
-ключи эндпоинтов шифруются Fernet и не возвращаются через API.
+Passwords use argon2, sessions live in HttpOnly cookies, mutating requests carry
+a CSRF token, endpoint keys are Fernet-encrypted and never returned by the API.
 
-## Тесты
+## Tests
 
 ```bash
 pip install pytest httpx ruff
 pytest tests/ -q
+ruff check backend scan
 ```
 
-40 тестов: API (`test_api.py`), ядро отчётов (`test_core.py`), scan-слой
-(`test_scan.py`), метрики (`test_metrics_new.py`). `test_api.py` проходит без
-API-ключа: он использует mock-движок и проверяет авторизацию, CSRF,
-версионирование датасетов, полный прогон и метрики.
+40 tests: API (`test_api.py`), report core (`test_core.py`), scan layer
+(`test_scan.py`), metrics (`test_metrics_new.py`). `test_api.py` needs no API
+key: it uses the mock engine and covers auth, CSRF, dataset versioning, a full
+run and metrics.
 
-CI (`.github/workflows/ci.yml`) прогоняет тесты и линтер на каждый push в `main`
-и на pull request.
+CI (`.github/workflows/ci.yml`) runs tests and the linter on every push to
+`main` and on pull requests.
 
-## Документация
+## Documentation
 
-| Файл | Что внутри |
+| File | Contents |
 |---|---|
-| [docs/METHODOLOGY.md](docs/METHODOLOGY.md) | Методика целиком: свойства, инструменты, 11 метрик, вердикты, границы |
-| [docs/SUITE.md](docs/SUITE.md) | Запуск набора без консоли: CLI, профили, артефакты |
-| [docs/metrics.md](docs/metrics.md) | Словарь метрик с формулами |
-| [docs/metrics-research.md](docs/metrics-research.md) | Исследование метрик безопасности и доступности |
-| [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) | Источники данных и их лицензии |
-| [docs/VALIDATION-CYBRA.md](docs/VALIDATION-CYBRA.md) | Что проверено, а что нет |
-| [examples/README.md](examples/README.md) | Примеры конфигураций endpoint |
+| [docs/METHODOLOGY.md](docs/METHODOLOGY.md) | Full methodology: properties, benchmarks, 11 metrics, verdicts, limits |
+| [docs/SUITE.md](docs/SUITE.md) | Running the suite without the console: CLI, profiles, artifacts |
+| [docs/metrics.md](docs/metrics.md) | Metric dictionary with formulas |
+| [docs/metrics-research.md](docs/metrics-research.md) | Research behind the safety and availability metrics |
+| [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) | Data sources and their licences |
+| [docs/VALIDATION-CYBRA.md](docs/VALIDATION-CYBRA.md) | What is verified and what is not |
+| [examples/README.md](examples/README.md) | Endpoint configuration examples |
 
-## Ограничения
+Russian documentation: [docs/ru/METHODOLOGY.md](docs/ru/METHODOLOGY.md) and
+friends in the same folder.
 
-Отчёт не покрывает ACL, изоляцию арендаторов, обход авторизации, RAG-индексацию,
-браузер и внешние side effects. `COMPLETE` относится к выбранному профилю, а не
-ко всем атакам инструмента, и не является сертификатом безопасности.
+## Limitations
 
-## Лицензия
+The report does not cover ACLs, tenant isolation, authorisation bypass, real RAG
+indexing, browsing or external side effects. `COMPLETE` refers to the selected
+profile, not to every attack a benchmark offers, and is not a security
+certificate.
 
-Apache-2.0. Сторонние данные и инструменты — см. `licenses/` и
+## Licence
+
+Apache-2.0. Third-party data and tools — see `licenses/` and
 [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
