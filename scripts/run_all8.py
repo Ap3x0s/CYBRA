@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -16,9 +17,9 @@ import urllib.request
 
 BASE = 'http://127.0.0.1:8000'
 EMAIL = 'admin@cybra.local'
-PASSWORD = '__CYBRA_PASSWORD__'
+# Пароль только из окружения: в репозитории ему не место.
+PASSWORD = os.environ.get('CYBRA_PASSWORD', '')
 
-import os
 TOOLS = os.environ.get('CYBRA_TOOLS','harmbench,jailbreakbench,bipia,security-regression,promptfoo,garak,pyrit,agentdojo').split(',')
 LIMIT = int(os.environ.get('CYBRA_LIMIT','8'))
 VARIANTS = os.environ.get('CYBRA_VARIANTS','direct,roleplay,authority').split(',')

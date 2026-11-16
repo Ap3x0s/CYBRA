@@ -5,12 +5,14 @@ reported, so each one is exercised: ⌘K focuses the field, the bell and the
 avatar open popovers, and every popover item navigates somewhere real.
 """
 from __future__ import annotations
+import os
 
 from playwright.sync_api import sync_playwright
 
 BASE = 'http://127.0.0.1:8000'
 EMAIL = 'admin@cybra.local'
-PASSWORD = '__CYBRA_PASSWORD__'
+# Пароль только из окружения: в репозитории ему не место.
+PASSWORD = os.environ.get('CYBRA_PASSWORD', '')
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(channel='chrome', headless=True)

@@ -40,7 +40,7 @@ PROBE = """async () => {
 
 def main() -> int:
     email = sys.argv[1] if len(sys.argv) > 1 else 'admin@cybra.local'
-    password = sys.argv[2] if len(sys.argv) > 2 else '__CYBRA_PASSWORD__'
+    password = sys.argv[2] if len(sys.argv) > 2 else os.environ.get('CYBRA_PASSWORD', '')
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel='chrome', headless=True)

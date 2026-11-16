@@ -5,6 +5,7 @@ The field exposes its own telemetry on the container (dataset.drawn / .grid /
 dense it is, that the glyphs keep moving, and that no console errors appeared.
 """
 from __future__ import annotations
+import os
 
 import sys
 
@@ -15,7 +16,7 @@ BASE = 'http://127.0.0.1:8000'
 
 def main() -> int:
     email = sys.argv[1] if len(sys.argv) > 1 else 'admin@cybra.local'
-    password = sys.argv[2] if len(sys.argv) > 2 else '__CYBRA_PASSWORD__'
+    password = sys.argv[2] if len(sys.argv) > 2 else os.environ.get('CYBRA_PASSWORD', '')
     out = sys.argv[3] if len(sys.argv) > 3 else 'field.png'
 
     with sync_playwright() as playwright:

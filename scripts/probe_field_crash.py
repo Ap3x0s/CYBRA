@@ -33,7 +33,7 @@ def main() -> int:
         else:
             page.goto(BASE + '/login', wait_until='networkidle')
             page.fill('input[type=email]', 'admin@cybra.local')
-            page.fill('input[type=password]', '__CYBRA_PASSWORD__')
+            page.fill('input[type=password]', os.environ.get('CYBRA_PASSWORD', ''))
             page.click('button[type=submit]')
             page.wait_for_url(BASE + '/', timeout=15000)
 

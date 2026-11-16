@@ -5,6 +5,7 @@ that a screenshot review tends to miss (a graphic under text, a child escaping
 its card, a row where one card is taller than its neighbour).
 """
 from __future__ import annotations
+import os
 
 import sys
 
@@ -12,7 +13,8 @@ from playwright.sync_api import sync_playwright
 
 BASE = 'http://127.0.0.1:8000'
 EMAIL = 'admin@cybra.local'
-PASSWORD = '__CYBRA_PASSWORD__'
+# Пароль только из окружения: в репозитории ему не место.
+PASSWORD = os.environ.get('CYBRA_PASSWORD', '')
 SCREENS = ['/', '/runs', '/runs/1', '/runs/new', '/datasets', '/metrics', '/models',
            '/settings', '/runs/1/report']
 

@@ -10,6 +10,7 @@
     python scripts/watch_run.py --id 17    # ждать конкретный
 """
 from __future__ import annotations
+import os
 
 import argparse
 import json
@@ -22,7 +23,8 @@ from pathlib import Path
 
 BASE = 'http://127.0.0.1:8000'
 EMAIL = 'admin@cybra.local'
-PASSWORD = '__CYBRA_PASSWORD__'
+# Пароль только из окружения: в репозитории ему не место.
+PASSWORD = os.environ.get('CYBRA_PASSWORD', '')
 
 
 class Client:
