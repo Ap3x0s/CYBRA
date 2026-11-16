@@ -19,6 +19,14 @@ ENV CYBRA_UI_OUTDIR=/ui/dist
 RUN npm run build
 
 FROM python:3.12-slim AS runtime
+
+# OCI-метаданные образа: кто владелец, под какой лицензией распространяется.
+LABEL org.opencontainers.image.title="CYBRA" \
+      org.opencontainers.image.description="Cybersecurity benchmarks for testing the security of LLM/AI models" \
+      org.opencontainers.image.authors="Ap3x0s" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/Ap3x0s/CYBRA"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     CYBRA_DATA_DIR=/data \

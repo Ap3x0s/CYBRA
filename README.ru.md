@@ -206,5 +206,7 @@ CI (`.github/workflows/ci.yml`) прогоняет тесты и линтер н
 
 ## Лицензия
 
-Apache-2.0. Сторонние данные и инструменты — см. `licenses/` и
+Copyright 2026 Ap3x0s. Лицензия Apache-2.0.
+
+Сторонние данные и инструменты — см. `licenses/` и
 [docs/ru/DATA_SOURCES.md](docs/ru/DATA_SOURCES.md).

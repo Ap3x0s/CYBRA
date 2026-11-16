@@ -209,5 +209,7 @@ certificate.
 
 ## Licence
 
-Apache-2.0. Third-party data and tools — see `licenses/` and
+Copyright 2026 Ap3x0s. Licensed under Apache-2.0.
+
+Third-party data and tools — see `licenses/` and
 [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
