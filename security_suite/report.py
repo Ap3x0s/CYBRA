@@ -93,8 +93,9 @@ def consolidate(run_dir):
     # Standalone HTML, no untrusted executable markup or remote assets.
     # Стили inline: отчёт должен открываться и печататься без сети, поэтому
     # внешние шрифты и картинки не используются. Палитра — CYBRA, но
-    # приглушённая под бумагу: акцент #B07E22 вместо экранного #E5A93C,
-    # иначе на белом он нечитаем при печати.
+    # приглушённая под бумагу: акцент #A0560D вместо экранного #EE9238.
+    # Подобран под тот же hue 30°, но с контрастом 4.94 к бумаге: прежний
+    # #B07E22 давал 3.24 — ниже порога AA, на печати блёк.
     css = """
 @page { size: A4; margin: 16mm 14mm; }
 * { box-sizing: border-box; }
@@ -131,7 +132,7 @@ h1 { font-size: 27px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.02e
 /* Карточка-предупреждение: заметна, но не кричит. Левый акцент вместо
    рамки по кругу — так блок читается как ремарка, а не как таблица. */
 .note {
-  border-left: 3px solid #B07E22; background: #F6F1E6;
+  border-left: 3px solid #A0560D; background: #F6F1E6;
   padding: 11px 15px; margin: 12px 0; font-size: 12px; color: #4A453E;
 }
 .note.critical { border-left-color: #A8321E; background: #FAF0ED; }
@@ -200,7 +201,7 @@ td.tool { font-weight: 500; }
   text-transform: uppercase; white-space: nowrap;
 }
 .chip.complete { background: #E4F0E9; color: #1F7A4D; }
-.chip.partial  { background: #F6F1E6; color: #8A6216; }
+.chip.partial  { background: #F6F1E6; color: #8A5A0E; }
 .chip.error    { background: #FAF0ED; color: #A8321E; }
 
 /* Полоса доли провалов: значение читается глазом, а не только числом. */
@@ -214,7 +215,7 @@ td.tool { font-weight: 500; }
 }
 .bar-cell .bar-none { color: #8A8580; font-size: 11px; }
 .bar-track { flex: 1; min-width: 60px; height: 6px; background: #EDE8DF; border-radius: 3px; }
-.bar-fill { height: 6px; background: #B07E22; border-radius: 3px; }
+.bar-fill { height: 6px; background: #A0560D; border-radius: 3px; }
 .bar-fill.high { background: #A8321E; }
 .bar-fill.zero { background: #D8D2C8; }
 

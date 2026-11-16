@@ -3,7 +3,7 @@ import * as PhosphorIcons from '../icons'
 
 /**
  * Custom SVG icons adapted to the CYBRA design system:
- * Dark theme (#141416 / #1f1f22), Amber accent #E5A93C, currentColor strokes/fills.
+ * Dark theme (#141416 / #1f1f22), orange accent #EE9238, currentColor strokes/fills.
  */
 export const CustomIcons = {
   // 1. iconoven:ci-pipeline-check (Runs / CI pipelines)
@@ -562,7 +562,7 @@ export default function AppIcon({
           display: 'grid',
           placeItems: 'center',
           background: 'rgba(229, 169, 60, 0.08)',
-          color: 'var(--accent, #E5A93C)',
+          color: 'var(--accent, #EE9238)',
           flexShrink: 0,
         }}
       >

@@ -14,15 +14,16 @@ import { useI18n } from '../i18n-context'
  * на печать, иначе менеджер и инженер видят разные отчёты.
  *
  * Цвета заданы здесь, а не в переменных темы: отчёт печатается на бумаге, где
- * экранный янтарь #E5A93C нечитаем. Используются приглушённые бумажные
- * значения.
+ * экранный оранжевый #EE9238 нечитаем. Бумажный ACCENT подобран под тот же
+ * hue 30°, но с контрастом 4.82 к бумаге — прежний #B07E22 давал 3.24, ниже
+ * порога AA.
  */
 
 const INK = '#14141A'
 const MUTED = '#8A8580'
 const BODY = '#4A453E'
 const EDGE = '#E6E1D8'
-const ACCENT = '#B07E22'
+const ACCENT = '#A0560D'
 const BAD = '#A8321E'
 const GOOD = '#1F7A4D'
 
@@ -36,7 +37,7 @@ const GOOD = '#1F7A4D'
  */
 const STATUS_LABELS = {
   COMPLETE: { label: 'полно', bg: '#E4F0E9', fg: GOOD },
-  PARTIAL: { label: 'частично', bg: '#F6F1E6', fg: '#8A6216' },
+  PARTIAL: { label: 'частично', bg: '#F6F1E6', fg: '#8A5A0E' },
   ERROR: { label: 'ошибка', bg: '#FAF0ED', fg: BAD },
   CANCELLED: { label: 'отменён', bg: '#FAF0ED', fg: BAD },
 }

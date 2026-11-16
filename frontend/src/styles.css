@@ -34,12 +34,26 @@
   --shadow-box: 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 14px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.045);
 
-  --accent: #E5A93C;
-  --accent-deep: #c4862a;
-  --accent-dim: rgba(229, 169, 60, 0.12);   /* glows only, never a fill */
-  --accent-ink: #1c1305;
-  --accent-surface: #362f25;                /* that 12% already flattened */
+  /* Брендовый акцент — оранжевый, снятый с логотипа.
+     Прежний #E5A93C имел hue 38.7°; у эмблемы доминирующий оттенок
+     27-30°. #EE9238 — это hue логотипа при светлоте 57.6%: самый светлый
+     из трёх проверенных на макете вариантов, выбран заказчиком.
+     Контраст с фоном 7.42 — выше AA (4.5), -deep и -dim посчитаны под
+     новый hue. Вердиктные цвета ниже намеренно НЕ менялись: жёлтый
+     --warn должен отличаться от оранжевого акцента, иначе в светофорной
+     логике PARTIAL сливается с активным элементом интерфейса. */
+  --accent: #EE9238;
+  --accent-deep: #CF6F12;
+  --accent-dim: rgba(238, 146, 56, 0.12);   /* glows only, never a fill */
+  --accent-ink: #1a0f04;
+  --accent-surface: #382d25;                /* that 12% already flattened */
 
+  /* Вердикты — отдельное семейство, НЕ брендовый акцент.
+     Зелёный = pass, красный = fail, и они никогда не используются
+     декоративно. --warn намеренно оставлен жёлтым: в светофорной логике
+     он должен отличаться от оранжевого акцента, иначе PARTIAL и
+     «активный элемент интерфейса» станут одного цвета и смысл
+     потеряется. */
   --pass: #3ecf8e;
   --pass-dim: rgba(62, 207, 142, 0.12);
   --danger: #f2696f;
@@ -334,7 +348,7 @@ table.data tbody tr.clickable { cursor: pointer; }
 .btn.primary {
   background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600;
 }
-.btn.primary:hover:not(:disabled) { background: #efb65a; }
+.btn.primary:hover:not(:disabled) { background: #F4A456; }
 /* Второстепенная кнопка — «невидимка»: в покое рамки нет, она появляется
    при наведении. Это единый принцип с .link-chevron и со ссылками-действиями:
    тихо, пока на них не смотрят. Постоянная рамка у трёх кнопок в ряд
@@ -901,7 +915,7 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
 }
 .report-page td { padding: 9px 10px; border-bottom: 1px solid #e6e0d5; }
 .report-page .note {
-  background: #efe9dd; border-left: 3px solid #b08d4f;
+  background: #efe9dd; border-left: 3px solid #A0560D;
   padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 12.5px; color: #4a443c;
 }
 .report-page .num { font-family: var(--font-mono); text-align: right; }
@@ -940,8 +954,8 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
 }
 .btn.btn-paper:focus-visible:not(:disabled) {
   outline: none;
-  border-color: #B07E22;
-  box-shadow: 0 0 0 3px rgba(176, 126, 34, 0.18);
+  border-color: #CF6F12;
+  box-shadow: 0 0 0 3px rgba(207, 111, 18, 0.18);
 }
 .btn.btn-paper.small { min-height: 28px; padding: 0 12px; font-size: 12px; border-radius: 7px; }
 
