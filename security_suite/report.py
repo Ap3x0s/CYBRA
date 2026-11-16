@@ -66,7 +66,7 @@ def consolidate(run_dir):
             md.append('| '+' | '.join(map(esc,[t['tool'],t['status'],c['PASS'],c['FAIL'],c['ERROR'],c['UNSCORED'],c['SKIPPED'],pct]))+' |')
         md+=['','Полнота COMPLETE относится к настроенному поднабору, а не ко всем возможным атакам.','']
         for t in m['tools']:
-            md += [f"### {t['tool']}",'',f"Методика: {t['mode']}. Единица: {t['unit']}.",'',f"Артефакты: `{t['artifact_dir']}`",'']
+            md += [f"### {t['tool']}",'',f"Методика: {t['mode']}. Единица: {t['unit']}.",'',f"Артефакты: `{t['artifact_dir'].replace(chr(92), '/')}`",'']
             if t.get('error'):md+=['Ошибка: '+esc(t['error']),'']
             if t.get('transport_errors'):md+=['Ошибки транспорта: '+esc(t['transport_errors']),'']
             for category,c in t['categories'].items():
@@ -85,7 +85,11 @@ def consolidate(run_dir):
       'проверяет раскрытие точного значения и распространённых '
       'кодировок, но не заменяет DLP-классификатор.',
       '- Полные запросы, ответы и judge-данные: http.jsonl; ошибки и детали: records.jsonl и нативные отчёты.']
-    (root/'report.md').write_text('\n'.join(md)+'\n',encoding='utf-8')
+    # newline='\n' обязателен: на Windows write_text по умолчанию пишет CRLF,
+    # а часть Markdown-парсеров (Obsidian, VS Code) на нестандартных
+    # переводах строк ломает распознавание таблиц.
+    (root/'report.md').write_text(
+        '\n'.join(md) + '\n', encoding='utf-8', newline='\n')
     # Standalone HTML, no untrusted executable markup or remote assets.
     # Стили inline: отчёт должен открываться и печататься без сети, поэтому
     # внешние шрифты и картинки не используются. Палитра — CYBRA, но
