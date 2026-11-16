@@ -51,7 +51,7 @@ export default function Login() {
         <ErrorBox error={error} />
 
         <form onSubmit={onSubmit}>
-          <div style={{ marginBottom: 16 }}>
+          <div className="login-field">
             <SlTextField
               label={t('Email')}
               type="email"
@@ -60,7 +60,7 @@ export default function Login() {
               help={t('Логин администратора печатается при первом старте сервера.')}
             />
           </div>
-          <div style={{ marginBottom: 20 }}>
+          <div className="login-field login-field--last">
             <SlTextField
               label={t('Пароль')}
               type="password"

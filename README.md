@@ -1,6 +1,12 @@
+<div align="center">
+
 # CYBRA
 
 **Cybersecurity benchmarks for testing the security of your LLM/AI models.**
+
+[English](README.md) · [Русский](README.ru.md)
+
+</div>
 
 CYBRA runs eight independent LLM security benchmarks against any
 OpenAI-compatible model and consolidates the results into one report with an
@@ -10,7 +16,6 @@ Built for the security engineer who owns the model, not for the researcher who
 writes the harness: add an endpoint, pick the models, press **Run**, get a report
 you can hand to leadership.
 
-> Also available in [Russian](README.ru.md).
 
 ![CYBRA dashboard](docs/media/console.png)
 
