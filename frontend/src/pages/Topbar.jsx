@@ -117,7 +117,7 @@ export default function Topbar() {
             alt="CYBRA"
             draggable="false"
           />
-          <div className="brand-sub">security console</div>
+          <div className="brand-sub">security benchmark</div>
         </div>
       </div>
 

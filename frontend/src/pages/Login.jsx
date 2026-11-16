@@ -35,7 +35,7 @@ export default function Login() {
           <img className="brand-logo-lg" src={markUrl} alt="" aria-hidden="true" />
           <div className="brand-text-lg">
             <img className="brand-word-img-lg" src={wordmarkUrl} alt="CYBRA" />
-            <div className="brand-sub">LLM security console</div>
+            <div className="brand-sub">security benchmark</div>
           </div>
         </div>
 
