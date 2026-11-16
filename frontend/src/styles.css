@@ -152,6 +152,8 @@ button { font-family: inherit; }
 }
 
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+/* Заглушка-монограмм остаётся для мест, где фирменный знак неуместен
+   (боковое меню на узких экранах). */
 .brand-mark {
   width: 26px; height: 26px;
   display: grid; place-items: center;
@@ -164,6 +166,21 @@ button { font-family: inherit; }
 }
 .brand-name { font-weight: 600; letter-spacing: 0.14em; font-size: 13px; }
 .brand-sub { color: var(--muted-dim); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* --- фирменный знак на экране входа --------------------------------
+   Здесь лого крупнее, чем в шапке: вход — первое, что видит человек, и
+   знак должен читаться без приглядывания. Пропорции берём из самих файлов
+   (знак 471:551, надпись 858:101), ширину не фиксируем. */
+.brand-login { padding: 0; margin-bottom: 22px; gap: 12px; }
+.brand-logo-lg {
+  height: 44px; width: auto; display: block;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
+}
+.brand-text-lg { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.brand-word-img-lg {
+  height: 19px; width: auto; display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a {

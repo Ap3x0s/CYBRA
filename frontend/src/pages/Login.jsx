@@ -4,6 +4,8 @@ import { ErrorBox } from '../components'
 import { ShieldCheck } from '../icons'
 import { SlTextField } from '../sl-ui/react'
 import { useI18n } from '../i18n-context'
+import markUrl from '../assets/cybra-mark.png'
+import wordmarkUrl from '../assets/cybra-wordmark.png'
 
 export default function Login() {
   const { login } = useAuth()
@@ -29,10 +31,10 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <div className="brand" style={{ padding: 0, marginBottom: 22 }}>
-          <div className="brand-mark">CY</div>
-          <div>
-            <div className="brand-name">CYBRA</div>
+        <div className="brand brand-login">
+          <img className="brand-logo-lg" src={markUrl} alt="" aria-hidden="true" />
+          <div className="brand-text-lg">
+            <img className="brand-word-img-lg" src={wordmarkUrl} alt="CYBRA" />
             <div className="brand-sub">LLM security console</div>
           </div>
         </div>
