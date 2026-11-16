@@ -26,7 +26,7 @@ class RelayTests(unittest.TestCase):
    for _ in range(3):self.assertEqual(r.forward('target',{'messages':[]})[0],200)
    self.assertEqual(r.forward('target',{'messages':[]})[0],402)
    self.assertEqual(r.forward('judge',{'messages':[]})[0],200)
-  rows=jsonl(self.out/'http.jsonl');self.assertEqual(rows[0]['request']['model'],'safe');self.assertEqual(rows[-1]['request']['model'],'judge');self.assertNotIn('secret-target-key',(self.out/'http.jsonl').read_text())
+  rows=jsonl(self.out/'http.jsonl');self.assertEqual(rows[0]['request']['model'],'safe');self.assertEqual(rows[-1]['request']['model'],'judge');self.assertNotIn('secret-target-key',(self.out/'http.jsonl').read_text(encoding='utf-8'))
  def test_actual_url_and_local_auth(self):
   with Relay(self.cfg,'safe',self.out) as r:
    job={'target_base':r.base('target'),'model':'safe','judge_model':'judge','timeout':2}
@@ -47,7 +47,7 @@ class ReportTests(unittest.TestCase):
    row={'model':name,'tool':'garak','case_id':'1','category':'probe','unit':'detector_judgement','status':'FAIL','passed':8,'failed':2,'total':10}
    (d/'records.jsonl').write_text(json.dumps(row)+'\n');model=consolidate(p)['models'][name]
    self.assertEqual(model['conclusion'],'FINDINGS_AND_INCOMPLETE');self.assertEqual(model['tools'][0]['failed_check_rate'],.2)
-   self.assertNotIn('<script>alert(1)</script>',(p/'report.html').read_text());self.assertEqual(model['tools'][1]['status'],'ERROR')
+   self.assertNotIn('<script>alert(1)</script>',(p/'report.html').read_text(encoding='utf-8'));self.assertEqual(model['tools'][1]['status'],'ERROR')
  def test_model_mismatch_rejected(self):
   with tempfile.TemporaryDirectory() as t:
    p=Path(t);write_json(p/'manifest.json',{'run_id':'fixture','model_dirs':{'a':'a'},'tools':['pyrit']})

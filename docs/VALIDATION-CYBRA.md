@@ -7,38 +7,42 @@
 
 | Что | Как | Результат |
 |---|---|---|
-| Backend API | `pytest tests/test_api.py` | 10 тестов, включая полный прогон |
-| Scan-слой | `pytest tests/test_scan.py` | 6 тестов: контракт артефактов, отмена, capabilities |
+| Backend API | `pytest tests/test_api.py` | авторизация, CSRF, версионирование датасетов, полный прогон |
+| Ядро отчётов | `pytest tests/test_core.py` | консолидация, экранирование, парные метрики |
+| Scan-слой | `pytest tests/test_scan.py` | контракт артефактов, отмена, capabilities |
+| Метрики | `pytest tests/test_metrics_new.py` | 15 тестов на `resilience_gap`, `utility_under_attack`, `agent_false_block_rate` |
+| Весь набор | `pytest tests/ -q` | **40 тестов, все проходят** |
 | Линт | `ruff check backend scan` | без замечаний |
-| Сборка SPA | `npm run build` | 242 КБ JS, 11.6 КБ CSS |
+| Сборка SPA | `npm run build` | Vite, без ошибок |
 | Запуск приложения | uvicorn + curl | health 200, SPA отдаётся, API 401 без сессии |
 | Авторизация | curl + браузер | логин, CSRF-токен, роли |
-| Демо-прогон | `scripts/seed_demo.py` | 2 модели × 3 инструмента, 10 шагов |
-| Метрики | `/metrics/series` + браузер | 8 точек, график строится |
-| Отчёт | `/runs/1/report?fmt=md` | 3427 байт |
-| Версионирование датасетов | браузер, e2e | правка кейса → v0.0.2 с родителем v0.0.1 |
+| Тяжёлые инструменты | `python -m cybra setup --tools …` | garak, PyRIT, AgentDojo, Promptfoo установлены в `.tools/` |
+| Реальные прогоны | UI + `run.py` | 19 прогонов в БД, включая прогон на 8 бенчмарках |
+| Метрики на реальных данных | `/metrics/series` | 11 метрик, включая три новые |
+| Отчёт | `/runs/{id}/report?fmt=md` и `pdf` | Markdown и HTML, печать без разрыва таблиц |
+| Версионирование датасетов | браузер, e2e | правка кейса → новая версия с родителем |
 | Все экраны UI | Playwright + скриншоты | 9 экранов, ошибок в консоли нет |
-| Dockerfile | `scripts/check_dockerfile.py` | 11 COPY-источников, USER, HEALTHCHECK |
+| Dockerfile | статическая проверка | COPY-источники, USER, HEALTHCHECK |
+| CI | GitHub Actions | тесты и линтер на push и PR |
 
 ## Не проверено
 
-**Сборка Docker-образа.** Docker Desktop на этой машине не поднимает движок:
-`com.docker.service` в состоянии Stopped, `docker ps` возвращает 500 по API.
-Та же проблема зафиксирована в `TRANSFER.md` этого репозитория при переносе
-стенда. Dockerfile проверен статически и включён в CI, где сборка и smoke-тест
+**Сборка Docker-образа.** Docker Desktop на машине разработки не поднимает
+движок: `com.docker.service` в состоянии Stopped, `docker ps` возвращает 500 по
+API. Dockerfile проверен статически и включён в CI, где сборка и smoke-тест
 выполнятся на чистом раннере.
 
-**Реальные модели.** Все прогоны выше — в режиме `mock`, против встроенной
-фикстуры. Реальный `run.py` против настоящего endpoint не запускался: на машине
-нет ни API-ключа, ни настроенного LiteLLM/OpenWebUI. Это значит, что проверена
-интеграция (пути, параметры, разбор артефактов), но не качество оценок.
+**Официальные leaderboard scores.** HarmBench и JailbreakBench используют
+официальные данные, но не свои штатные классификаторы и оптимизаторы атак.
+BIPIA использует штатные builders, но не штатные evaluators. Поэтому полученные
+значения — результат нашего судьи, а не официальная метрика бенчмарка.
 
-**Тяжёлые инструменты.** garak, PyRIT, AgentDojo и Promptfoo не установлены
-(нет `uv` и Node-зависимостей в нужной конфигурации). Проверено только то, что
-`capabilities` корректно сообщает об их отсутствии.
+**Качество судьи.** Согласованность судьи с человеческой разметкой не
+измерялась. ASR — это вердикт модели-судьи, а не измеренная истина. Все FAIL и
+случайную выборку PASS следует просматривать вручную.
 
-**exe-сборка.** PyInstaller-конфигурация не создавалась: по решению из спеки
-exe — второй канал доставки, сначала делается docker-путь.
+**exe-сборка.** PyInstaller-конфигурация не создавалась: exe — второй канал
+доставки, сначала делается docker-путь.
 
 ## Как воспроизвести проверку
 
@@ -46,8 +50,8 @@ exe — второй канал доставки, сначала делаетс�
 python -m venv .venv
 .venv/bin/pip install -e backend pytest httpx ruff
 
-# backend + scan
-.venv/bin/pytest tests/test_api.py tests/test_scan.py -q
+# весь набор
+.venv/bin/pytest tests/ -q
 .venv/bin/ruff check backend scan
 
 # UI
@@ -55,15 +59,18 @@ cd frontend && npm install && npm run build && cd ..
 
 # сервер + демо-данные
 python -m cybra --engine mock &
-python scripts/seed_demo.py admin@cybra.local <пароль из консоли запуска>
+python scripts/seed_demo.py admin@cybra.local "$CYBRA_PASSWORD"
 
 # скриншоты (нужен Chrome)
 pip install playwright
-python scripts/screenshots.py admin@cybra.local <пароль>
+python scripts/shot_docs.py admin@cybra.local "$CYBRA_PASSWORD"
 ```
+
+Пароль передаётся через переменную окружения `CYBRA_PASSWORD`: в скриптах
+значения нет, в репозитории его тоже больше нет.
 
 ## Ограничения методики
 
 Отчёт не покрывает ACL, изоляцию арендаторов, обход авторизации, RAG-индексацию,
 браузер и внешние side effects. `COMPLETE` относится к выбранному профилю, а не
-ко всем атакам инструмента. Подробнее — `docs/metrics.md` и `docs/METHODOLOGY.md`.
+ко всем атакам инструмента. Подробнее — `docs/METHODOLOGY.md`.

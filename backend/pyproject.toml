@@ -41,7 +41,13 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 # FastAPI's dependency injection is expressed as a call in the default value;
 # B008 flags every route signature, which is the framework's normal style.
-"backend/cybra/api.py" = ["B008"]
-"backend/cybra/security.py" = ["B008"]
-"scan/__init__.py" = ["E402"]
+#
+# Пути считаются от КАТАЛОГА ЭТОГО ФАЙЛА (backend/), а не от корня репозитория.
+# С префиксом "backend/" правило не срабатывало: ruff склеивал путь в
+# backend/backend/cybra/api.py, файл не совпадал, и 83 замечания B008 сыпались
+# на каждый маршрут, хотя комментарий обещал обратное.
+"cybra/api.py" = ["B008"]
+"cybra/security.py" = ["B008"]
+# scan/ лежит вне этого конфига, поэтому его исключения живут в корневом
+# ruff.toml — там же, откуда ruff его и читает.
 

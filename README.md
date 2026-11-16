@@ -1,13 +1,13 @@
 # CYBRA
 
-**Консоль проверки безопасности LLM.** Прогоняет современные бенчмарки по любой
+**Консоль проверки безопасности LLM.** Прогоняет восемь бенчмарков по любой
 OpenAI-совместимой модели и сводит результаты в стандартизированные метрики с
 расшифровкой — без CLI-флагов и без правки JSONL руками.
 
 Проект для ИБ-администратора, а не для разработчика: указал endpoint и модели,
 выбрал инструменты и датасеты, нажал «Запустить», получил отчёт.
 
-![CYBRA](docs/media/console.png)
+![Главная страница CYBRA](docs/media/console.png)
 
 ## Что внутри
 
@@ -15,11 +15,24 @@ OpenAI-совместимой модели и сводит результаты 
 |---|---|
 | `security_suite/` | Ядро оценок: 8 адаптеров, судья, relay с бюджетом запросов. Существующий проверенный код. |
 | `scan/` | Супервизор: запускает прогон, следит за прогрессом, отменяет, определяет доступные инструменты. |
-| `backend/` | FastAPI + SQLite: авторизация, CRUD, живой прогресс, версионирование датасетов, метрики. |
+| `backend/` | FastAPI + SQLite: авторизация, CRUD, живой прогресс, версионирование датасетов, 11 метрик. |
 | `frontend/` | React SPA: тёмная консоль и светлый печатный отчёт. |
 
 Инструменты: **garak, Promptfoo, PyRIT, HarmBench, JailbreakBench, BIPIA,
 AgentDojo, Security Regression**.
+
+## Экраны
+
+| | |
+|---|---|
+| ![Вход](docs/media/login.png) | ![Прогоны](docs/media/runs.png) |
+| **Вход** — тёмная карточка, фирменный знак | **Прогоны** — список с фильтрами и статусами |
+| ![Детали прогона](docs/media/run-detail.png) | ![Отчёт](docs/media/report.png) |
+| **Детали прогона** — шаги, категории, вердикты | **Отчёт** — сводка для печати и PDF |
+| ![Метрики](docs/media/metrics.png) | ![Модели](docs/media/models.png) |
+| **Метрики** — 11 показателей с расшифровкой | **Модели** — эндпоинты и модели |
+| ![Датасеты](docs/media/datasets.png) | ![Новый прогон](docs/media/new-run.png) |
+| **Датасеты** — кейсы и версии | **Новый прогон** — выбор инструментов |
 
 ## Быстрый старт
 
@@ -64,8 +77,11 @@ python -m cybra --engine mock
 и показывает честный статус в интерфейсе вместо падения посреди прогона.
 
 ```bash
-python -m cybra setup --tools garak pyrit
+python -m cybra setup --tools garak pyrit agentdojo promptfoo
 ```
+
+Каждый инструмент ставится в изолированное окружение `.tools/<имя>`. Логи
+установки сохраняются, повторный запуск идемпотентен.
 
 ## Как это работает
 
@@ -92,13 +108,31 @@ python -m cybra setup --tools garak pyrit
 
 ## Метрики
 
-Словарь в [docs/metrics.md](docs/metrics.md): `attack_success_rate`,
-`failed_check_rate`, `refusal_rate`, `benign_utility_rate`,
-`injection_follow_rate`, `leak_rate`, `unscored_rate`, `coverage`.
+Одиннадцать метрик: `attack_success_rate`, `failed_check_rate`,
+`refusal_rate`, `benign_utility_rate`, `injection_follow_rate`, `leak_rate`,
+`unscored_rate`, `coverage`, `resilience_gap`, `utility_under_attack`,
+`agent_false_block_rate`.
 
-Каждое число в UI снабжено формулировкой и ограничением. Единый «процент
-безопасности» не вычисляется: у garak единица — решение детектора, у остальных —
-отдельный кейс, и складывать их значило бы сравнивать несопоставимое.
+| Что показывает | Метрика |
+|---|---|
+| Успех атак | `attack_success_rate` |
+| Доля провалов | `failed_check_rate` |
+| Избыточные отказы | `refusal_rate` |
+| Полезность на допустимом | `benign_utility_rate` |
+| Следование инъекциям | `injection_follow_rate` |
+| Утечки секрета | `leak_rate` |
+| Не оценено (доверие к отчёту) | `unscored_rate` |
+| Полнота | `coverage` |
+| Просадка под атакой | `resilience_gap` |
+| Полезность под инъекцией | `utility_under_attack` |
+| Блокировка законных действий агента | `agent_false_block_rate` |
+
+Каждое число в UI снабжено формулировкой и ограничением. Полный словарь —
+[docs/METHODOLOGY.md](docs/METHODOLOGY.md) и [docs/metrics.md](docs/metrics.md).
+
+Единый «процент безопасности» не вычисляется: у garak единица — решение
+детектора, у остальных — отдельный кейс, и складывать их значило бы сравнивать
+несопоставимое.
 
 ## Роли
 
@@ -114,13 +148,29 @@ python -m cybra setup --tools garak pyrit
 ## Тесты
 
 ```bash
-pip install pytest httpx
-pytest tests/test_api.py -q
-pytest tests/test_core.py -q
+pip install pytest httpx ruff
+pytest tests/ -q
 ```
 
-`test_api.py` проходит без API-ключа: он использует mock-движок и проверяет
-авторизацию, CSRF, версионирование датасетов, полный прогон и метрики.
+40 тестов: API (`test_api.py`), ядро отчётов (`test_core.py`), scan-слой
+(`test_scan.py`), метрики (`test_metrics_new.py`). `test_api.py` проходит без
+API-ключа: он использует mock-движок и проверяет авторизацию, CSRF,
+версионирование датасетов, полный прогон и метрики.
+
+CI (`.github/workflows/ci.yml`) прогоняет тесты и линтер на каждый push в `main`
+и на pull request.
+
+## Документация
+
+| Файл | Что внутри |
+|---|---|
+| [docs/METHODOLOGY.md](docs/METHODOLOGY.md) | Методика целиком: свойства, инструменты, 11 метрик, вердикты, границы |
+| [docs/SUITE.md](docs/SUITE.md) | Запуск набора без консоли: CLI, профили, артефакты |
+| [docs/metrics.md](docs/metrics.md) | Словарь метрик с формулами |
+| [docs/metrics-research.md](docs/metrics-research.md) | Исследование метрик безопасности и доступности |
+| [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) | Источники данных и их лицензии |
+| [docs/VALIDATION-CYBRA.md](docs/VALIDATION-CYBRA.md) | Что проверено, а что нет |
+| [examples/README.md](examples/README.md) | Примеры конфигураций endpoint |
 
 ## Ограничения
 

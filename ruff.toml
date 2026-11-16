@@ -1,0 +1,29 @@
+# Конфигурация линтера для проверки из КОРНЯ репозитория.
+#
+# Зачем отдельный файл: ruff берёт настройки из ближайшего pyproject.toml
+# вверх по дереву, а он лежит в backend/. При запуске `ruff check backend scan`
+# из корня правила per-file-ignores из backend/pyproject.toml разрешались
+# относительно backend/, путь склеивался в backend/backend/cybra/api.py и не
+# совпадал ни с одним файлом — 83 замечания B008 на каждый маршрут FastAPI.
+#
+# Здесь пути записаны от корня, откуда линтер и запускается (см. CI и
+# README). Значения select/ignore повторяют backend/pyproject.toml, чтобы
+# результат не зависел от того, из какого каталога запущена проверка.
+
+line-length = 100
+target-version = "py310"
+
+[lint]
+# E/F: pycodestyle и pyflakes. I: порядок импортов. B: bugbear.
+# UP намеренно выключен: проект поддерживает Python 3.10, а quoted forward
+# references в определениях Protocol сделаны осознанно.
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# FastAPI выражает внедрение зависимостей вызовом в значении по умолчанию —
+# для маршрутов это штатный стиль, а не ошибка.
+"backend/cybra/api.py" = ["B008"]
+"backend/cybra/security.py" = ["B008"]
+# scan/__init__.py намеренно импортирует после настройки sys.path.
+"scan/__init__.py" = ["E402"]
