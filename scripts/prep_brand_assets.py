@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 BRAND = ROOT / 'docs' / 'brand'
 OUT = ROOT / 'frontend' / 'src' / 'assets'
 
-MARK_SRC = BRAND / 'Металлическая эмблема без фона.png'
-WORD_SRC = BRAND / 'Металлическая надпись CYBRA без фона.png'
+MARK_SRC = BRAND / 'emblem-trimmed.png'
+WORD_SRC = BRAND / 'wordmark.png'
 
 
 def trim(im: Image.Image) -> Image.Image:

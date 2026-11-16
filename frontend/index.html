@@ -4,7 +4,27 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CYBRA — LLM security console</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111418'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='14' font-weight='700' fill='%236ee7b7' text-anchor='middle'%3ECY%3C/text%3E%3C/svg%3E" />
+
+    <!-- Иконки вкладки и закладок.
+         Порядок не случаен: .ico первым — его понимают все браузеры,
+         включая старые и встроенные (Safari, Electron-оболочки). PNG идут
+         следом с явным sizes, современные браузеры предпочтут их.
+         type указываем обязательно: без него часть браузеров игнорирует
+         запись и откатывается на /favicon.ico. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+
+    <!-- iOS «Добавить на главный экран». Без прозрачности: iOS заливает
+         альфу чёрным и получается двойная рамка. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Цвет адресной строки на мобильных и цвет темы для тёмной схемы.
+         Совпадает с фоном шапки, чтобы строка не выбивалась. -->
+    <meta name="theme-color" content="#18181c" />
+    <meta name="color-scheme" content="dark" />
+
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
     <div id="root"></div>
