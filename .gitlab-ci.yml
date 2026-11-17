@@ -1,0 +1,154 @@
+# CI/CD для CYBRA.
+#
+# Зачем второй пайплайн, если уже есть GitHub Actions: GitLab — площадка
+# корпоративного стенда, и здесь же живёт registry, из которого разворачивается
+# образ. GitHub остаётся публичным зеркалом для open-source части.
+#
+# Стадии: lint → test → build → publish → verify. Всё, что требует тяжёлых
+# инструментов (garak, PyRIT, Agentfoo), в CI НЕ ставится — они тянут
+# гигабайты и проверяются отдельно по VALIDATION-CYBRA.
+#
+# Про dind: на стенде раннер запущен с privileged = false, поэтому
+# docker:dind здесь не поднимется. Зато в job смонтирован /var/run/docker.sock
+# (см. config.toml раннера), а значит клиент docker говорит с демоном хоста —
+# сборка идёт на нём же, и слои кеша живут между job'ами без пересборки.
+
+stages:
+  - lint
+  - test
+  - build
+  - publish
+  - verify
+
+variables:
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+  # Registry локального стенда слушает 5050, сам GitLab — 8929. Из job-контейнера
+  # оба доступны по имени хоста.
+  GITLAB_HOST: host.docker.internal
+  PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
+  NPM_CONFIG_CACHE: $CI_PROJECT_DIR/.cache/npm
+
+default:
+  retry: 0
+  interruptible: true
+
+# --- lint --------------------------------------------------------------
+# Дёшево и первым: ошибка в импорте не должна ждать сборки образа.
+
+lint:backend:
+  stage: lint
+  image: python:3.12-slim
+  cache:
+    key: pip-lint
+    paths: [.cache/pip]
+  before_script:
+    - pip install --disable-pip-version-check --no-cache-dir ruff
+  script:
+    # Конфиг в ruff.toml в корне, поэтому пути пишем от корня.
+    # ruff format не проверяем: в проекте он не подключён и переформатировал бы
+    # 18 файлов, то есть это не действующее правило, а вкусовщина.
+    - ruff check backend scan
+
+lint:frontend:
+  stage: lint
+  image: node:22-alpine
+  cache:
+    key: npm-lint
+    paths: [.cache/npm]
+  script:
+    # Сборка — единственная проверка, которая ловит и синтаксис, и битые
+    # импорты. Отдельного линтера в проект не подключено.
+    - cd frontend
+    - npm ci --no-audit --no-fund
+    - npm run build
+
+# --- test --------------------------------------------------------------
+
+test:backend:
+  stage: test
+  image: python:3.12-slim
+  cache:
+    key: pip-test
+    paths: [.cache/pip]
+  variables:
+    # Тесты пишут БД и прогоны в var/. В контейнере это единственный
+    # writable путь кроме /tmp, поэтому уводим данные внутрь проекта.
+    CYBRA_DATA_DIR: $CI_PROJECT_DIR/.ci-data
+  script:
+    - pip install --disable-pip-version-check --no-cache-dir -e backend
+    - pip install --disable-pip-version-check --no-cache-dir pytest httpx
+    - mkdir -p "$CYBRA_DATA_DIR"
+    - pytest tests/ -q
+
+# --- build -------------------------------------------------------------
+# Сборка на демоне хоста через docker.sock. Тегов два из одной сборки:
+# SHA — то, что проверяем сейчас, latest — то, что разворачивают.
+
+build:image:
+  stage: build
+  image: docker:29
+  variables:
+    DOCKER_BUILDKIT: "1"
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - |
+      docker build \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --cache-from "$IMAGE_NAME:latest" \
+        -f docker/Dockerfile \
+        -t "$IMAGE_NAME:$CI_COMMIT_SHA" \
+        -t "$IMAGE_NAME:latest" .
+  after_script:
+    # Диагностика: если сборка упала, видно, что реально получилось.
+    - docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -F "$IMAGE_NAME" || true
+
+# --- publish -----------------------------------------------------------
+# Только main: ветки не должны перезаписывать latest, из которого
+# разворачиваются. Пересборки нет — образ уже лежит на демоне хоста.
+
+publish:registry:
+  stage: publish
+  image: docker:29
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker push "$IMAGE_NAME:$CI_COMMIT_SHA"
+    - docker push "$IMAGE_NAME:latest"
+
+# --- verify ------------------------------------------------------------
+# Образ должен не просто существовать, а подниматься и отвечать. Это
+# единственная проверка, которая ловит «собралось, но не работает».
+
+verify:smoke:
+  stage: verify
+  image: docker:29
+  variables:
+    CYBRA_TEST_SECRET: "ci-smoke-secret-key-not-for-production-use-32b"
+    # 8000 занят локальным дев-сервером на хосте, поэтому публикуем в 18080.
+    SMOKE_PORT: "18080"
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    # Верифицируем ровно тот образ, что уехал в registry, а не локальную сборку.
+    - docker pull "$IMAGE_NAME:$CI_COMMIT_SHA"
+  script:
+    - |
+      docker run -d --name cybra-ci \
+        -e CYBRA_SECRET_KEY="$CYBRA_TEST_SECRET" \
+        -p "$SMOKE_PORT:8000" "$IMAGE_NAME:$CI_COMMIT_SHA"
+    # В образе docker:29 нет curl, поэтому wget.
+    - |
+      for i in $(seq 1 40); do
+        if wget -q -O- --timeout=3 "http://$GITLAB_HOST:$SMOKE_PORT/api/v1/health"; then
+          echo "health ok after ${i} attempts"
+          exit 0
+        fi
+        sleep 2
+      done
+      echo "health check failed"
+      docker logs cybra-ci
+      exit 1
+  after_script:
+    - docker rm -f cybra-ci || true
