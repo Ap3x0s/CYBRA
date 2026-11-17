@@ -14,6 +14,7 @@
 | [DATA_SOURCES.md](DATA_SOURCES.md) | Источники данных и их лицензии |
 | [VALIDATION-CYBRA.md](VALIDATION-CYBRA.md) | Что проверено, а что нет |
 | [VALIDATION.md](VALIDATION.md) | Валидация на реальных моделях |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Доставка и развёртывание: CI/CD, образ, окружение, состояние |
 
 Русский README проекта: [README.ru.md](../../README.ru.md).
 

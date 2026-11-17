@@ -58,6 +58,19 @@ docker run -p 8000:8000 -v cybra-data:/data cybra/cybra
 Открыть http://localhost:8000. При первом старте логин и пароль администратора
 печатаются в журнал — смените их в «Настройках».
 
+Образ двухступенчатый: Node собирает SPA, затем она копируется в Python-стадию
+и раздаётся тем же процессом. Один образ, один порт — нет CORS, нет второго
+контейнера, нет reverse proxy. Зависимости ставятся из `pyproject.toml` *до*
+копирования исходников, поэтому правка `backend/cybra/*.py` не вызывает
+повторное скачивание fastapi/uvicorn. Пакет не ставится через `-e`:
+`PYTHONPATH=/app/backend` указывает туда же, куда указывала editable-установка,
+а `config.root` (`parents[2]` от `cybra/config.py`, то есть `/app`) продолжает
+находить `datasets/` и `var/`.
+
+```bash
+docker compose -f docker/compose.prod.yaml up -d   # нужен CYBRA_SECRET_KEY в .env
+```
+
 ### Из исходников
 
 ```bash
@@ -180,8 +193,34 @@ ruff check backend scan
 API-ключа: он использует mock-движок и проверяет авторизацию, CSRF,
 версионирование датасетов, полный прогон и метрики.
 
-CI (`.github/workflows/ci.yml`) прогоняет тесты и линтер на каждый push в `main`
-и на pull request.
+CI прогоняет тесты и линтер на каждый push в `main` и на pull request:
+
+| Конфиг | Где | Что делает |
+|---|---|---|
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | GitHub Actions | линт, тесты, сборка образа + smoke |
+| [`.gitlab-ci.yml`](.gitlab-ci.yml) | GitLab CI | линт, тесты, сборка образа, **публикация в registry**, smoke |
+
+GitHub-пайплайн — публичное зеркало: он подтверждает, что код цел, но образ
+выбрасывает. GitLab — путь доставки: он публикует
+`<registry>/<namespace>/cybra:<commit-sha>` и `:latest`, а стадия `verify`
+стягивает уже запушенный образ обратно и ждёт `/api/v1/health`. Образ
+считается доставленным, только если он реально стартует.
+
+Развернуть этот артефакт на любой машине:
+
+```bash
+docker login registry.example.com
+docker pull registry.example.com/<namespace>/cybra:latest
+docker run -p 8000:8000 -v cybra-data:/data \
+  -e CYBRA_SECRET_KEY="<сгенерируйте: 32 случайных байта в urlsafe base64>" \
+  registry.example.com/<namespace>/cybra:latest
+```
+
+Ключ генерируется так:
+
+```bash
+python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+```
 
 ## Документация
 
@@ -193,6 +232,7 @@ CI (`.github/workflows/ci.yml`) прогоняет тесты и линтер н
 | [docs/ru/metrics-research.md](docs/ru/metrics-research.md) | Исследование метрик безопасности и доступности |
 | [docs/ru/DATA_SOURCES.md](docs/ru/DATA_SOURCES.md) | Источники данных и их лицензии |
 | [docs/ru/VALIDATION-CYBRA.md](docs/ru/VALIDATION-CYBRA.md) | Что проверено, а что нет |
+| [docs/ru/DEPLOYMENT.md](docs/ru/DEPLOYMENT.md) | Доставка и развёртывание: CI/CD, образ, окружение, состояние |
 | [examples/README.md](examples/README.md) | Примеры конфигураций endpoint |
 
 Английская документация: [docs/METHODOLOGY.md](docs/METHODOLOGY.md) и остальные
