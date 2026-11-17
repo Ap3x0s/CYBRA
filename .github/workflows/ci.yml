@@ -19,9 +19,14 @@ jobs:
           pip install -e backend
           pip install pytest httpx ruff
       - name: Lint
-        run: ruff check backend scan --config backend/pyproject.toml
+        # Without --config: ruff finds ruff.toml in the repo root, where the
+        # per-file-ignores are written relative to the root. Pointing it at
+        # backend/pyproject.toml made ruff resolve "cybra/api.py" from backend/
+        # into backend/backend/cybra/api.py, so 83 B008 findings fired on every
+        # FastAPI route despite the ignore being declared.
+        run: ruff check backend scan
       - name: Tests
-        run: pytest tests/test_api.py tests/test_scan.py -q
+        run: pytest tests/ -q
 
   frontend:
     runs-on: ubuntu-latest
