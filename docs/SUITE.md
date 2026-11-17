@@ -190,4 +190,4 @@ The synthetic secret and marker in the data are public and intended solely for c
 
 Full responses may contain unwanted content and information from your application. Access to the report directory should be restricted in the same way as access to the original requests. Sending to the judge is a separate transfer of these texts to the selected judge endpoint.
 
-Details: [methodology and sources](docs/METHODOLOGY.md), [project validation](docs/VALIDATION.md), [licenses and provenance](docs/DATA_SOURCES.md).
+Details: [methodology and sources](METHODOLOGY.md), [project validation](VALIDATION.md), [licenses and provenance](DATA_SOURCES.md).
