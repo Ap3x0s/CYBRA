@@ -40,9 +40,29 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 
+# Зависимости ставим ДО копирования исходников, и только по pyproject.toml.
+# Иначе любая правка в cybra/*.py меняет слой COPY и заставляет pip заново
+# тянуть fastapi/uvicorn из сети — на пустом кеше это минуты, а зависимостей
+# ровно семь строк, которые меняются куда реже кода.
 COPY backend/pyproject.toml /app/backend/pyproject.toml
+RUN python -c "import tomllib, pathlib; print('\n'.join(tomllib.loads(pathlib.Path('/app/backend/pyproject.toml').read_text())['project']['dependencies']))" > /tmp/requirements.txt \
+ && pip install --no-cache-dir -r /tmp/requirements.txt \
+ && rm /tmp/requirements.txt
+
 COPY backend/cybra /app/backend/cybra
-RUN pip install --no-cache-dir -e /app/backend
+# Без editable-установки: пакет уже лежит по своему боевому пути, а
+# `pip install -e` лишь прописывал этот путь в sys.path. PYTHONPATH делает то
+# же самое без сборки .pth-файлов и без пересборки слоя при каждой правке.
+# Путь важен ещё и потому, что config.root = parents[2] от cybra/config.py,
+# то есть /app: оттуда берутся datasets/ и var/. Переезд пакета в
+# site-packages сломал бы оба каталога.
+ENV PYTHONPATH=/app/backend
+
+# Консольную команду `cybra` ставит entry point из pyproject.toml, а он
+# устанавливается только вместе с пакетом. Раз пакет не ставим — даём обёртку:
+# подсказки в UI («run: cybra setup --tools garak») остаются верными.
+RUN printf '#!/bin/sh\nexec python -m cybra "$@"\n' > /usr/local/bin/cybra \
+ && chmod +x /usr/local/bin/cybra
 
 COPY scan /app/scan
 COPY security_suite /app/security_suite
