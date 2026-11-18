@@ -288,6 +288,14 @@ build:image:
       else
         echo "Docker Hub credentials absent: skipped."
       fi
+    # Аудит содержимого образа: секреты, личные данные и мусор.
+    # Питон берём из проверяемого образа — в docker:29 его нет, и первый
+    # вариант этой проверки падал с «python: not found» (exit 127).
+    - echo "--- содержимое образа ---"
+    - |
+      docker run --rm -v "$CI_PROJECT_DIR/scripts:/audit:ro" \
+        --entrypoint python "$IMAGE_NAME:$IMAGE_TAG" /audit/audit_image.py \
+          --self "$IMAGE_NAME:$IMAGE_TAG" || true
   after_script:
     - docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' || true
   artifacts:
@@ -369,10 +377,6 @@ security:image:
     - mkdir -p "$SECURITY_REPORTS"
     - trivy image --severity HIGH,CRITICAL --format sarif --output "$SECURITY_REPORTS/trivy.sarif" "$IMAGE_NAME:$IMAGE_TAG" || true
     - trivy image --severity HIGH,CRITICAL --format table "$IMAGE_NAME:$IMAGE_TAG" | head -40 || true
-    # Проверяем, что в образ не уехали секреты, личные данные и мусор
-    # из репозитория: node_modules, __pycache__, .git.
-    - echo "--- содержимое образа ---"
-    - python scripts/audit_image.py "$IMAGE_NAME:$IMAGE_TAG"
   artifacts:
     when: always
     paths: ["$SECURITY_REPORTS/trivy.sarif"]
