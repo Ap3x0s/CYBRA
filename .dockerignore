@@ -21,3 +21,22 @@ jira
 *.pem
 *.key
 security-reports
+
+# Вложенные каталоги: паттерн без слэша матчится только от корня
+# контекста, поэтому frontend/node_modules под `node_modules` не подпадал.
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+
+# Любой .env*, а не только голый .env: frontend/.env.development
+# проходил мимо и уезжал в образ.
+**/.env
+**/.env.*
+frontend/.env*
+
+# Локальное состояние, которое не должно уезжать в образ.
+cookies.txt
+**/secret.key
+**/*.pem
+**/*.key
+*.bundle

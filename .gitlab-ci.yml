@@ -242,6 +242,9 @@ security:iac:
     # PowerShell раскрывает $ИМЯ как свою переменную, и такие
     # строки молча теряют путь (уже ловили в security:sca).
     - python scripts/check_lost_vars.py
+    # Аудит САМОГО образа: правило в .dockerignore может быть верным, а файл
+    # всё равно уехать через COPY каталога или стадию.
+    - python scripts/check_build_context.py
     - echo "--- .dockerignore не даёт утащить секреты в образ ---"
     - sh scripts/check_dockerignore.sh
 
@@ -366,6 +369,10 @@ security:image:
     - mkdir -p "$SECURITY_REPORTS"
     - trivy image --severity HIGH,CRITICAL --format sarif --output "$SECURITY_REPORTS/trivy.sarif" "$IMAGE_NAME:$IMAGE_TAG" || true
     - trivy image --severity HIGH,CRITICAL --format table "$IMAGE_NAME:$IMAGE_TAG" | head -40 || true
+    # Проверяем, что в образ не уехали секреты, личные данные и мусор
+    # из репозитория: node_modules, __pycache__, .git.
+    - echo "--- содержимое образа ---"
+    - python scripts/audit_image.py "$IMAGE_NAME:$IMAGE_TAG"
   artifacts:
     when: always
     paths: ["$SECURITY_REPORTS/trivy.sarif"]
