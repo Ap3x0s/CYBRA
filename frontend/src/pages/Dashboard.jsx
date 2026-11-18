@@ -82,7 +82,7 @@ export default function Dashboard() {
       iconName: 'ci-pipeline-check',
     },
     {
-      label: 'Проверок', value: stats.checks, hint: t('{fails} с провалом', { fails: stats.fails }),
+      label: t('Проверок'), value: stats.checks, hint: t('{fails} с провалом', { fails: stats.fails }),
       iconName: 'exam-check',
       delta: stats.checks ? pct(stats.fails / stats.checks) : null,
       deltaLabel: t('провалов'),

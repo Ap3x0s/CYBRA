@@ -1,5 +1,26 @@
 // Thin API client. Keeping fetch calls here means the UI never builds a URL.
+
 let csrf = ''
+
+/**
+ * Перевод строки, пришедшей с бэкенда.
+ *
+ * Импортировать DICT из i18n.js здесь НЕЛЬЗЯ: api.js грузится раньше, чем
+ * i18n.js успевает выполнить `export const I18nContext = createContext(…)`,
+ * и приложение падало с «createContext is not defined» — то есть ломался не
+ * текст ошибки, а весь вход в систему. Словарь получаем лениво, уже во время
+ * вызова, когда модуль точно инициализирован.
+ */
+function tr(text) {
+  if (typeof text !== 'string' || !text) return text
+  const lang = localStorage.getItem('cybra:lang') || 'ru'
+  // Динамический импорт синхронным быть не может, поэтому словарь берём из
+  // глобального реестра, который кладёт туда i18n.js при загрузке.
+  const dict = globalThis.__CYBRA_DICT__
+  if (!dict) return text
+  const table = dict[lang]
+  return (table && table[text]) || text
+}
 
 export function setCsrf(token) {
   csrf = token || ''
@@ -36,13 +57,19 @@ async function request(path, { method = 'GET', body, form } = {}) {
   }
   if (!response.ok) {
     const detail = payload?.detail
-    const message =
+    const raw =
       typeof detail === 'string'
         ? detail
         : Array.isArray(detail)
           ? detail.map((item) => item.msg || JSON.stringify(item)).join('; ')
           : `HTTP ${response.status}`
-    throw new ApiError(message, response.status)
+    // Бэкенд отдаёт текст ошибки по-русски ('Неверный email или пароль').
+    // Раньше он попадал в интерфейс как есть, поэтому в английском режиме
+    // ошибки входа и работы с эндпоинтами оставались русскими. Переводим
+    // здешним t(), а не тем, что в контексте React: api.js — не компонент,
+    // и хук тут недоступен. Перевод берётся из того же словаря и того же
+    // localStorage, поэтому результат совпадает с интерфейсом.
+    throw new ApiError(tr(raw), response.status)
   }
   return payload
 }

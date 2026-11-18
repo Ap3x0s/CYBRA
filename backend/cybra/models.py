@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -175,6 +176,9 @@ class RunStep(Base):
     failed_check_rate: Mapped[float | None] = mapped_column(Float)
     categories: Mapped[dict] = mapped_column(JSON, default=dict)
     requests: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Сколько проверок инструмент планировал выполнить. NULL у прогонов до
+    # появления поля: там планового числа нет, и coverage опирается на факт.
+    planned: Mapped[int | None] = mapped_column(Integer)
     error: Mapped[str] = mapped_column(Text, default='')
     artifact_dir: Mapped[str] = mapped_column(String(1000), default='')
 

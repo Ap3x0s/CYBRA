@@ -185,7 +185,7 @@ export default function NewRun() {
           ) : null}
 
           {step === 1 ? (
-            <Field label={t("Инструменты")} help="Можно выбрать несколько: отчёт покажет их раздельно.">
+            <Field label={t("Инструменты")} help={t('Можно выбрать несколько: отчёт покажет их раздельно.')}>
               <div style={{ display: 'grid', gap: 8 }}>
                 {TOOLS.map((tool) => {
                   const status = availability[tool.id]
@@ -228,7 +228,7 @@ export default function NewRun() {
           {step === 2 ? (
             <>
               <div className="row">
-                <Field label={t("Режим движка")} help="mock — офлайн-фикстура для демонстрации, без реальных запросов.">
+                <Field label={t("Режим движка")} help={t('mock — офлайн-фикстура для демонстрации, без реальных запросов.')}>
                   <Select
                     value={engineMode}
                     onChange={setEngineMode}
@@ -238,7 +238,7 @@ export default function NewRun() {
                     ]}
                   />
                 </Field>
-                <Field label={t("Лимит кейсов")} help="0 — все записи выбранного набора.">
+                <Field label={t("Лимит кейсов")} help={t('0 — все записи выбранного набора.')}>
                   <input
                     className="input"
                     type="number"
@@ -258,7 +258,7 @@ export default function NewRun() {
                     onChange={(event) => setSeed(event.target.value)}
                   />
                 </Field>
-                <Field label={t("Бюджет запросов")} help="На модель, инструмент и маршрут.">
+                <Field label={t("Бюджет запросов")} help={t('На модель, инструмент и маршрут.')}>
                   <input
                     className="input"
                     type="number"
@@ -269,7 +269,7 @@ export default function NewRun() {
                 </Field>
               </div>
 
-              <Field label={t("Версии датасетов")} help="Пусто — будут использоваться файлы из комплекта.">
+              <Field label={t("Версии датасетов")} help={t('Пусто — будут использоваться файлы из комплекта.')}>
                 <div style={{ maxHeight: 220, overflow: 'auto', display: 'grid', gap: 6 }}>
                   {versionList.slice(0, 40).map((version) => (
                     <label key={version.id} className="checkbox" style={{ fontSize: 12 }}>

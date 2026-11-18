@@ -273,6 +273,10 @@ def import_results(db: OrmSession, run: Run, spec: dict) -> None:
                 failed_check_rate=tool_result.get('failed_check_rate'),
                 categories=tool_result.get('categories', {}),
                 requests=tool_result.get('requests', {}),
+                # Плановое число проверок — знаменатель для coverage. Воркер
+                # пишет его в status.json; в архивных прогонах его нет, там
+                # coverage честно опирается на фактически записанное.
+                planned=tool_result.get('planned'),
                 error=tool_result.get('error') or '',
                 # Храним путь вместе с каталогом сессии: иначе по этому полю
                 # нельзя открыть артефакты, потому что summary пишет пути

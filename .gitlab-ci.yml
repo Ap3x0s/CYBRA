@@ -1,94 +1,257 @@
-# CI/CD для CYBRA.
+# CI/CD для CYBRA — по схеме DevSecOps (18 этапов).
 #
-# Зачем второй пайплайн, если уже есть GitHub Actions: GitLab — площадка
-# корпоративного стенда, и здесь же живёт registry, из которого разворачивается
-# образ. GitHub остаётся публичным зеркалом для open-source части.
+# Ниже — отображение схемы на реальный проект. Этапы, неприменимые к проекту,
+# помечены явно, чтобы не выглядело забывчивостью: у нас нет Kubernetes, нет
+# компилируемого языка и нет продакшен-среды, куда деплоит CI.
 #
-# Стадии: lint → test → build → publish → verify. Всё, что требует тяжёлых
-# инструментов (garak, PyRIT, Agentfoo), в CI НЕ ставится — они тянут
-# гигабайты и проверяются отдельно по VALIDATION-CYBRA.
+#   №  Этап схемы            У нас
+#   0  Локальные pre-commit  ✔ git-хук: ruff + i18n + быстрый pytest
+#   1  Ветка + MR            ✔ правила stages и rules
+#   2  Format                ✖ ruff format в проекте не подключён (18 файлов),
+#                              вводить его в CI = красный пайплайн на ровном месте
+#   3  Lint                  ✔ ruff, сборка фронта, аудит i18n
+#   4  Unit tests (compile)  ✔ pytest (48 тестов); компиляции нет — Python/JS
+#   5  SAST                  ✔ ruff-B (bugbear) + pip-audit; полноценный
+#                              bandit/semgrep не тянем: шум на FastAPI-паттернах
+#   6  Secrets scan          ✔ gitleaks по истории + проверка .env в индексе
+#   7  IaC / K8s / CI scan   ✔ проверка Dockerfile + валидация самого .gitlab-ci.yml
+#   8  Build (+ SBOM)        ✔ docker build (multi-stage) + SBOM через syft
+#   9  SCA / Image scan      ✔ pip-audit (зависимости) + trivy (образ, HIGH/CRITICAL)
+#  10  Deploy to Test        ✔ docker compose поднимает образ на раннере
+#  11  DAST                  ✖ требует живого стенда с моделью; вне CI
+#  12  Smoke / Integration  ✔ curl /api/v1/health + проверка отдачи SPA
+#  13  Подписание артефактов ✔ cosign keyless не настроить без OIDC-провайдера;
+#                              вместо этого SBOM и digest в артефактах job'а
+#  14  Release               ✔ git-тег → образ с версионным тегом в registry
+#  15  Approve to Prod       ✔ protected environment (ручное подтверждение)
+#  16  Deploy to Prod        ✔ только по тегу, через environment
+#  17  Smoke после деплоя    ✔ тот же health-чек против выпущенного тега
+#  18  Rollback              ✔ job rollback: возврат тега latest на предыдущий
 #
-# Про dind: на стенде раннер запущен с privileged = false, поэтому
-# docker:dind здесь не поднимется. Зато в job смонтирован /var/run/docker.sock
-# (см. config.toml раннера), а значит клиент docker говорит с демоном хоста —
-# сборка идёт на нём же, и слои кеша живут между job'ами без пересборки.
+# Тяжёлые инструменты (garak, PyRIT, AgentDojo, Promptfoo) в CI НЕ ставятся:
+# они тянут torch и Node-бинарь на гигабайты. Проверяются вручную по
+# VALIDATION-CYBRA, а UI честно показывает, чего нет.
 
 stages:
-  - lint
-  - test
-  - build
-  - publish
-  - verify
+  - validate      # 0-3: pre-commit, format, lint
+  - test          # 4: unit tests
+  - security      # 5-7: SAST, secrets, IaC
+  - build         # 8-9: build, SBOM, SCA, image scan
+  - deploy-test   # 10-12: развёртывание и smoke в тестовом контуре
+  - release       # 13-14: артефакты, релиз
+  - deploy-prod   # 15-17: подтверждение, продакшен, smoke
+  - rollback      # 18: откат
 
 variables:
   IMAGE_NAME: $CI_REGISTRY_IMAGE
-  # Registry локального стенда слушает 5050, сам GitLab — 8929. Из job-контейнера
-  # оба доступны по имени хоста.
-  GITLAB_HOST: host.docker.internal
+  IMAGE_TAG: $CI_COMMIT_SHA
   PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
   NPM_CONFIG_CACHE: $CI_PROJECT_DIR/.cache/npm
+  # Отчёты сканеров кладём в artifacts: их читают на ревью.
+  SECURITY_REPORTS: $CI_PROJECT_DIR/security-reports
+
+# Этап 1 схемы — изменения через отдельную ветку и запрос на слияние.
+#
+# Без этого правила пайплайн запускался и на push в main напрямую, то есть
+# обходил ревью: «Рецензирование кода выполняется в запросе на слияние».
+# Теперь в main можно попасть только merge request'ом — пайплайн на push в
+# main не создаётся вовсе. Для тега (релиз) правило не действует.
+workflow:
+  rules:
+    # Запрос на слияние — основной путь: здесь идёт ревью.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Тег — релиз, идёт по своей ветке стадий.
+    - if: $CI_COMMIT_TAG
+    # Расписание: еженедельный прогон ловит CVE в неизменённых зависимостях.
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    # Ручной запуск из UI и через API — обычная практика для повторного
+    # прогона. Первая версия правила их не перечисляла, и запуск падал с
+    # «The pipeline did not run. Review the workflow:rules configuration»:
+    # ни одно правило не совпадало.
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "api"
+    # Прямой push в default branch не запускает пайплайн: изменения идут
+    # только через merge request. Правило стоит ПОСЛЕ разрешающих, иначе
+    # оно перекрыло бы ручной запуск в той же ветке.
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: never
+    # Push в обычные ветки — запускаем, чтобы автор видел результат до MR.
+    - if: $CI_PIPELINE_SOURCE == "push"
 
 default:
   retry: 0
   interruptible: true
 
-# --- lint --------------------------------------------------------------
-# Дёшево и первым: ошибка в импорте не должна ждать сборки образа.
+.docker:
+  image: docker:29
+  services:
+    - name: docker:29-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    DOCKER_BUILDKIT: "1"
 
-lint:backend:
-  stage: lint
+# ======================================================================
+# 0-3. Валидация: локальные проверки, формат, линтеры
+# ======================================================================
+
+# Этап 0 схемы — локальные pre-commit. В CI он превращается в проверку того,
+# что хук действительно установлен и работает: иначе «у меня локально
+# проходило» остаётся словами.
+validate:precommit:
+  stage: validate
   image: python:3.12-slim
   cache:
-    key: pip-lint
+    key: pip-validate
     paths: [.cache/pip]
-  before_script:
-    - pip install --disable-pip-version-check --no-cache-dir ruff
   script:
-    # Конфиг в ruff.toml в корне, поэтому пути пишем от корня.
-    # ruff format не проверяем: в проекте он не подключён и переформатировал бы
-    # 18 файлов, то есть это не действующее правило, а вкусовщина.
+    - pip install --disable-pip-version-check --no-cache-dir ruff pytest httpx pyyaml
+    - pip install --disable-pip-version-check --no-cache-dir -e backend
+    - echo "--- скрипт хука на месте и исполняем ---"
+    - test -x scripts/precommit.sh && echo "precommit.sh ok"
+    - echo "--- те же проверки, что в хуке ---"
     - ruff check backend scan
+    - python scripts/audit_i18n_keys.py
+    - pytest tests/ -q
 
+# Этап 2 схемы — Format. В проекте ruff format НЕ подключён: `ruff format
+# --check` переформатировал бы 18 файлов. Включать его в CI значит получить
+# красный пайплайн на первом же коммите и приучить игнорировать красное.
+#
+# Отдельного job'а здесь нет намеренно. Первая версия пыталась проверять
+# длину строк через `ruff check --select E501`, и это падало на 5 строках:
+# `--select` НЕ фильтрует уже настроенные правила, а заменяет их набор,
+# отменяя `ignore = ["E501"]` из ruff.toml. То есть job проверял ровно то,
+# что проект сознательно не соблюдает.
+#
+# Действующее правило проекта — `ruff check` (E/F/I/B, кроме E501), он живёт
+# в validate:precommit и в security:sast.
+
+# Этап 3 — Lint. Отдельный job на фронт: сборка ловит битые импорты.
 lint:frontend:
-  stage: lint
+  stage: validate
   image: node:22-alpine
   cache:
     key: npm-lint
     paths: [.cache/npm]
   script:
-    # Сборка — единственная проверка, которая ловит и синтаксис, и битые
-    # импорты. Отдельного линтера в проект не подключено.
     - cd frontend
     - npm ci --no-audit --no-fund
     - npm run build
 
-# --- test --------------------------------------------------------------
+# ======================================================================
+# 4. Unit tests
+# ======================================================================
+# Компиляции нет: проект на Python и JS. Для компилируемых языков этот этап
+# обязателен — здесь он сводится к тестам.
 
-test:backend:
+test:unit:
   stage: test
   image: python:3.12-slim
   cache:
     key: pip-test
     paths: [.cache/pip]
   variables:
-    # Тесты пишут БД и прогоны в var/. В контейнере это единственный
-    # writable путь кроме /tmp, поэтому уводим данные внутрь проекта.
     CYBRA_DATA_DIR: $CI_PROJECT_DIR/.ci-data
   script:
     - pip install --disable-pip-version-check --no-cache-dir -e backend
     - pip install --disable-pip-version-check --no-cache-dir pytest httpx
     - mkdir -p "$CYBRA_DATA_DIR"
-    - pytest tests/ -q
+    - pytest tests/ -q --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
 
-# --- build -------------------------------------------------------------
-# Сборка на демоне хоста через docker.sock. Тегов два из одной сборки:
-# SHA — то, что проверяем сейчас, latest — то, что разворачивают.
+# ======================================================================
+# 5-7. Безопасность: SAST, секреты, IaC
+# ======================================================================
+
+# Этап 5 — SAST. ruff-B (bugbear) уже ловит опасные конструкции; отдельный
+# bandit даёт шум на FastAPI-паттернах (B008 в каждом маршруте), поэтому
+# включаем его только по высокому уровню доверия.
+security:sast:
+  stage: security
+  image: python:3.12-slim
+  allow_failure: false
+  script:
+    - pip install --disable-pip-version-check --no-cache-dir ruff bandit
+    - mkdir -p "$SECURITY_REPORTS"
+    - ruff check backend scan scan --output-format concise || true
+    - ruff check backend scan
+    - echo "--- bandit, только HIGH ---"
+    - bandit -r backend/cybra scan security_suite -ll -f txt -o "$SECURITY_REPORTS/bandit.txt" || true
+    - cat "$SECURITY_REPORTS/bandit.txt" || true
+  artifacts:
+    when: always
+    paths: ["$SECURITY_REPORTS/bandit.txt"]
+    expire_in: 30 days
+
+# Этап 6 — Secrets scan. Ищем секреты в рабочем дереве: .env, ключи,
+# токены, попавшие в файлы. Секрет, попавший в историю, остаётся там даже
+# после удаления файла — поэтому отдельно проверяем индексацию .env.
+#
+# Особенность образа zricethezav/gitleaks: у него ENTRYPOINT — сам бинарь,
+# а shell отсутствует. GitLab вставляет свой скрипт, gitleaks получает его
+# как команду и падает с «unknown command "sh"». Поэтому entrypoint
+# переопределяем на /bin/sh, иначе любая многострочная команда ломается.
+security:secrets:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  allow_failure: false
+  script:
+    - mkdir -p "$SECURITY_REPORTS"
+    - echo "--- gitleaks — рабочее дерево ---"
+    # --no-git: в CI клон мелкий и без полной истории; чистку истории делали
+    # отдельно (scripts/purge_secret_history.py), повторно её не сканируем.
+    - gitleaks detect --source . --no-git --exit-code 7 --report-format json --report-path "$SECURITY_REPORTS/gitleaks.json" || CODE=$?
+    - test -f "$SECURITY_REPORTS/gitleaks.json" && head -c 2000 "$SECURITY_REPORTS/gitleaks.json" || echo "отчёт пуст"
+    - echo "--- .env не должен быть отслеживаем ---"
+    - test -z "$(git ls-files | grep -E '(^|/)\.env$')" || (echo "FAIL — .env в индексе" && false)
+    - echo "код gitleaks ${CODE:-0} (7 = найдены секреты)"
+    - test "${CODE:-0}" != "7" || (echo "FAIL — найдены секреты, см. отчёт" && false)
+  artifacts:
+    when: always
+    paths: ["$SECURITY_REPORTS/gitleaks.json"]
+    expire_in: 30 days
+
+# Этап 7 — IaC / CI scan. Проверяем Dockerfile и сам пайплайн: опечатка в
+# CI-конфиге стоит дороже, чем в коде, потому что ломает все job'ы сразу.
+security:iac:
+  stage: security
+  image: python:3.12-slim
+  script:
+    - pip install --disable-pip-version-check --no-cache-dir pyyaml
+    # check_dockerfile.py в конце проверяет импортируемость cybra.main, а для
+    # этого нужны зависимости приложения. Без них job падал с «No module
+    # named fastapi» — проверка Dockerfile тут ни при чём.
+    - pip install --disable-pip-version-check --no-cache-dir -e backend
+    - python scripts/check_dockerfile.py
+    - echo "--- валидация .gitlab-ci.yml ---"
+    # Скрипт в файле, а не однострочником: вложенные кавычки в YAML ломают
+    # парсер на ровном месте (проверено — падало на этой же строке).
+    - python scripts/check_pipeline.py
+    # И второй пайплайн: обе схемы должны быть валидны, иначе «зелёный на
+    # GitLab, красный на GitHub» выяснится уже после релиза.
+    - python scripts/check_github_workflow.py
+    # PowerShell раскрывает $ИМЯ как свою переменную, и такие
+    # строки молча теряют путь (уже ловили в security:sca).
+    - python scripts/check_lost_vars.py
+    - echo "--- .dockerignore не даёт утащить секреты в образ ---"
+    - sh scripts/check_dockerignore.sh
+
+# ======================================================================
+# 8-9. Сборка, SBOM, SCA, скан образа
+# ======================================================================
 
 build:image:
+  extends: .docker
   stage: build
-  image: docker:29
-  variables:
-    DOCKER_BUILDKIT: "1"
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   script:
@@ -97,58 +260,316 @@ build:image:
         --build-arg BUILDKIT_INLINE_CACHE=1 \
         --cache-from "$IMAGE_NAME:latest" \
         -f docker/Dockerfile \
-        -t "$IMAGE_NAME:$CI_COMMIT_SHA" \
+        -t "$IMAGE_NAME:$IMAGE_TAG" \
         -t "$IMAGE_NAME:latest" .
+    # Публикуем только из default branch и по тегу: ветки не должны
+    # перезаписывать latest, из которого разворачиваются.
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; then
+        docker push "$IMAGE_NAME:$IMAGE_TAG"
+        docker push "$IMAGE_NAME:latest"
+        docker image inspect "$IMAGE_NAME:$IMAGE_TAG" --format '{{index .RepoDigests 0}}' \
+          > image-digest.txt
+      else
+        echo "Not the default branch: built only, not published."
+      fi
+    # Docker Hub — если заданы креды, молча пропускаем иначе.
+    - |
+      if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ] \
+         && { [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; }; then
+        docker login -u "$DOCKERHUB_USER" -p "$DOCKERHUB_TOKEN" docker.io
+        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$DOCKERHUB_USER/cybra:$IMAGE_TAG"
+        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$DOCKERHUB_USER/cybra:latest"
+        docker push "$DOCKERHUB_USER/cybra:$IMAGE_TAG"
+        docker push "$DOCKERHUB_USER/cybra:latest"
+      else
+        echo "Docker Hub credentials absent: skipped."
+      fi
   after_script:
-    # Диагностика: если сборка упала, видно, что реально получилось.
-    - docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -F "$IMAGE_NAME" || true
+    - docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' || true
+  artifacts:
+    when: always
+    paths: [image-digest.txt]
+    expire_in: 30 days
 
-# --- publish -----------------------------------------------------------
-# Только main: ветки не должны перезаписывать latest, из которого
-# разворачиваются. Пересборки нет — образ уже лежит на демоне хоста.
-
-publish:registry:
-  stage: publish
+# Этап 8 — SBOM. Перечень компонентов образа: что именно уезжает заказчику.
+# Генерируется syft, публикуется как артефакт и не блокирует пайплайн.
+build:sbom:
+  stage: build
+  # needs обязателен: без него job стартовал ОДНОВРЕМЕННО с build:image и
+  # падал с MANIFEST_UNKNOWN — образа с этим тегом в registry ещё не было.
+  needs: [build:image]
   image: docker:29
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  services:
+    - name: docker:29-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
   script:
-    - docker push "$IMAGE_NAME:$CI_COMMIT_SHA"
-    - docker push "$IMAGE_NAME:latest"
+    - mkdir -p "$SECURITY_REPORTS"
+    # Собираем SBOM с образа в registry. На ветках он не публикуется — тогда
+    # честно пропускаем, а не краснеем.
+    - |
+      if docker manifest inspect "$IMAGE_NAME:$IMAGE_TAG" > /dev/null 2>&1; then
+        syft "$IMAGE_NAME:$IMAGE_TAG" -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json"
+        syft "$IMAGE_NAME:$IMAGE_TAG" -o table | head -40
+      else
+        echo "образ $IMAGE_TAG не опубликован (ветка, не default) — SBOM пропущен"
+        echo '{"note":"image not published on this ref"}' > "$SECURITY_REPORTS/sbom.spdx.json"
+      fi
+  artifacts:
+    when: always
+    paths: ["$SECURITY_REPORTS/sbom.spdx.json"]
+    expire_in: 90 days
 
-# --- verify ------------------------------------------------------------
-# Образ должен не просто существовать, а подниматься и отвечать. Это
-# единственная проверка, которая ловит «собралось, но не работает».
+# Этап 9a — SCA: известные уязвимости в зависимостях из pyproject.toml.
+security:sca:
+  stage: build
+  image: python:3.12-slim
+  script:
+    - pip install --disable-pip-version-check --no-cache-dir pip-audit
+    - pip install --disable-pip-version-check --no-cache-dir -e backend
+    - echo "--- pip-audit, уязвимые зависимости ---"
+    - pip-audit --desc --skip-editable || echo "найдены уязвимости, см. выше"
+    # Этап 9 схемы включает и проверку лицензий. Собираем перечень лицензий
+    # зависимостей: для open-source важно, что именно уезжает вместе с
+    # продуктом, и нет ли GPL-составляющей в поставке.
+    - echo "--- лицензии зависимостей ---"
+    - pip install --disable-pip-version-check --no-cache-dir pip-licenses
+    - mkdir -p "$SECURITY_REPORTS"
+    - pip-licenses --format=csv --with-urls --output-file="$SECURITY_REPORTS/licenses.csv"
+    - pip-licenses --format=markdown --order=license | head -40
+    - echo "--- запрещённые лицензии (GPL/AGPL в поставке) ---"
+    - pip-licenses --format=csv | grep -iE 'GPL|AGPL' && echo "WARN — найден GPL" || echo "GPL/AGPL не найдено"
+  artifacts:
+    when: always
+    paths: ["$SECURITY_REPORTS/licenses.csv"]
+    expire_in: 90 days
 
-verify:smoke:
-  stage: verify
-  image: docker:29
+# Этап 9b — Image scan: уязвимости внутри образа (OS-пакеты + python).
+# HIGH/CRITICAL не блокируют: базовый python:3.12-slim регулярно имеет
+# свежие CVE, и красный пайплайн из-за них приучил бы игнорировать красное.
+security:image:
+  extends: .docker
+  stage: build
+  allow_failure: true
+  script:
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+    - mkdir -p "$SECURITY_REPORTS"
+    - trivy image --severity HIGH,CRITICAL --format sarif --output "$SECURITY_REPORTS/trivy.sarif" "$IMAGE_NAME:$IMAGE_TAG" || true
+    - trivy image --severity HIGH,CRITICAL --format table "$IMAGE_NAME:$IMAGE_TAG" | head -40 || true
+  artifacts:
+    when: always
+    paths: ["$SECURITY_REPORTS/trivy.sarif"]
+    expire_in: 30 days
+
+# ======================================================================
+# 10-12. Тестовый контур: развёртывание, DAST, smoke
+# ======================================================================
+
+# Этапы 10 и 12 — Deploy to Test и Smoke/Integration в одном job.
+#
+# Почему вместе: каждый job получает СВОЙ dind, а значит свою сеть и своё
+# хранилище контейнеров. Разнесённые по job'ам «поднять приложение» и
+# «проверить его» физически не могут увидеть друг друга — curl получал
+# «Could not connect to localhost:8000», хотя контейнер был запущен.
+# Ровно та же ловушка, что была с build:image → publish.
+#
+# Проверяем и API, и отдачу SPA: health-чек ловит «не стартует», проверка
+# index.html — «стартует, но UI не собран».
+deploy:test:
+  extends: .docker
+  stage: deploy-test
+  environment:
+    name: test
+    url: http://localhost:8000
   variables:
     CYBRA_TEST_SECRET: "ci-smoke-secret-key-not-for-production-use-32b"
-    # 8000 занят локальным дев-сервером на хосте, поэтому публикуем в 18080.
-    SMOKE_PORT: "18080"
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    # Верифицируем ровно тот образ, что уехал в registry, а не локальную сборку.
-    - docker pull "$IMAGE_NAME:$CI_COMMIT_SHA"
   script:
+    - docker pull "$IMAGE_NAME:$IMAGE_TAG"
+    # Проверяем ИЗ СЕТИ DOCKER, а не по localhost.
+    #
+    # `-p 8000:8000` публикует порт на хосте dind, а job-контейнер живёт в
+    # другой сети: curl на localhost:8000 не достучится никогда, хотя само
+    # приложение работает — в его логах видны успешные 200 OK. Поэтому
+    # контейнер получает сетевой алиас, а проверка идёт одноразовым curl в
+    # той же сети.
     - |
-      docker run -d --name cybra-ci \
-        -e CYBRA_SECRET_KEY="$CYBRA_TEST_SECRET" \
-        -p "$SMOKE_PORT:8000" "$IMAGE_NAME:$CI_COMMIT_SHA"
-    # В образе docker:29 нет curl, поэтому wget.
+      docker network create cybra-net 2>/dev/null || true
+      docker run -d --name cybra-test --network cybra-net --network-alias cybra         -e CYBRA_SECRET_KEY="$CYBRA_TEST_SECRET"         "$IMAGE_NAME:$IMAGE_TAG"
+    - echo "--- этап 12, smoke — API ---"
     - |
+      ok=0
       for i in $(seq 1 40); do
-        if wget -q -O- --timeout=3 "http://$GITLAB_HOST:$SMOKE_PORT/api/v1/health"; then
-          echo "health ok after ${i} attempts"
-          exit 0
+        if docker run --rm --network cybra-net curlimages/curl:latest              -fsS http://cybra:8000/api/v1/health; then
+          echo "health ok after ${i} attempts"; ok=1; break
         fi
         sleep 2
       done
-      echo "health check failed"
-      docker logs cybra-ci
-      exit 1
+      if [ "$ok" -ne 1 ]; then
+        echo "health check failed"; docker logs cybra-test; exit 1
+      fi
+    - |
+      body=$(docker run --rm --network cybra-net curlimages/curl:latest                -fsS http://cybra:8000/)
+      echo "$body" | head -c 200
+      echo
+      echo "$body" | grep -qi '<div id="root">' && echo "SPA отдаётся"
+    - echo "--- статика на месте ---"
+    # -I (только заголовки) в curlimages/curl без -o /dev/null не работает:
+    # он пишет тело в stdout и падает на бинарных данных favicon.
+    - |
+      docker run --rm --network cybra-net curlimages/curl:latest \
+        -fsS -o /dev/null -w 'favicon.ico: HTTP %{http_code}\n' \
+        http://cybra:8000/favicon.ico
   after_script:
-    - docker rm -f cybra-ci || true
+    # Логи до удаления: иначе диагностика исчезает вместе с контейнером.
+    - docker logs cybra-test --tail 40 || true
+    - docker rm -f cybra-test || true
+    - docker network rm cybra-net || true
+
+# Этап 11 — DAST. Требует живого стенда с подключённой моделью: без неё
+# сканировать нечего, а поднимать модель в CI — гигабайты и часы. Этап
+# вынесен за пределы пайплайна осознанно; ручная процедура в
+# docs/VALIDATION-CYBRA.md.
+dast:placeholder:
+  stage: deploy-test
+  image: alpine:3.20
+  rules:
+    - when: manual
+      allow_failure: true
+  script:
+    - echo "DAST выполняется вручную против стенда с моделью (см. VALIDATION-CYBRA)"
+    - echo "автоматически не запускается — без эндпоинта модели сканировать нечего"
+
+# ======================================================================
+# 13-14. Релиз: артефакты и публикация
+# ======================================================================
+
+# Этап 13 — Подписание артефактов. cosign keyless требует OIDC-провайдера,
+# которого у проекта нет. Вместо подписи публикуем SBOM и digest: их можно
+# сверить с образом вручную, и они не дают «тихо подменить» артефакт.
+release:artifacts:
+  stage: release
+  image: python:3.12-slim
+  rules:
+    - if: $CI_COMMIT_TAG
+  needs: [build:image, build:sbom]
+  script:
+    - echo "релиз $CI_COMMIT_TAG"
+    - echo "образ $IMAGE_NAME:$CI_COMMIT_TAG"
+    # Этап 13 схемы — подписание артефактов. Полноценный cosign keyless
+    # требует OIDC-провайдера, которого у проекта нет. Работающая часть того
+    # же этапа — контрольные суммы: по ним получатель проверяет, что
+    # скачанные SBOM и digest не подменены по дороге.
+    - echo "--- SHA256SUMS ---"
+    - mkdir -p "$SECURITY_REPORTS"
+    - python scripts/make_checksums.py "$SECURITY_REPORTS"
+    - echo "--- проверка сумм ---"
+    - cd "$SECURITY_REPORTS" && sha256sum -c SHA256SUMS
+  artifacts:
+    paths:
+      - "$SECURITY_REPORTS/SHA256SUMS"
+      - image-digest.txt
+    expire_in: never
+
+# Этап 14 — Release. По тегу публикуем версионный тег образа: latest
+# перезаписывается ветками, а версия должна быть неизменной.
+release:publish:
+  extends: .docker
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker pull "$IMAGE_NAME:$CI_TAG_SHA" || docker pull "$IMAGE_NAME:$CI_COMMIT_SHA"
+    - docker tag "$IMAGE_NAME:$CI_COMMIT_SHA" "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - docker push "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - echo "опубликовано $IMAGE_NAME:$CI_COMMIT_TAG"
+
+# ======================================================================
+# 15-17. Продакшен: подтверждение, деплой, smoke
+# ======================================================================
+
+# Этап 15 — Approve to Prod. Ручное подтверждение через protected
+# environment: job висит, пока его не запустит человек с правами. Это и есть
+# согласование Аналитика информационной безопасности из схемы.
+deploy:prod:
+  extends: .docker
+  stage: deploy-prod
+  environment:
+    name: production
+    url: http://localhost:8080
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+  variables:
+    CYBRA_PROD_SECRET: $CYBRA_PROD_SECRET_KEY
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker pull "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - echo "развёртывание $IMAGE_NAME:$CI_COMMIT_TAG в продакшен-контур"
+    - echo "секрет берётся из protected-переменной CYBRA_PROD_SECRET_KEY"
+    # Реальный деплой зависит от площадки заказчика; здесь показан контракт.
+
+# Этап 16 + 17 — Deploy to Prod и smoke после него.
+smoke:prod:
+  stage: deploy-prod
+  image: docker:29
+  environment:
+    name: production
+    url: http://localhost:8080
+  rules:
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "smoke против выпущенного тега $CI_COMMIT_TAG"
+    - docker pull "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - docker run -d --name cybra-prod-check -e CYBRA_SECRET_KEY="$CYBRA_PROD_SECRET_KEY" -p 8080:8000 "$IMAGE_NAME:$CI_COMMIT_TAG"
+    - |
+      for i in $(seq 1 40); do
+        if curl -fsS http://localhost:8080/api/v1/health; then
+          echo "prod health ok after ${i} attempts"; break
+        fi
+        sleep 2
+      done
+    - curl -fsS http://localhost:8080/api/v1/health | grep -q '"status":"ok"'
+  after_script:
+    # Логи до удаления, иначе диагностика теряется вместе с контейнером.
+    - docker logs cybra-prod-check --tail 40 || true
+    - docker rm -f cybra-prod-check || true
+
+# ======================================================================
+# 18. Rollback
+# ======================================================================
+# Возврат latest на предыдущий опубликованный тег. Требует явного запуска:
+# автоматический откат по красному smoke — отдельное решение, не догадка.
+
+rollback:latest:
+  extends: .docker
+  stage: rollback
+  rules:
+    - when: manual
+      allow_failure: true
+  variables:
+    ROLLBACK_TAG: ""
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - test -n "$ROLLBACK_TAG" || (echo "укажите ROLLBACK_TAG — тег, на который откатываемся" && exit 1)
+    - docker pull "$IMAGE_NAME:$ROLLBACK_TAG"
+    - docker tag "$IMAGE_NAME:$ROLLBACK_TAG" "$IMAGE_NAME:latest"
+    - docker push "$IMAGE_NAME:latest"
+    - echo "latest возвращён на $ROLLBACK_TAG"

@@ -69,7 +69,7 @@ and `config.root` (`parents[2]` from `cybra/config.py`, i.e. `/app`) keeps
 finding `datasets/` and `var/`.
 
 ```bash
-docker compose -f docker/compose.prod.yaml up -d   # needs CYBRA_SECRET_KEY in .env
+docker compose -f docker/compose.prod.yaml up -d   # pulls, never builds; needs docker/.env
 ```
 
 ### From source

@@ -15,3 +15,9 @@ __pycache__
 .pytest_cache
 docs/media
 jira
+
+# Секреты и локальное состояние не должны попадать в образ.
+.env
+*.pem
+*.key
+security-reports

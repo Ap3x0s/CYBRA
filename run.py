@@ -27,6 +27,39 @@ def nonnegative(value):
     if n<0:raise argparse.ArgumentTypeError('must be >=0')
     return n
 
+def planned_total(out, job, rows):
+    """Сколько проверок инструмент планировал — знаменатель для coverage.
+
+    Источники по убыванию точности:
+      1. selected_cases.json — сам инструмент записал свой план (harmbench,
+         jailbreakbench, security-regression, bipia).
+      2. Оценка по датасету и limit, когда план детерминирован, но не записан
+         (promptfoo).
+      3. Фактически записанные строки — единственное, что остаётся для garak,
+         pyrit и agentdojo, чей план зависит от внутренних проб и шагов агента.
+
+    Возвращаем максимум из фактом и найденным планом: план не может быть
+    меньше факта, иначе полнота превысит 100 %. Источники НЕ равноправны:
+    план, записанный самим инструментом, перебивает оценку — она построена
+    на предположении, что воркер прошёл весь план, а он мог упасть раньше.
+    """
+    actual = len(rows)
+    plan_file = out / 'selected_cases.json'
+    if plan_file.exists():
+        try:
+            return max(actual, len(json.loads(plan_file.read_text(encoding='utf-8'))))
+        except (ValueError, OSError):
+            pass
+    try:
+        from security_suite.plan import estimate_planned
+        estimate = estimate_planned(job)
+        if estimate:
+            return max(actual, int(estimate))
+    except Exception:  # noqa: BLE001 — оценка не должна ломать прогон
+        pass
+    return actual
+
+
 def endpoint(base,path):
     url=base.rstrip('/')+'/'+path.lstrip('/')
     validate_url(url);return url
@@ -114,6 +147,12 @@ def run(args):
                         if p is not None and p.poll() is None:terminate(p)
                         status={'status':'ERROR','error':str(e)}
                     status.update({'requests':relay.counts,'transport_errors':relay.errors[:20]})
+                    # Плановое число проверок: знаменатель для coverage. Воркер
+                    # знает его точно (selector уже отработал), но не сообщает,
+                    # поэтому берём: записанные строки + то, что не доехало из
+                    # плана. Без этого coverage делил на число записей и падение
+                    # воркера на 60 % давало 100 % полноты.
+                    status['planned']=planned_total(out,job,rows)
                     write_json(out/'status.json',status)
                 consolidate(dest)
                 print(f'[{model}] {tool}: {status["status"]}',flush=True)

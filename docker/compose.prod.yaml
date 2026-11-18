@@ -1,15 +1,31 @@
-# Production-профиль: тот же образ, но с отдельным каталогом прогонов.
+# Production-профиль: развёртывание артефакта из registry, без сборки.
 #
 # Зачем вообще compose, если хватает docker run: нужен предсказуемый рестарт,
 # явный volume и возможность позже вынести scan в отдельный контейнер, не
 # переписывая образ.
+#
+# Почему здесь НЕТ `build:` — это не забывчивость, а суть профиля. С `build:`
+# compose собирает образ из локального контекста и молча подменяет тег
+# `cybra/cybra:latest`, так что на двух машинах оказываются две разные сборки
+# под одним именем. Именно этого и не должно быть: одна и та же развёртка
+# у всех. Собирает и публикует только CI (см. .gitlab-ci.yml), сюда приходит
+# уже проверенный образ.
+#
+#   docker login registry.example.com
+#   printf 'CYBRA_SECRET_KEY=%s\n' "<key>" > docker/.env
+#   docker compose -f docker/compose.prod.yaml pull
+#   docker compose -f docker/compose.prod.yaml up -d
+#
+# Локальная сборка для разработки — docker build напрямую (см. README).
 
 services:
   cybra:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: cybra/cybra:latest
+    # Переопределяется через CYBRA_IMAGE, чтобы тот же файл работал и с
+    # локальным стендом, и с корпоративным registry.
+    image: ${CYBRA_IMAGE:-cybra/cybra:latest}
+    # Всегда тянуть из registry: если образа нет локально, compose без этого
+    # попытается собрать его из контекста и упадёт с невнятной ошибкой.
+    pull_policy: always
     container_name: cybra
     restart: unless-stopped
     ports:

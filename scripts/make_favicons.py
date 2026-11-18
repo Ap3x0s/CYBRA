@@ -1,29 +1,25 @@
-"""Собрать набор favicon из фирменной иконки приложения.
+"""Собрать favicon из фирменной иконки.
 
-Источник: docs/brand/Премиальная иконка с металлическим шестиугольником
-и кубом.png — скруглённый квадрат с эмблемой, 1254x1254, прозрачный фон,
-непрозрачная часть 716x694.
+Задача из ревью: иконка во вкладке выглядит меньше, чем у DNS или Wildberries.
+Разобрался в причине, и она не в размере файла — он честный 16/32/48.
 
-Что делаем и почему:
+Что реально происходит. В исходнике docs/brand/app-icon.png (1254x1254)
+скруглённая плитка занимает 714x692, то есть 57 % холста, а внутри плитки
+эмблема занимает её на 100 %. То есть эмблема уже максимальна для своего
+знака — увеличивать её значит ломать пропорции шестиугольника.
 
-1. Обрезаем прозрачные поля. В исходнике 70% прозрачных пикселей; если
-   масштабировать как есть, во вкладке браузера значок занял бы треть
-   отведённого места.
+Разница с DNS и WB в другом: у них иконка — яркий сплошной квадрат на весь
+холст, у нас тёмная плитка. На тёмной панели вкладок тёмная плитка
+растворяется, и глаз видит только серебряный контур в её середине.
 
-2. favicon.ico — многокадровый (16/32/48). Именно ICO, а не только PNG:
-   Chrome и Firefox читают PNG, но Safari и часть встроенных браузеров
-   надёжнее берут ICO. Дублирование не вредит — браузер выберет сам.
+Что делает скрипт:
+  * обрезает холст по плитке (убирает 43 % пустых полей вокруг);
+  * для favicon вписывает плитку в холст ВПРИТЫК, без полей — 32x32
+    заполняется целиком (было 32x30 из-за исходных пропорций);
+  * для PWA (192/512) и apple-touch оставляет плитку как есть: там она
+    читается и является частью бренда.
 
-3. PNG 32 и 16 — для современных браузеров, с явным указанием sizes.
-
-4. apple-touch-icon 180x180 — для «Добавить на главный экран» в iOS.
-   Здесь прозрачность убираем: iOS не поддерживает альфу в этой иконке,
-   прозрачные углы он заливает чёрным, получается двойное скругление с
-   грязной каймой. Подкладываем фон, снятый с самой иконки.
-
-5. icon-192 и icon-512 — для PWA-манифеста.
-
-Скрипт идемпотентен: просто перезаписывает файлы.
+Скрипт идемпотентен: перезаписывает файлы.
 """
 from __future__ import annotations
 
@@ -32,71 +28,64 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / 'docs' / 'brand' / (
-    'app-icon.png')
+SRC = ROOT / 'docs' / 'brand' / 'app-icon.png'
 PUBLIC = ROOT / 'frontend' / 'public'
 
 
-def trim(im: Image.Image) -> Image.Image:
-    """Обрезать по альфа-каналу и привести к квадрату."""
+def tile_bbox(im: Image.Image) -> tuple[int, int, int, int]:
+    """Границы непрозрачной плитки — она же граница эмблемы."""
     bbox = im.split()[-1].getbbox()
-    if not bbox:
-        return im
-    im = im.crop(bbox)
+    return bbox if bbox else (0, 0, im.width, im.height)
 
-    # Квадрат: иконка почти квадратная (716x694), но не идеально.
-    # Дополняем до квадрата прозрачным, чтобы при уменьшении не исказить.
-    side = max(im.width, im.height)
+
+def fill_canvas(crop: Image.Image, side: int) -> Image.Image:
+    """Вписать в квадрат side x side так, чтобы заполнить его целиком.
+
+    Ключевой момент: масштабируем по БОЛЬШЕЙ стороне и центруем. Исходник
+    714x692 (не квадрат), поэтому наивное resize исказило бы знак, а
+    resize с сохранением полей оставил бы его меньше холста.
+    """
+    scale = side / max(crop.size)
+    width = round(crop.width * scale)
+    height = round(crop.height * scale)
+    resized = crop.resize((width, height), Image.LANCZOS)
     canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
-    canvas.paste(im, ((side - im.width) // 2, (side - im.height) // 2))
+    canvas.alpha_composite(resized, ((side - width) // 2, (side - height) // 2))
     return canvas
-
-
-def rounded_mask(side: int, radius_ratio: float = 0.22) -> Image.Image:
-    """Маска со скруглением — для apple-touch-icon."""
-    from PIL import ImageDraw
-    mask = Image.new('L', (side, side), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, side - 1, side - 1),
-        radius=int(side * radius_ratio), fill=255)
-    return mask
 
 
 def main() -> int:
     PUBLIC.mkdir(parents=True, exist_ok=True)
     src = Image.open(SRC).convert('RGBA')
-    base = trim(src)
-    print(f'источник: {src.size}, после обрезки: {base.size}')
+    plate = src.crop(tile_bbox(src))
+    print(f'источник: {src.size}, плитка/эмблема: {plate.size} '
+          f'({100 * plate.width // src.width} % холста)')
 
-    # --- PNG для браузера (прозрачность сохраняем) ---
-    sizes = {'favicon-16x16.png': 16, 'favicon-32x32.png': 32,
-             'icon-192.png': 192, 'icon-512.png': 512}
-    for name, side in sizes.items():
-        base.resize((side, side), Image.LANCZOS).save(
-            PUBLIC / name, optimize=True)
+    # --- favicon: плитка впритык к краям холста ---
+    for name, side in (('favicon-16x16.png', 16),
+                       ('favicon-32x32.png', 32),
+                       ('favicon-48x48.png', 48)):
+        fill_canvas(plate, side).save(PUBLIC / name, optimize=True)
+        print(f'  {name}: {side}x{side}, заполнение 100 %')
+    # ICO собираем из одного кадра 48: PIL пересэмплирует остальные размеры.
+    fill_canvas(plate, 48).save(
+        PUBLIC / 'favicon.ico', format='ICO', sizes=[(16, 16), (32, 32), (48, 48)])
+    print('  favicon.ico: 16/32/48')
+
+    # --- PWA: плитка целиком, как в оригинале ---
+    for name, side in (('icon-192.png', 192), ('icon-512.png', 512)):
+        fill_canvas(plate, side).save(PUBLIC / name, optimize=True)
         print(f'  {name}: {side}x{side}')
 
-    # --- ICO многокадровый ---
-    ico_sizes = [(16, 16), (32, 32), (48, 48)]
-    base.save(PUBLIC / 'favicon.ico', format='ICO', sizes=ico_sizes)
-    print(f'  favicon.ico: {ico_sizes}')
-
-    # --- apple-touch-icon: без прозрачности ---
-    # Фон берём с самой иконки — нижняя часть скруглённого квадрата,
-    # там самый тёмный участок градиента.
-    #
-    # Заливаем квадрат ЦЕЛИКОМ, а не только под альфой: у исходной иконки
-    # собственное скругление, и если просто подложить фон под прозрачные
-    # пиксели, по углам останется светлая кайма от антиалиасинга — iOS
-    # показывает её как грязную рамку вокруг иконки.
-    bg = base.getpixel((base.width // 2, int(base.height * 0.88)))
-    bg = (bg[0], bg[1], bg[2], 255)
+    # --- apple-touch: iOS не понимает альфу, заливаем фоном плитки ---
     side = 180
-    apple = base.resize((side, side), Image.LANCZOS)
+    apple = fill_canvas(plate, side)
+    bg = apple.getpixel((side // 2, int(side * 0.94)))
+    bg = (bg[0], bg[1], bg[2], 255)
     flat = Image.new('RGBA', (side, side), bg)
     flat.alpha_composite(apple)
     flat.convert('RGB').save(PUBLIC / 'apple-touch-icon.png', optimize=True)
-    print(f'  apple-touch-icon.png: 180x180, фон {bg[:3]}')
+    print(f'  apple-touch-icon.png: {side}x{side}, фон {bg[:3]}')
 
     print(f'\nвсё в {PUBLIC}')
     return 0

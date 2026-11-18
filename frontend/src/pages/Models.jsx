@@ -61,7 +61,7 @@ export default function Models() {
             <PageSearch
               value={query}
               onChange={setQuery}
-              placeholder="Поиск по моделям…"
+              placeholder={t('Поиск по моделям…')}
               width={260}
             />
             <button className="btn ghost" onClick={() => setShowEndpoint((value) => !value)}>
@@ -75,7 +75,7 @@ export default function Models() {
           <PageSearch
             value={query}
             onChange={setQuery}
-            placeholder="Поиск по моделям…"
+            placeholder={t('Поиск по моделям…')}
             width={260}
           />
         )}
@@ -270,10 +270,10 @@ function EndpointForm({ onDone, onError }) {
         </Field>
       </div>
       <div className="row">
-        <Field label={t("Полный URL метода")} help="Необязательно. Приоритетнее base URL.">
+        <Field label={t("Полный URL метода")} help={t('Необязательно. Приоритетнее base URL.')}>
           <input className="input" value={form.chat_url} onChange={update('chat_url')} placeholder="http://host/v1/chat/completions" />
         </Field>
-        <Field label={t("API-ключ")} help="Шифруется; в ответах API не показывается.">
+        <Field label={t("API-ключ")} help={t('Шифруется; в ответах API не показывается.')}>
           <input className="input" type="password" value={form.api_key} onChange={update('api_key')} autoComplete="off" />
         </Field>
       </div>
@@ -341,7 +341,7 @@ function TargetForm({ endpoints, onDone, onError }) {
             }))}
           />
         </Field>
-        <Field label={t("ID модели")} help="Именно то имя, которое принимает сервер.">
+        <Field label={t("ID модели")} help={t('Именно то имя, которое принимает сервер.')}>
           <input className="input" value={form.model_id} onChange={update('model_id')} required />
         </Field>
       </div>
@@ -349,7 +349,7 @@ function TargetForm({ endpoints, onDone, onError }) {
         <Field label={t("Отображаемое имя")}>
           <input className="input" value={form.label} onChange={update('label')} />
         </Field>
-        <Field label={t("Группа")} help="Для сравнения пула моделей в графиках.">
+        <Field label={t("Группа")} help={t('Для сравнения пула моделей в графиках.')}>
           <input className="input" value={form.group_name} onChange={update('group_name')} />
         </Field>
         <Field label={t("Параметр лимита")}>

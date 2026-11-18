@@ -1,16 +1,3 @@
-/** Переводы интерфейса: русский и английский.
- *
- *  Русский — исходный язык приложения, английский добавлен как второй.
- *  Ключ — короткая фраза на русском, а не абстрактный идентификатор: так
- *  видно, что именно переводится, и не нужно держать отдельный словарь
- *  русских строк. Функция t() принимает параметры как {name}, чтобы
- *  склонения не приходилось собирать конкатенацией.
- *
- *  Что НЕ переводится (по требованию): название продукта, его подпись
- *  «Security Console», названия инструментов (garak, Promptfoo, PyRIT,
- *  HarmBench, JailbreakBench, BIPIA, AgentDojo), вердикты PASS / FAIL /
- *  UNSCORED / SKIPPED, идентификаторы моделей и прогонов, команды CLI.
- */
 import { createContext, useContext } from 'react'
 
 export const RU = {
@@ -385,9 +372,9 @@ export const RU = {
   '{n} мин назад': '{n} мин назад',
   '{n} ч назад': '{n} ч назад',
   '{n} дн назад': '{n} дн назад',
-  'admin': 'admin',
-  'operator': 'operator',
-  'viewer': 'viewer',
+  'admin': 'Администратор',
+  'operator': 'Оператор',
+  'viewer': 'Наблюдатель',
   // --- добивка 6 ---
   'Результаты синтетические: они проверяют работу конвейера, но ничего не говорят о безопасности модели.': 'Результаты синтетические: они проверяют работу конвейера, но ничего не говорят о безопасности модели.',
   'Не установлены:': 'Не установлены:',
@@ -812,9 +799,9 @@ export const EN = {
   '{n} мин назад': '{n} min ago',
   '{n} ч назад': '{n} h ago',
   '{n} дн назад': '{n} d ago',
-  'admin': 'admin',
-  'operator': 'operator',
-  'viewer': 'viewer',
+  'admin': 'Administrator',
+  'operator': 'Operator',
+  'viewer': 'Viewer',
   // --- extra 6 ---
   'Результаты синтетические: они проверяют работу конвейера, но ничего не говорят о безопасности модели.': 'The results are synthetic: they exercise the pipeline but say nothing about the model\'s security.',
   'Не установлены:': 'Not installed:',
@@ -880,9 +867,55 @@ export const EN = {
   'Итоги по инструментам': 'Totals by tool',
   'Отчёт относится к настроенному подмножеству атак и не является сертификатом безопасности.': 'The report covers the configured subset of attacks and is not a security certificate.',
   'Пользователь {email} создан': 'User {email} created',
+  'Просадка под атакой': 'Degradation under attack',
+  'Полезность под инъекцией': 'Utility under injection',
+  'Блокировка законных действий': 'Blocking of legitimate actions',
+  '(PASS + FAIL) / всего записей': '(PASS + FAIL) / total records',
+  'Безопасность(прямые) − среднее Безопасность(обёртки)': 'Security(direct) − mean Security(wrappers)',
+  'Доля записей с вердиктом. Единица — оценено всё.': 'Share of records that received a verdict. One means everything was scored.',
+  'Насколько модель хуже под атакующей обёрткой, чем на том же наборе без неё. Ноль означает устойчивую защиту; высокое значение — защита рассыпается от переформулировки.': 'How much worse the model gets under an attacking wrapper than on the same set without one. Zero means the defence holds; a high value means it falls apart when the request is rephrased.',
+  'Справляется ли модель с законной задачей, когда в контексте лежит инъекция. Показывает цену защиты: отражение атак не стоит ничего, если попутно ломается работа.': 'Whether the model still completes a legitimate task when an injection sits in the context. Shows the price of the defence: repelling attacks is worth nothing if legitimate work breaks along the way.',
+  'Доля законных задач агента, которые не были выполнены. Показывает, не ломает ли защита нормальную работу агента.': 'Share of legitimate agent tasks that were not completed. Shows whether the defence breaks the agent\'s normal operation.',
+  'Считается только там, где есть и прямые запросы, и обёртки (roleplay, authority). Методология MLCommons AILuminate: сравнение baseline и атаки на одном наборе.': 'Only computed where both direct requests and wrappers (roleplay, authority) exist. MLCommons AILuminate methodology: baseline and attack compared on the same set.',
+  'BIPIA делает обе записи (инъекцию и полезность) в одном прогоне, поэтому «чистой» полезности на том же наборе нет. Сравнивать стоит с benign_utility_rate других инструментов, а не внутри шага.': 'BIPIA records both (injection and utility) in one run, so there is no "clean" utility on the same set. Compare against other tools\' benign_utility_rate rather than within the step.',
+  'Использует baseline-записи AgentDojo — выполнение задачи без инъекции. Если инструмент не пишет baseline, метрика не вычисляется, а не подменяется нулём.': 'Uses AgentDojo baseline records — task execution without an injection. If a tool writes no baseline, the metric is not computed instead of being replaced with zero.',
+  'Неверный email или пароль': 'Wrong email or password',
+  'Текущий пароль неверен': 'The current password is incorrect',
+  'Модель не найдена': 'Model not found',
+  'Прогон не найден': 'Run not found',
+  'Кейс не найден': 'Case not found',
+  'Версия не найдена': 'Version not found',
+  'Неизвестная роль': 'Unknown role',
+  'Этот прогон не выполняется': 'This run is not in progress',
+  'Пользователь с таким email уже существует': 'A user with this email already exists',
+  'Выберите хотя бы один инструмент': 'Select at least one tool',
+  'Эндпоинт не найден': 'Endpoint not found',
+  'Пользователь не найден': 'User not found',
+  'Сначала добавьте модель для этого эндпоинта': 'Add a model to this endpoint first',
+  'Неподдерживаемый тип файла: {suffix}': 'Unsupported file type: {suffix}',
+  'Неизвестные инструменты: {", ".join(unknown)}': 'Unknown tools: {", ".join(unknown)}',
+  'Внутренняя ошибка сервера': 'Internal server error',
+  'Отчёт ещё не готов': 'The report is not ready yet',
+  'Импорт из {path.name}': 'Import from {path.name}',
+  'Импорт файла {file.filename}': 'Import of file {file.filename}',
+  'Импортировано из {relative}': 'Imported from {relative}',
+  'Первичный импорт из комплекта': 'Initial import from the bundled set',
+  'Ветка от {parent.version}': 'Forked from {parent.version}',
+  'Правка кейса в {parent.version}': 'Case edit in {parent.version}',
+  'Ответ без choices — это не Chat Completions': 'A response without choices is not Chat Completions',
+  '(PASS + FAIL) / запланировано проверок': '(PASS + FAIL) / checks planned',
+  'Доля запланированных проверок, получивших вердикт. Единица — оценено всё, что инструмент собирался проверить.': 'Share of planned checks that received a verdict. One means everything the tool set out to check was scored.',
+  'Считается от плана, а не от числа записей в отчёте: воркер, записавший 60 из 100 проверок, даёт 60 %, а не 100 %. Плана нет у архивных прогонов и у инструментов, чей объём зависит от внутренних проб (garak, pyrit, agentdojo) — там знаменатель совпадает с числом записей. COMPLETE относится к выбранному профилю, а не ко всем атакам инструмента. Это не сертификат безопасности.': 'Computed from the plan, not from the number of records in the report: a worker that wrote 60 of 100 checks yields 60 %, not 100 %. Archived runs and tools whose volume depends on internal probes (garak, pyrit, agentdojo) have no plan — there the denominator equals the record count. COMPLETE refers to the selected profile, not to every attack a tool offers. This is not a security certificate.',
+  'Проверка сессии…': 'Checking the session…',
 }
 
 export const DICT = { ru: RU, en: EN }
+// api.js переводит тексты ошибок, которые приходят с бэкенда, но не может
+// импортировать этот модуль: он грузится раньше, и ES-цикл ломал
+// `createContext` ниже («createContext is not defined» — падал весь вход в
+// систему). Кладём словарь в глобальный реестр, чтобы клиент брал его во
+// время вызова, когда модуль уже инициализирован.
+globalThis.__CYBRA_DICT__ = DICT
 export const LANGS = [
   { code: 'ru', label: 'Русский', short: 'RU' },
   { code: 'en', label: 'English', short: 'EN' },

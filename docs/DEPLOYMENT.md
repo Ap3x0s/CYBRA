@@ -74,9 +74,27 @@ is sent over plain HTTP.
 Or with compose, which also sets a restart policy:
 
 ```bash
-printf 'CYBRA_SECRET_KEY=%s\n' "<key>" > .env
+printf 'CYBRA_SECRET_KEY=%s\n' "<key>" > docker/.env
+docker compose -f docker/compose.prod.yaml pull
 docker compose -f docker/compose.prod.yaml up -d
 ```
+
+`compose.prod.yaml` deliberately has no `build:` section. It pulls. With
+`build:` compose quietly assembles the image from the local context and
+overwrites the same tag, so two machines end up running two different builds
+under one name — the exact thing a shared container deployment is meant to
+prevent. Only CI builds and publishes.
+
+Point the file at a specific registry with `CYBRA_IMAGE`:
+
+```bash
+CYBRA_IMAGE=registry.example.com/<namespace>/cybra:latest \
+  docker compose -f docker/compose.prod.yaml up -d
+```
+
+`pull_policy: always` is set for the same reason: if the image is missing
+locally, compose would otherwise try to build it from the context and fail with
+an obscure error.
 
 Open `http://<host>:8000`. On first start the admin password is printed to the
 log once; change it in **Settings**.
@@ -120,14 +138,17 @@ rather than a guarantee.
 
 ## What is not built
 
-**Desktop application.** The design document lists `cybra.exe` (PyInstaller) as
-a second delivery channel for offline local use. It is not implemented: the
-docker path is the one being delivered first. The web console works in a browser
-on the same machine, so the exe adds convenience (a double-click, no terminal)
-rather than capability. If it is built, the honest scope is: UI + API + clean
-adapters, no heavy benchmarks — the same trade-off the image makes.
+**Desktop application — decided as "later", not "no".** The design document
+lists `cybra.exe` (PyInstaller) as a second delivery channel for offline local
+use. It is not implemented. The decision taken: the browser format is the
+current deliverable, the exe is a later block of work. The web console works in
+a browser on the same machine, so the exe adds convenience (a double-click, no
+terminal) rather than capability. When it is built, the honest scope is: UI +
+API + clean adapters, no heavy benchmarks — the same trade-off the image makes.
 
-**PWA.** `frontend/public/manifest.webmanifest` is present, so the console can be
-installed to the home screen on a phone or desktop, but there is no service
-worker: without a connection the app does not load. The manifest makes it feel
-like an app; it is not an offline application.
+**PWA offline mode.** `frontend/public/manifest.webmanifest` is present, so the
+console can be installed to the home screen on a phone or desktop, but there is
+no service worker: without a connection the app does not load. The manifest
+makes it feel like an app; it is not an offline application. This is deliberate
+for now — the benchmarks themselves need network access to reach a model
+endpoint, so an offline shell would open onto screens that cannot do anything.

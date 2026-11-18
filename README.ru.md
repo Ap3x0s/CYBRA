@@ -68,7 +68,7 @@ docker run -p 8000:8000 -v cybra-data:/data cybra/cybra
 находить `datasets/` и `var/`.
 
 ```bash
-docker compose -f docker/compose.prod.yaml up -d   # нужен CYBRA_SECRET_KEY в .env
+docker compose -f docker/compose.prod.yaml up -d   # только тянет, не собирает; нужен docker/.env
 ```
 
 ### Из исходников

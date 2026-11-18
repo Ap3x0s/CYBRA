@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { can, useAuth } from './auth'
 import { Loading } from './components'
 import AnimatedBackdrop from './components/AnimatedBackdrop'
+import { useI18n } from './i18n-context'
 import Datasets from './pages/Datasets'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
@@ -16,7 +17,8 @@ import Topbar from './pages/Topbar'
 
 function Protected({ children }) {
   const { user, ready } = useAuth()
-  if (!ready) return <Loading label="Проверка сессии…" />
+  const { t } = useI18n()
+  if (!ready) return <Loading label={t('Проверка сессии…')} />
   if (!user) return <Navigate to="/login" replace />
   return children
 }
@@ -29,8 +31,9 @@ function Admin({ children }) {
 
 export default function App() {
   const { user, ready } = useAuth()
+  const { t } = useI18n()
 
-  if (!ready) return <Loading label="Проверка сессии…" />
+  if (!ready) return <Loading label={t('Проверка сессии…')} />
 
   return (
     <Routes>

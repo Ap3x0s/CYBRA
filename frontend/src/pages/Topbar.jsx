@@ -220,7 +220,10 @@ export default function Topbar() {
                 <span className="account-text">
                   <span className="account-name">{name}</span>
                   <span className="account-mail">{user?.email}</span>
-                  <span className="account-role">{user?.role}</span>
+                  {/* Роль приходит с бэкенда английским ключом (admin,
+                      operator, viewer). Раньше она рендерилась без t(), и в
+                      английском интерфейсе оставалась русская подпись. */}
+                  <span className="account-role">{t(user?.role || '')}</span>
                 </span>
               </div>
               <div className="popover-sep" />

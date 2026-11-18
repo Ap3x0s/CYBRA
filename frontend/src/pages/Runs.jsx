@@ -44,7 +44,7 @@ export default function Runs() {
           <PageSearch
             value={query}
             onChange={setQuery}
-            placeholder="Поиск по прогонам…"
+            placeholder={t('Поиск по прогонам…')}
             width={280}
           />
           <Link className="btn primary" to="/runs/new">

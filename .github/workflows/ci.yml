@@ -1,40 +1,110 @@
+# CI/CD для CYBRA — схема DevSecOps, 18 этапов.
+#
+# Здесь та же схема, что в .gitlab-ci.yml. Разница площадок описана честно:
+# GitHub Actions имеет docker нативно (не нужен dind-сервис) и встроенный
+# реестр ghcr.io, доступный через GITHUB_TOKEN без секретов — поэтому полный
+# цикл, включая публикацию образа, работает и здесь.
+#
+# Соответствие 18 этапам:
+#
+#   №  Этап схемы              Где в этом файле
+#   0  Локальные pre-commit    validate:precommit
+#   1  Ветка + MR              on: pull_request + branch protection (см. ниже)
+#   2  Format                  ✖ ruff format не подключён в проекте
+#   3  Lint                    lint:backend, lint:frontend
+#   4  Unit tests (compile)    test:unit; компиляции нет — Python/JS
+#   5  SAST                    security:sast (bandit, только HIGH)
+#   6  Secrets scan            security:secrets (gitleaks по истории)
+#   7  IaC / K8s / CI scan     security:iac
+#   8  Build (+ SBOM)          build:image, build:sbom
+#   9  SCA / Image scan        security:sca (+ лицензии), security:image
+#  10  Deploy to Test          deploy:test
+#  11  DAST                    ✖ требует стенда с моделью; ручная процедура
+#  12  Smoke / Integration     deploy:test (проверка API и SPA)
+#  13  Подписание артефактов   release:checksums (SHA256SUMS)
+#  14  Release                 release:publish (публикация версионного тега)
+#  15  Approve to Prod         deploy:prod (environment: production)
+#  16  Deploy to Prod          deploy:prod
+#  17  Smoke после деплоя      deploy:prod (второй шаг)
+#  18  Rollback                rollback (workflow_dispatch)
+#
+# Ветка + MR (этап 1): правила запускаются на pull_request, но чтобы в main
+# нельзя было пушить напрямую, включи branch protection в
+# Settings → Branches → Add rule → Require a pull request before merging.
+#
+# Публикация образа идёт в GitHub Container Registry (ghcr.io) — он не требует
+# секретов: GITHUB_TOKEN с packages: write выдаётся автоматически.
+
 name: CI
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  schedule:
+    # Еженедельный прогон ловит уязвимости, появившиеся в неизменённых
+    # зависимостях: база CVE обновляется чаще, чем код.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      rollback_tag:
+        description: 'Этап 18: тег, на который откатываем latest'
+        required: false
+
+permissions:
+  contents: read
+  packages: write      # публикация в ghcr.io
+  security-events: write
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '22'
+  SECURITY_REPORTS: security-reports
+  REGISTRY: ghcr.io
 
 jobs:
-  backend:
+  # ====================================================================
+  # №0, №2-3. Валидация: pre-commit, формат, линтеры
+  # ====================================================================
+
+  # Этап 0 — локальные pre-commit. Проверяем, что хук на месте и исполняем:
+  # иначе «у меня локально проходило» остаётся словами.
+  validate:precommit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e backend
-          pip install pytest httpx ruff
-      - name: Lint
-        # Without --config: ruff finds ruff.toml in the repo root, where the
-        # per-file-ignores are written relative to the root. Pointing it at
-        # backend/pyproject.toml made ruff resolve "cybra/api.py" from backend/
-        # into backend/backend/cybra/api.py, so 83 B008 findings fired on every
-        # FastAPI route despite the ignore being declared.
-        run: ruff check backend scan
-      - name: Tests
-        run: pytest tests/ -q
+          pip install ruff pytest httpx
+      - name: pre-commit хук на месте
+        run: |
+          test -x scripts/precommit.sh
+          test -x scripts/install_git_hooks.sh
+          echo "скрипты хука исполняемы"
+      - name: Те же проверки, что в хуке
+        run: |
+          ruff check backend scan
+          python scripts/audit_i18n_keys.py
 
-  frontend:
+  # Этап 2 — Format: ruff format в проекте НЕ подключён (`--check`
+  # переформатировал бы 18 файлов). Включать в CI значит получить красный
+  # пайплайн на ровном месте. Действующее правило проверяет ruff check.
+  # Шага нет намеренно — здесь только пояснение для ревьюера.
+
+  # Этап 3 — Lint фронта: сборка ловит и синтаксис, и битые импорты.
+  lint:frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
       - name: Install
         working-directory: frontend
         run: npm ci --no-audit --no-fund
@@ -42,21 +112,409 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  docker:
+  # ====================================================================
+  # №4. Unit tests
+  # ====================================================================
+
+  test:unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Static Dockerfile checks
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
         run: |
+          python -m pip install --upgrade pip
           pip install -e backend
-          python scripts/check_dockerfile.py
-      - name: Build image
-        run: docker build -f docker/Dockerfile -t cybra/cybra:ci .
-      - name: Smoke test
+          pip install pytest httpx
+      - name: Tests
+        env:
+          # Тесты пишут БД и прогоны в var/ — единственный writable путь
+          # кроме /tmp на раннере.
+          CYBRA_DATA_DIR: ${{ github.workspace }}/.ci-data
         run: |
-          docker run -d --name cybra-ci -p 8000:8000 cybra/cybra:ci
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/api/v1/health; then exit 0; fi
+          mkdir -p "$CYBRA_DATA_DIR"
+          pytest tests/ -q --junitxml=report.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-report
+          path: report.xml
+
+  # ====================================================================
+  # №5-7. Безопасность: SAST, секреты, IaC
+  # ====================================================================
+
+  # Этап 5 — SAST. ruff-B (bugbear) плюс bandit по высокому уровню.
+  security:sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e backend
+          pip install ruff bandit
+      - name: ruff
+        run: ruff check backend scan
+      - name: bandit (только HIGH)
+        run: |
+          mkdir -p "$SECURITY_REPORTS"
+          bandit -r backend/cybra scan security_suite -ll -f txt -o "$SECURITY_REPORTS/bandit.txt" || true
+          cat "$SECURITY_REPORTS/bandit.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: ${{ env.SECURITY_REPORTS }}/bandit.txt
+
+  # Этап 6 — Secrets scan. fetch-depth: 0 обязателен: секрет остаётся в
+  # истории даже после удаления файла, и мелкий клон его не увидит.
+  security:secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: .env не отслеживается
+        run: |
+          if git ls-files | grep -qE '(^|/)\.env$'; then
+            echo "FAIL: .env попал в индекс"
+            exit 1
+          fi
+          echo ".env не отслеживается"
+
+  # Этап 7 — IaC / CI scan. Опечатка в конфиге пайплайна ломает все job'ы
+  # сразу, поэтому проверяем и его, а не только Dockerfile.
+  security:iac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e backend
+          pip install pyyaml
+      - name: Dockerfile
+        run: python scripts/check_dockerfile.py
+      - name: Пайплайн GitLab
+        run: python scripts/check_pipeline.py
+      - name: .dockerignore
+        run: sh scripts/check_dockerignore.sh
+      - name: Валидация собственного workflow
+        # Скрипт в файле, а не heredoc: вложенные кавычки и \ в
+        # YAML-блоке ломают парсер на ровном месте (проверено на GitLab CI).
+        run: python scripts/check_github_workflow.py
+
+  # ====================================================================
+  # №8-9. Сборка, SBOM, SCA, скан образа
+  # ====================================================================
+
+  # Этапы 8-9 — сборка образа и публикация в ghcr.io.
+  # Сборка и публикация в одном job'е: на GitHub docker нативный, но
+  # публиковать надо в том же шаге, где собран образ — иначе его нет.
+  build:image:
+    runs-on: ubuntu-latest
+    needs: [test:unit, security:sast]
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Метаданные образа
+        id: meta
+        run: |
+          # ghcr.io требует нижний регистр: Ap3x0s/CYBRA → ap3x0s/cybra
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "образ: $image"
+      - uses: docker/setup-buildx-action@v3
+      - name: Login в ghcr.io
+        # На pull_request из форка GITHUB_TOKEN без packages: write — честно
+        # пропускаем публикацию, а не краснеем.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Сборка
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Публикация
+        if: github.event_name != 'pull_request' && (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/'))
+        run: |
+          docker push "${{ steps.meta.outputs.image }}:${{ github.sha }}"
+          docker push "${{ steps.meta.outputs.image }}:latest"
+      - name: Digest
+        run: |
+          docker image inspect "${{ steps.meta.outputs.image }}:${{ github.sha }}" \
+            --format '{{index .RepoDigests 0}}' > image-digest.txt || true
+          cat image-digest.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-digest
+          path: image-digest.txt
+
+  # Этап 8 — SBOM: перечень компонентов образа.
+  build:sbom:
+    runs-on: ubuntu-latest
+    needs: [build:image]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Сборка образа для SBOM
+        run: docker build -f docker/Dockerfile -t cybra:sbom .
+      - name: syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin
+          mkdir -p "$SECURITY_REPORTS"
+          syft cybra:sbom -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json"
+          syft cybra:sbom -o table | head -40
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: ${{ env.SECURITY_REPORTS }}/sbom.spdx.json
+
+  # Этап 9 — SCA: уязвимости зависимостей И проверка лицензий.
+  security:sca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e backend
+          pip install pip-audit pip-licenses
+      - name: Уязвимые зависимости
+        run: pip-audit --desc --skip-editable || echo "найдены уязвимости, см. выше"
+      - name: Лицензии зависимостей
+        run: |
+          mkdir -p "$SECURITY_REPORTS"
+          pip-licenses --format=csv --with-urls --output-file="$SECURITY_REPORTS/licenses.csv"
+          pip-licenses --format=markdown --order=license | head -40
+          echo "--- GPL/AGPL в поставке ---"
+          pip-licenses --format=csv | grep -iE 'GPL|AGPL' && echo "WARN — найден GPL" || echo "GPL/AGPL не найдено"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: licenses
+          path: ${{ env.SECURITY_REPORTS }}/licenses.csv
+
+  # Этап 9b — скан образа: HIGH/CRITICAL не блокируют, потому что базовый
+  # python:3.12-slim регулярно имеет свежие CVE, и красный пайплайн из-за
+  # них приучил бы игнорировать красное.
+  security:image:
+    runs-on: ubuntu-latest
+    needs: [build:image]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Сборка
+        run: docker build -f docker/Dockerfile -t cybra:scan .
+      - name: trivy
+        continue-on-error: true
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin
+          mkdir -p "$SECURITY_REPORTS"
+          trivy image --severity HIGH,CRITICAL --format table cybra:scan | head -40
+          trivy image --severity HIGH,CRITICAL --format sarif \
+            --output "$SECURITY_REPORTS/trivy.sarif" cybra:scan || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: ${{ env.SECURITY_REPORTS }}/trivy.sarif
+
+  # ====================================================================
+  # №10, №12. Тестовый контур: развёртывание и smoke
+  # ====================================================================
+  # Один job: образ собран в предыдущем шаге и здесь же поднимается.
+  # Проверяем и API, и отдачу SPA: health-чек ловит «не стартует»,
+  # grep по index.html — «стартует, но UI не собран».
+
+  deploy:test:
+    runs-on: ubuntu-latest
+    needs: [build:image, security:sca]
+    environment:
+      name: test
+      url: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Сборка
+        run: docker build -f docker/Dockerfile -t cybra:test .
+      - name: Запуск
+        run: |
+          docker run -d --name cybra-test -p 8000:8000 \
+            -e CYBRA_SECRET_KEY="ci-smoke-secret-key-not-for-production-use-32b" \
+            cybra:test
+      - name: Smoke, API
+        run: |
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8000/api/v1/health; then
+              echo "health ok after ${i} attempts"; ok=1; break
+            fi
             sleep 2
           done
-          echo "health check failed"; docker logs cybra-ci; exit 1
+          if [ "$ok" -ne 1 ]; then
+            echo "health check failed"; docker logs cybra-test; exit 1
+          fi
+          curl -fsS http://localhost:8000/api/v1/health | grep -q '"status":"ok"'
+      - name: Smoke, SPA и статика
+        run: |
+          curl -fsS http://localhost:8000/ | grep -qi '<div id="root">'
+          echo "SPA отдаётся"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8000/favicon.ico)
+          test "$code" = "200"
+          echo "favicon.ico: HTTP $code"
+      - name: Логи при падении
+        if: failure()
+        run: docker logs cybra-test
+
+  # Этап 11 — DAST. Требует живого стенда с моделью: без неё сканировать
+  # нечего, а поднимать модель в CI — гигабайты и часы. Ручная процедура
+  # в docs/VALIDATION-CYBRA.md.
+
+  # ====================================================================
+  # №13-14. Релиз: артефакты и публикация
+  # ====================================================================
+
+  # Этап 13 — Подписание артефактов. cosign keyless требует OIDC-провайдера,
+  # но работающая часть того же этапа — контрольные суммы: по ним получатель
+  # проверяет, что скачанные SBOM и digest не подменены по дороге.
+  release:checksums:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build:sbom, build:image]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ env.SECURITY_REPORTS }}
+      - name: SHA256SUMS
+        run: |
+          python scripts/make_checksums.py "$SECURITY_REPORTS"
+          echo "--- проверка сумм ---"
+          cd "$SECURITY_REPORTS" && sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: ${{ env.SECURITY_REPORTS }}/SHA256SUMS
+          retention-days: 90
+
+  # Этап 14 — Release: публикация версионного тега образа. latest
+  # перезаписывается ветками, а версия должна быть неизменной.
+  release:publish:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build:image]
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Публикация тега
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          docker pull "$image:${GITHUB_SHA}" && docker tag "$image:${GITHUB_SHA}" "$image:${GITHUB_REF_NAME}"
+          docker push "$image:${GITHUB_REF_NAME}"
+          echo "опубликовано: $image:${GITHUB_REF_NAME}"
+
+  # ====================================================================
+  # №15-17. Продакшен: подтверждение, деплой, smoke
+  # ====================================================================
+
+  # Этапы 15-17 — самое важное: environment: production.
+  # Чтобы этап 15 работал по схеме, в Settings → Environments → production
+  # включи Required reviewers: тогда job висит, пока его не подтвердит
+  # человек с правами. Без этой настройки GitHub запустит job сразу.
+  deploy:prod:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [release:publish]
+    environment:
+      name: production
+      url: http://localhost:8080
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Деплой
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "развёртывание $image:${GITHUB_REF_NAME} в продакшен-контур"
+          docker pull "$image:${GITHUB_REF_NAME}"
+          docker run -d --name cybra-prod -p 8080:8000 \
+            -e CYBRA_SECRET_KEY="${{ secrets.CYBRA_PROD_SECRET_KEY }}" \
+            "$image:${GITHUB_REF_NAME}"
+      - name: Smoke после деплоя
+        run: |
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8080/api/v1/health; then
+              echo "prod health ok after ${i} attempts"; ok=1; break
+            fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "prod health failed"; docker logs cybra-prod; exit 1
+          fi
+          curl -fsS http://localhost:8080/api/v1/health | grep -q '"status":"ok"'
+      - name: Логи при падении
+        if: failure()
+        run: docker logs cybra-prod
+
+  # ====================================================================
+  # №18. Rollback
+  # ====================================================================
+  # Возврат latest на предыдущий опубликованный тег. Ручной запуск:
+  # автоматический откат по красному smoke — отдельное решение, не догадка.
+
+  rollback:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback_tag != ''
+    environment:
+      name: production
+      url: http://localhost:8080
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Откат latest
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          tag="${{ github.event.inputs.rollback_tag }}"
+          docker pull "$image:$tag"
+          docker tag "$image:$tag" "$image:latest"
+          docker push "$image:latest"
+          echo "latest возвращён на $tag"

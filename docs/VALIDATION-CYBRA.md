@@ -43,8 +43,9 @@ obtained are the result of our judge, not the official benchmark metric.
 measured. ASR is the verdict of a judge model, not measured truth. All FAILs and
 a random sample of PASSes should be reviewed manually.
 
-**exe build.** A PyInstaller configuration has not been created: the exe is the second delivery
-channel, the docker path is made first.
+**exe build.** A PyInstaller configuration has not been created. The decision:
+the browser format is the current deliverable, the exe is a later block of work
+— not a rejection. See [DEPLOYMENT.md](DEPLOYMENT.md#what-is-not-built).
 
 ## How to reproduce the verification
 

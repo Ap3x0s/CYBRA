@@ -180,6 +180,74 @@ class TestAgentFalseBlockRate:
 
 # ------------------------------------------------------------- Catalog link
 
+class TestCoverageUsesPlan:
+    """Coverage делит на ПЛАН, а не на число записей в отчёте.
+
+    Исходный дефект: 100 запланированных проверок, воркер записал 60, все 60
+    получили вердикт — формула (60+0)/60 показывала 100 % полноты. Числитель
+    и знаменатель сжимались вместе, и метрика врала ровно тогда, когда её
+    читают: при частично упавшем воркере.
+    """
+
+    def test_partial_worker_is_not_full_coverage(self):
+        """60 записей из 100 запланированных = 60 %, а не 100 %."""
+        step = make_step(tool='promptfoo', planned=100, counts={
+            'PASS': 60, 'FAIL': 0, 'ERROR': 0, 'UNSCORED': 0, 'SKIPPED': 0})
+        assert M._rate(step, 'coverage') == pytest.approx(0.60)
+
+    def test_full_worker_is_full_coverage(self):
+        step = make_step(tool='promptfoo', planned=60, counts={
+            'PASS': 60, 'FAIL': 0, 'ERROR': 0, 'UNSCORED': 0, 'SKIPPED': 0})
+        assert M._rate(step, 'coverage') == pytest.approx(1.0)
+
+    def test_errors_reduce_coverage(self):
+        """Ошибки — часть плана, но вердикта у них нет."""
+        step = make_step(tool='jailbreakbench', planned=40, counts={
+            'PASS': 34, 'FAIL': 1, 'ERROR': 5, 'UNSCORED': 0, 'SKIPPED': 0})
+        # 35 оценённых из 40 запланированных.
+        assert M._rate(step, 'coverage') == pytest.approx(0.875)
+
+    def test_without_plan_falls_back_to_records(self):
+        """Архивные прогоны: плана нет, падаем на число записей."""
+        step = make_step(tool='harmbench', planned=None, counts={
+            'PASS': 6, 'FAIL': 2, 'ERROR': 0, 'UNSCORED': 0, 'SKIPPED': 0})
+        assert M._rate(step, 'coverage') == pytest.approx(1.0)
+
+    def test_nothing_planned_returns_none(self):
+        """Пустой шаг: не 0 и не деление на ноль."""
+        step = make_step(tool='bipia', planned=0, counts={
+            'PASS': 0, 'FAIL': 0, 'ERROR': 0, 'UNSCORED': 0, 'SKIPPED': 0})
+        assert M._rate(step, 'coverage') is None
+
+
+class TestPlannedTotal:
+    """planned_total() в run.py берёт план из артефактов инструмента."""
+
+    def test_uses_selected_cases_file(self, tmp_path):
+        """План, записанный самим инструментом, точнее любой оценки."""
+        from run import planned_total
+
+        (tmp_path / 'selected_cases.json').write_text(
+            json.dumps([{'id': i} for i in range(100)]), encoding='utf-8')
+        rows = [{'status': 'PASS'}] * 60
+        assert planned_total(tmp_path, {'tool': 'harmbench'}, rows) == 100
+
+    def test_never_less_than_actual(self, tmp_path):
+        """План не может быть меньше факта — иначе полнота > 100 %."""
+        from run import planned_total
+
+        (tmp_path / 'selected_cases.json').write_text(
+            json.dumps([{'id': 0}]), encoding='utf-8')
+        rows = [{'status': 'PASS'}] * 5
+        assert planned_total(tmp_path, {'tool': 'harmbench'}, rows) >= 5
+
+    def test_no_artifacts_falls_back_to_rows(self, tmp_path):
+        from run import planned_total
+
+        rows = [{'status': 'PASS'}] * 7
+        assert planned_total(tmp_path, {'tool': 'unknown-tool'}, rows) == 7
+
+
 class TestCatalogIntegrity:
     def test_every_catalog_metric_has_implementation(self):
         """Каждая метрика каталога должна считаться.
