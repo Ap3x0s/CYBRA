@@ -57,15 +57,14 @@ Notes that cost time to rediscover:
 python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 
 # 2. Pull and run
-docker login registry.example.com
-docker pull registry.example.com/<namespace>/cybra:latest
+docker pull ap3x0/cybra:latest
 
 docker run -d --name cybra \
   -p 8000:8000 \
   -v cybra-data:/data \
   -e CYBRA_SECRET_KEY="<the key from step 1>" \
   -e CYBRA_COOKIE_SECURE=1 \
-  registry.example.com/<namespace>/cybra:latest
+  ap3x0/cybra:latest
 ```
 
 `CYBRA_COOKIE_SECURE=1` is required behind HTTPS. Without it the session cookie
@@ -88,7 +87,7 @@ prevent. Only CI builds and publishes.
 Point the file at a specific registry with `CYBRA_IMAGE`:
 
 ```bash
-CYBRA_IMAGE=registry.example.com/<namespace>/cybra:latest \
+CYBRA_IMAGE=ap3x0/cybra:latest \
   docker compose -f docker/compose.prod.yaml up -d
 ```
 
@@ -127,7 +126,7 @@ state; the container itself is disposable.
 ## Updating
 
 ```bash
-docker pull registry.example.com/<namespace>/cybra:latest
+docker pull ap3x0/cybra:latest
 docker compose -f docker/compose.prod.yaml up -d
 ```
 

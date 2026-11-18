@@ -56,15 +56,14 @@ push в main
 python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 
 # 2. Стянуть и запустить
-docker login registry.example.com
-docker pull registry.example.com/<namespace>/cybra:latest
+docker pull ap3x0/cybra:latest
 
 docker run -d --name cybra \
   -p 8000:8000 \
   -v cybra-data:/data \
   -e CYBRA_SECRET_KEY="<ключ из шага 1>" \
   -e CYBRA_COOKIE_SECURE=1 \
-  registry.example.com/<namespace>/cybra:latest
+  ap3x0/cybra:latest
 ```
 
 `CYBRA_COOKIE_SECURE=1` обязателен за HTTPS. Без него сессионная cookie
@@ -87,7 +86,7 @@ compose молча собирает образ из локального кон�
 Указать конкретный registry можно через `CYBRA_IMAGE`:
 
 ```bash
-CYBRA_IMAGE=registry.example.com/<namespace>/cybra:latest \
+CYBRA_IMAGE=ap3x0/cybra:latest \
   docker compose -f docker/compose.prod.yaml up -d
 ```
 
@@ -125,7 +124,7 @@ secret.key       только если CYBRA_SECRET_KEY не задан
 ## Обновление
 
 ```bash
-docker pull registry.example.com/<namespace>/cybra:latest
+docker pull ap3x0/cybra:latest
 docker compose -f docker/compose.prod.yaml up -d
 ```
 

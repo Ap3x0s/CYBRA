@@ -6,6 +6,11 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/ap3x0/cybra)](https://hub.docker.com/r/ap3x0/cybra)
+[![Image Size](https://img.shields.io/docker/image-size/ap3x0/cybra/latest)](https://hub.docker.com/r/ap3x0/cybra)
+[![Pipeline](https://gitlab.com/Ap3x0/cybra/badges/main/pipeline.svg)](https://gitlab.com/Ap3x0/cybra/-/pipelines)
+
+
 </div>
 
 CYBRA runs eight independent LLM security benchmarks against any
@@ -204,18 +209,17 @@ CI runs tests and the linter on every push to `main` and on pull requests:
 
 The GitHub pipeline is the public mirror: it proves the code is sound but
 throws the image away. The GitLab one is the delivery path — it publishes
-`<registry>/<namespace>/cybra:<commit-sha>` and `:latest`, and its `verify`
+`ap3x0/cybra:<commit-sha>` and `:latest`, and its `verify`
 stage pulls that pushed image back and waits for `/api/v1/health`. An image
 counts as delivered only if it actually starts.
 
 Deploying that artefact on any machine:
 
 ```bash
-docker login registry.example.com
-docker pull registry.example.com/<namespace>/cybra:latest
+docker pull ap3x0/cybra:latest
 docker run -p 8000:8000 -v cybra-data:/data \
   -e CYBRA_SECRET_KEY="<generate: 32 random bytes, urlsafe base64>" \
-  registry.example.com/<namespace>/cybra:latest
+  ap3x0/cybra:latest
 ```
 
 Generate the key with:

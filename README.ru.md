@@ -6,6 +6,11 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/ap3x0/cybra)](https://hub.docker.com/r/ap3x0/cybra)
+[![Image Size](https://img.shields.io/docker/image-size/ap3x0/cybra/latest)](https://hub.docker.com/r/ap3x0/cybra)
+[![Pipeline](https://gitlab.com/Ap3x0/cybra/badges/main/pipeline.svg)](https://gitlab.com/Ap3x0/cybra/-/pipelines)
+
+
 </div>
 
 CYBRA прогоняет восемь независимых бенчмарков безопасности LLM по любой
@@ -202,18 +207,17 @@ CI прогоняет тесты и линтер на каждый push в `main
 
 GitHub-пайплайн — публичное зеркало: он подтверждает, что код цел, но образ
 выбрасывает. GitLab — путь доставки: он публикует
-`<registry>/<namespace>/cybra:<commit-sha>` и `:latest`, а стадия `verify`
+`ap3x0/cybra:<commit-sha>` и `:latest`, а стадия `verify`
 стягивает уже запушенный образ обратно и ждёт `/api/v1/health`. Образ
 считается доставленным, только если он реально стартует.
 
 Развернуть этот артефакт на любой машине:
 
 ```bash
-docker login registry.example.com
-docker pull registry.example.com/<namespace>/cybra:latest
+docker pull ap3x0/cybra:latest
 docker run -p 8000:8000 -v cybra-data:/data \
   -e CYBRA_SECRET_KEY="<сгенерируйте: 32 случайных байта в urlsafe base64>" \
-  registry.example.com/<namespace>/cybra:latest
+  ap3x0/cybra:latest
 ```
 
 Ключ генерируется так:
