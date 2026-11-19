@@ -1,6 +1,10 @@
 # CYBRA runtime and local state
 var/
 var-test/
+# Временный каталог с базой прогонов для проверки первого пароля. Внутри
+# secret.key — ключ шифрования эндпоинтов этой машины, и initial-password.
+# Правило var-test/ его не покрывал: имя другое, каталог оставался видимым.
+var-test-initpass/
 .venv/
 node_modules/
 frontend/dist/
@@ -179,3 +183,38 @@ scripts/fix_react_report.py
 scripts/fix_print_breaks.py
 scripts/fix_md_download.py
 scripts/fix_md_paths.py
+
+# Одноразовые скрипты задачи «общий вердикт судьи» и уборки.
+# Каждый выполнил свою проверку или правку: результат в коде и в тестах,
+# сам скрипт ценности не несёт. Два из них (check_all_md, .probe_site)
+# содержали пароль локальной установки — в историю он не попал, но держать
+# такие файлы в репозитории нельзя.
+.fix_ci2.py
+.probe_lang.py
+.probe_site.py
+scripts/add_logo_topbar.py
+scripts/check_all_md.py
+scripts/check_initial_password_perm.py
+scripts/check_jira_not_in_image.py
+scripts/check_md_chars.py
+scripts/check_md_name.py
+scripts/cleanup_accent_preview.py
+scripts/compare_accent.py
+scripts/deep_md_check.py
+scripts/fix_md_format.py
+scripts/fix_react_print.py
+scripts/prepare_logo.py
+scripts/prepare_logo2.py
+scripts/prepare_logo3.py
+scripts/purge_secret_history.py
+scripts/restore_logo_placeholder.py
+scripts/wrap_missing_t.py
+
+# Материалы бренда, которые нигде не используются. Держим локально: могут
+# понадобиться для соцсетей и аватаров, но в репозитории это лишний вес.
+docs/brand/small-app-icon.png
+scripts/make_avatar_variants.py
+
+# Внутренняя страница предпросмотра иконок: не подключена в роутинг и
+# пользователю недоступна. Держим локально как рабочий инструмент дизайна.
+frontend/src/pages/IconsPreview.jsx
