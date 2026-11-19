@@ -92,9 +92,9 @@ export function Banner({ tone = '', children }) {
   return <div className={`banner ${tone}`}>{children}</div>
 }
 
-export function Field({ label, help, children }) {
+export function Field({ label, help, children, className }) {
   return (
-    <div className="field">
+    <div className={className ? `field ${className}` : 'field'}>
       {label ? <label>{label}</label> : null}
       {children}
       {help ? <span className="help">{help}</span> : null}
