@@ -161,3 +161,89 @@ def test_reset_password_unknown_user(fresh_data_dir):
     from cybra.__main__ import main as cli
 
     assert cli(['reset-password', 'nobody@example.com']) == 1
+
+
+def test_reset_updates_marker_file(fresh_data_dir):
+    """reset-password обновляет файл, а не оставляет в нём прежний пароль.
+
+    Дефект: файл писался один раз при первом старте. После сброса в нём
+    оставался СТАРЫЙ пароль — а README советует читать именно файл, то есть
+    следующий оператор шёл за заведомо нерабочим значением.
+    """
+    from sqlalchemy import select
+
+    from cybra.__main__ import main as cli
+
+    marker = fresh_data_dir / 'initial-password'
+    before = marker.read_text(encoding='utf-8').strip()
+
+    assert cli(['reset-password', 'admin@cybra.local', 'fresh-pass-456']) == 0
+
+    after = marker.read_text(encoding='utf-8').strip()
+    assert after == 'fresh-pass-456', f'файл не обновлён, в нём {after!r}'
+    assert after != before
+
+    # И этот пароль действительно подходит.
+    from cybra.db import SessionLocal
+    from cybra.models import User
+    from cybra.security import verify_password
+
+    db = SessionLocal()
+    try:
+        admin = db.scalar(select(User).where(User.email == 'admin@cybra.local'))
+        assert verify_password(admin.password_hash, 'fresh-pass-456')
+    finally:
+        db.close()
+
+
+def test_reset_does_not_create_marker_when_absent(fresh_data_dir):
+    """Нет файла — reset не создаёт его заново: он нужен только для первого входа."""
+    from cybra.__main__ import main as cli
+
+    marker = fresh_data_dir / 'initial-password'
+    marker.unlink()
+
+    assert cli(['reset-password', 'admin@cybra.local', 'another-pass-789']) == 0
+    assert not marker.exists(), 'файл создан заново, хотя не должен'
+
+
+def test_change_password_removes_marker(fresh_data_dir):
+    """Смена пароля через API удаляет файл первого старта.
+
+    Дефект: README обещал «после смены файл не нужен», но код его не удалял.
+    Старый пароль переставал работать, а файл продолжал лежать в каталоге,
+    который бэкапят и монтируют в контейнер.
+    """
+    from cybra.api import change_password
+    from cybra.config import settings
+    from cybra.schemas import PasswordIn
+
+    marker = fresh_data_dir / 'initial-password'
+    assert marker.exists()
+
+    current = marker.read_text(encoding='utf-8').strip()
+
+    from cybra.db import SessionLocal
+    from cybra.models import Session as DbSession
+    from cybra.models import User
+    from cybra.security import create_session
+    from sqlalchemy import select
+
+    db = SessionLocal()
+    try:
+        admin = db.scalar(select(User).where(User.email == 'admin@cybra.local'))
+        _token, session = create_session(db, admin, 'pytest')
+
+        class FakeRequest:
+            state = type('S', (), {'session': session})()
+            # check_csrf пропускает безопасные методы и читает заголовки.
+            method = 'POST'
+            headers = {'x-csrf-token': session.csrf_token}
+
+        change_password(PasswordIn(current_password=current, new_password='changed-by-ui-999'),
+                        FakeRequest(), user=admin, db=db)
+    finally:
+        db.close()
+
+    assert not marker.exists(), 'файл первого старта не удалён после смены пароля'
+    assert settings.data_dir.exists()

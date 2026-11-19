@@ -50,6 +50,22 @@ def _reset_password(argv: list[str]) -> int:
 
     print(f'пароль для {email} установлен:', flush=True)
     print(f'  {password}', flush=True)
+
+    # Обновляем файл первого старта, если он есть: иначе там останется
+    # прежний пароль, и следующий оператор пойдёт читать именно файл —
+    # это первое, что советует README. Файл не создаём заново: он нужен
+    # только для первичного доступа, а после сброса пароль уже напечатан.
+    from .config import settings
+
+    marker = settings.data_dir / 'initial-password'
+    if marker.exists():
+        try:
+            marker.write_text(password + '\n', encoding='utf-8')
+            marker.chmod(0o600)
+            print(f'  файл обновлён: {marker}', flush=True)
+        except OSError:
+            pass
+
     print('смените его в «Настройках» после входа.', flush=True)
     return 0
 

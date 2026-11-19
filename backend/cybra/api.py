@@ -126,6 +126,14 @@ def change_password(payload: PasswordIn, request: Request,
         raise HTTPException(status.HTTP_400_BAD_REQUEST, 'Текущий пароль неверен')
     user.password_hash = hash_password(payload.new_password)
     db.commit()
+    # Файл первого старта больше не нужен: пароль сменили, и записанный в нём
+    # старый не подходит. Держать его — значит хранить мёртвый секрет в
+    # каталоге, который бэкапят и монтируют в контейнер. Через месяц никто не
+    # вспомнит, от чего этот пароль и почему он не работает.
+    try:
+        (settings.data_dir / 'initial-password').unlink(missing_ok=True)
+    except OSError:
+        pass  # read-only каталог — не повод валить смену пароля
     return {'ok': True}
 
 
