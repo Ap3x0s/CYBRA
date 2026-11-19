@@ -139,6 +139,10 @@ export const api = {
   runProgress: (id) => request(`/runs/${id}/progress`),
   runFindings: (id, params = {}) => request(`/runs/${id}/findings${query(params)}`),
   runReport: (id, fmt = 'json') => request(`/runs/${id}/report${query({ fmt })}`),
+  // Базовый критерий вердикта: приходит с сервера, чтобы текст промта не
+  // существовал в двух копиях. Язык — параметр: интерфейс переключается
+  // мгновенно, и заготовка промта должна меняться вместе с ним.
+  judgeCriterion: (lang = 'ru') => request(`/judge/criterion${query({ lang })}`),
 
   // metrics & capabilities
   metricsCatalog: () => request('/metrics/catalog'),

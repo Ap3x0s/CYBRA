@@ -37,6 +37,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # таблица, колонка, тип
     ('run_steps', 'planned', 'INTEGER'),
+    ('runs', 'verdicts', 'JSON'),
 )
 
 

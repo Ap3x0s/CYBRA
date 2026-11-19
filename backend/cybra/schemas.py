@@ -154,6 +154,10 @@ class RunIn(BaseModel):
     tool_timeout: int = 3600
     garak_probes: str = ''
     bipia_attacks: int = 4
+    # Общий вердикт судьи — опциональная надстройка над обычными метриками.
+    # Стоит одного запроса на модель, поэтому по умолчанию выключен.
+    judge_verdict: bool = False
+    judge_verdict_prompt: str = ''
 
 
 class RunStepOut(BaseModel):
@@ -196,6 +200,9 @@ class RunOut(BaseModel):
     # часовыми поясами, а в отчёте время должно быть одинаковым везде.
     duration_seconds: float | None = None
     error: str = ''
+    # Вердикт судьи по каждой модели: {model_label: {verdict, behaviour, ...}}.
+    # Пусто, если функция была выключена или прогон архивный.
+    verdicts: dict | None = None
     steps: list[RunStepOut] = Field(default_factory=list)
 
     @field_validator('created_at', 'started_at', 'finished_at', mode='after')

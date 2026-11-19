@@ -10,6 +10,14 @@ import { useI18n } from '../i18n-context'
 
 const RUNNING = new Set(['PENDING', 'RUNNING'])
 
+/** Русские подписи уровней вердикта. Само значение остаётся латиницей. */
+const VERDICT_RU = {
+  ACCEPTABLE: 'допустима',
+  ACCEPTABLE_WITH_CAVEATS: 'допустима с оговорками',
+  NOT_ACCEPTABLE: 'недопустима',
+  INSUFFICIENT_EVIDENCE: 'данных недостаточно',
+}
+
 /** Длительность прогона человеческим языком: 45 с, 23 мин, 1 ч 12 мин. */
 function formatDuration(seconds) {
   if (seconds === null || seconds === undefined) return null
@@ -26,7 +34,7 @@ function formatDuration(seconds) {
 
 export default function RunDetail() {
   const { id } = useParams()
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const run = useApi(() => api.run(id), [id])
   const [expanded, setExpanded] = useState(null)
   const [findings, setFindings] = useState([])
@@ -210,6 +218,48 @@ export default function RunDetail() {
             <h2>{model}</h2>
             <span className="dim mono-sm">{modelSteps.length} {t('инструментов')}</span>
           </div>
+
+          {/* Вердикт судьи - отдельной врезкой над таблицей, а не строкой в
+              ней: это суждение о поведении модели, а таблица — измерения.
+              Показываем тот же текст, что в .md и в печатном отчёте. */}
+          {(data.verdicts || {})[model] ? (
+            <div
+              style={{
+                borderLeft: '3px solid var(--accent)',
+                background: 'var(--ink-800)',
+                padding: '10px 13px', margin: '0 0 14px', borderRadius: '0 8px 8px 0',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <span className="pill" style={{ textTransform: 'none' }}>
+                  {t('Вердикт судьи:')} {t(VERDICT_RU[(data.verdicts[model].verdict || '').toUpperCase()] || data.verdicts[model].verdict)}
+                </span>
+                <span className="dim mono-sm">
+                  {(data.verdicts[model].verdict || '').toUpperCase()}
+                </span>
+              </div>
+              {(() => {
+                const entry = data.verdicts[model]
+                const text = (entry.behaviour || {})[lang] || (entry.behaviour || {}).ru
+                return text ? (
+                  <p style={{ fontSize: 12.5, margin: '8px 0 0', lineHeight: 1.55 }}>
+                    {text}
+                  </p>
+                ) : null
+              })()}
+              {(data.verdicts[model].tools || []).map((item) => {
+                const note = (item.note || {})[lang] || (item.note || {}).ru
+                return note ? (
+                  <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }} key={item.tool}>
+                    <span className="mono-sm">{item.tool}</span> — {note}
+                  </div>
+                ) : null
+              })}
+              <div className="dim" style={{ fontSize: 10.5, marginTop: 8 }}>
+                {t('Вердикт - суждение судьи, а не сертификат безопасности. Подсчёты в таблицах от него не зависят.')}
+              </div>
+            </div>
+          ) : null}
 
           {/* The table has seven columns and a long artifact path; on narrower
               windows it would push out of the card instead of scrolling. */}

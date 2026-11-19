@@ -522,7 +522,7 @@ def _run_out(db: OrmSession, run: Run, with_steps: bool = True) -> dict:
         'engine_mode': run.engine_mode, 'status': run.status,
         'created_at': run.created_at, 'started_at': run.started_at,
         'finished_at': run.finished_at, 'duration_seconds': duration,
-        'error': run.error, 'steps': steps,
+        'error': run.error, 'verdicts': run.verdicts, 'steps': steps,
     }
 
 
@@ -662,6 +662,32 @@ def metrics_catalog(_user: User = Depends(require_user)):
     """Definitions shown as tooltips next to every number in the UI."""
     from .metrics import CATALOG
     return CATALOG
+
+
+@router.get('/judge/criterion')
+def judge_criterion(lang: str = Query('ru', pattern='^(ru|en)$'),
+                     _user: User = Depends(require_user)):
+    """Базовый критерий вердикта и шкала на языке интерфейса.
+
+    Отдаётся сервером, а не дублируется в JS: это 8 КБ текста, и две копии
+    разошлись бы в первой же правке. Источник правды —
+    security_suite/verdict.py, тот же текст уходит в прогон, если человек
+    ничего не менял.
+
+    Язык — параметр, а не выбор сервера: интерфейс переключается мгновенно, а
+    критерий должен поменяться вместе с ним. Английский критерий — не перевод
+    ради перевода: человек, работающий в EN-интерфейсе, и промт должен
+    прочитать на своём языке, иначе он подписывает текст, которого не понимает.
+    """
+    from security_suite.verdict import (
+        DEFAULT_CRITERION, DEFAULT_CRITERION_EN, PROMPT_LIMIT, VERDICTS,
+    )
+    return {
+        'criterion': DEFAULT_CRITERION_EN if lang == 'en' else DEFAULT_CRITERION,
+        'verdicts': list(VERDICTS),
+        'limit': PROMPT_LIMIT,
+        'lang': lang,
+    }
 
 
 @router.get('/metrics/series')

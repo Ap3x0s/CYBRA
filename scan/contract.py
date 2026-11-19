@@ -56,6 +56,11 @@ class RunRequest:
     verify_tls: bool = True
     garak_probes: str = ''
     bipia_attacks: int = 4
+    # Общий вердикт судьи — опциональная функция поверх обычных метрик.
+    # Выключен по умолчанию: это дополнительный запрос к модели-судье, и
+    # администратор должен включать его сознательно.
+    verdict_enabled: bool = False
+    verdict_prompt: str = ''
 
 
 @dataclasses.dataclass

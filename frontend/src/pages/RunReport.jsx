@@ -125,6 +125,89 @@ const H3 = {
   color: MUTED, fontWeight: 700, margin: '20px 0 9px',
 }
 
+/**
+ * Вердикт судьи в отчёте для печати.
+ *
+ * Текст берётся из summary.json (поле verdicts), а не считается здесь:
+ * иначе эта страница и report.md утверждали бы разное про один прогон.
+ * Поэтому блок показывает ТОЛЬКО то, что пришло с сервера.
+ *
+ * Оформление отличается от таблиц намеренно: это суждение, а не измерение.
+ * Рамка слева, как у врезки, и оговорка снизу - чтобы вердикт не читали как
+ * сертификат безопасности.
+ */
+const VERDICT_STYLE = {
+  ACCEPTABLE: { bg: '#E4F0E9', fg: GOOD, label: 'допустима' },
+  ACCEPTABLE_WITH_CAVEATS: { bg: '#F6F1E6', fg: '#8A5A0E', label: 'допустима с оговорками' },
+  NOT_ACCEPTABLE: { bg: '#FAF0ED', fg: BAD, label: 'недопустима' },
+  INSUFFICIENT_EVIDENCE: { bg: '#EDE8DF', fg: BODY, label: 'данных недостаточно' },
+}
+
+function JudgeVerdict({ entry }) {
+  const { t, lang } = useI18n()
+  if (!entry) return null
+  const value = String(entry.verdict || '').toUpperCase()
+  const style = VERDICT_STYLE[value] || { bg: '#EDE8DF', fg: BODY, label: value }
+  // Язык берём из интерфейса: в отчёте судья пишет на обоих, поэтому
+  // показываем ту половину, на которой открыт документ.
+  const behaviour = (entry.behaviour || {})[lang] || (entry.behaviour || {}).ru || ''
+  const problems = entry.problems || []
+  return (
+    <div
+      style={{
+        background: '#FBFAF7', borderLeft: `3px solid ${INK}`,
+        padding: '12px 15px', margin: '12px 0 18px',
+        breakInside: 'avoid', pageBreakInside: 'avoid',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
+        <span
+          style={{
+            padding: '2px 8px', borderRadius: 3, background: style.bg,
+            color: style.fg, fontSize: 10.5, fontWeight: 700,
+          }}
+        >
+          {t('Вердикт судьи:')} {t(style.label)}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: MUTED }}>
+          {value}
+        </span>
+      </div>
+      {behaviour ? (
+        <p style={{ fontSize: 12, color: INK, margin: '9px 0 0', lineHeight: 1.55 }}>
+          {behaviour}
+        </p>
+      ) : null}
+      {(entry.tools || []).length ? (
+        <ul style={{ margin: '9px 0 0', paddingLeft: 16, fontSize: 11.5, color: BODY }}>
+          {entry.tools.map((item) => {
+            const note = (item.note || {})[lang] || (item.note || {}).ru || ''
+            if (!note) return null
+            return (
+              <li key={item.tool}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: INK }}>
+                  {item.tool}
+                </span>
+                {' — '}{note}
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+      {problems.length ? (
+        <ul style={{ margin: '9px 0 0', paddingLeft: 16, fontSize: 11, color: BAD }}>
+          {problems.slice(0, 4).map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div style={{ marginTop: 10, fontSize: 10, color: MUTED }}>
+        {t('Вердикт - суждение судьи по описанию выше, а не сертификат безопасности. Подсчёты в таблицах от него не зависят.')}
+      </div>
+    </div>
+  )
+}
+
 export default function RunReport() {
   const { id } = useParams()
   const { t } = useI18n()
@@ -259,6 +342,11 @@ export default function RunReport() {
                 {scored ? ` · ${t('провалов')} ${totals.fail} ${t('из')} ${scored} ${t('оценённых')}` : ''}
                 {totals.bad ? ` · ${t('не оценено')} ${totals.bad}` : ''}
               </div>
+
+              {/* Вердикт идёт сразу под машинным заключением: заключение -
+                  факт («есть FAIL»), вердикт - его трактовка. Рядом, чтобы
+                  одно не приняли за другое. */}
+              <JudgeVerdict entry={(data.verdicts || {})[model]} />
 
               <div style={H3}>{t('Итоги по инструментам')}</div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

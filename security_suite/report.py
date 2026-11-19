@@ -7,7 +7,100 @@ from .common import read_json, jsonl, write_json, MODES
 def esc(value):
     return html.escape(str(value)).replace('|','&#124;').replace('\n',' ')
 
-def consolidate(run_dir):
+# Подписи вердикта. Один словарь на оба рендера: если текст расходится между
+# report.md и report.html, читатель получает два разных вывода из одного
+# прогона. Русская подпись идёт в отчёт (он всегда русский), английская — в
+# title и в печатную страницу, которая двуязычна.
+VERDICT_LABELS = {
+    'ACCEPTABLE': ('допустима', 'acceptable'),
+    'ACCEPTABLE_WITH_CAVEATS': ('допустима с оговорками', 'acceptable with caveats'),
+    'NOT_ACCEPTABLE': ('недопустима', 'not acceptable'),
+    'INSUFFICIENT_EVIDENCE': ('данных недостаточно', 'insufficient evidence'),
+}
+VERDICT_CLASS = {
+    'ACCEPTABLE': 'ok',
+    'ACCEPTABLE_WITH_CAVEATS': 'warn',
+    'NOT_ACCEPTABLE': 'bad',
+    'INSUFFICIENT_EVIDENCE': 'idle',
+}
+
+
+def verdict_block_ru(entry):
+    """Текст вердикта для report.md — тот же, что уходит в HTML.
+
+    Возвращает markdown-строки. Держим рядом с рендером HTML намеренно:
+    два независимых форматтера разошлись бы в первый же правке формулировок.
+    """
+    if not entry:
+        return []
+    value = str(entry.get('verdict') or '').upper()
+    label, _ = VERDICT_LABELS.get(value, (value.lower(), value.lower()))
+    behaviour = (entry.get('behaviour') or {}).get('ru') or ''
+    lines = [f'> **Вердикт судьи: {label}** ({value})', '>']
+    if behaviour:
+        lines += [f'> {line}' for line in behaviour.split('\n') if line.strip()] + ['>']
+    notes = entry.get('tools') or []
+    if notes:
+        lines.append('> Поведение по инструментам:')
+        for item in notes:
+            text = ((item.get('note') or {}).get('ru') or '').strip()
+            if text:
+                lines.append(f"> - `{item.get('tool')}` — {text}")
+        lines.append('>')
+    problems = entry.get('problems') or []
+    if problems:
+        lines.append('> Судья не дал пригодного ответа, поэтому вердикт не выносится:')
+        for problem in problems[:4]:
+            lines.append(f'> - {problem}')
+        lines.append('>')
+    lines.append('> Вердикт — суждение судьи по описанию выше, а не сертификат '
+                 'безопасности. Подсчёты в таблицах от него не зависят.')
+    # Пустая строка обязательна: без неё следующая за врезкой таблица
+    # прилипает к blockquote и не распознаётся ни Obsidian, ни VS Code,
+    # ни GitHub — вместо таблицы читатель видит строку с вертикальными чертами.
+    lines.append('')
+    return lines
+
+
+def verdict_block_html(entry):
+    """Вердикт для report.html. Тот же смысл, что verdict_block_ru."""
+    if not entry:
+        return []
+    value = str(entry.get('verdict') or '').upper()
+    label, label_en = VERDICT_LABELS.get(value, (value.lower(), value.lower()))
+    cls = VERDICT_CLASS.get(value, 'idle')
+    behaviour = (entry.get('behaviour') or {}).get('ru') or ''
+    parts = ['<div class="judge-verdict">',
+             f'<div class="judge-verdict-head">'
+             f'<span class="judge-chip {cls}" title="{html.escape(label_en)}">'
+             f'Вердикт судьи: {html.escape(label)}</span>'
+             f'<span class="judge-code">{html.escape(value)}</span></div>']
+    if behaviour:
+        parts.append('<p class="judge-behaviour">'
+                     + html.escape(behaviour).replace('\n', '<br>') + '</p>')
+    notes = entry.get('tools') or []
+    if notes:
+        parts.append('<ul class="judge-tools">')
+        for item in notes:
+            text = ((item.get('note') or {}).get('ru') or '').strip()
+            if text:
+                parts.append(f'<li><code>{html.escape(str(item.get("tool")))}</code> — '
+                             f'{html.escape(text)}</li>')
+        parts.append('</ul>')
+    problems = entry.get('problems') or []
+    if problems:
+        parts.append('<ul class="judge-problems">')
+        for problem in problems[:4]:
+            parts.append(f'<li>{html.escape(str(problem))}</li>')
+        parts.append('</ul>')
+    parts.append('<div class="judge-disclaimer">Вердикт — суждение судьи по описанию '
+                 'выше, а не сертификат безопасности. Подсчёты в таблицах от него '
+                 'не зависят.</div>')
+    parts.append('</div>')
+    return parts
+
+
+def consolidate(run_dir, verdicts=None):
     root=Path(run_dir);manifest=read_json(root/'manifest.json')
     # Старые прогоны (до появления model_dirs) не содержали карту каталогов,
     # но структура на диске та же: подкаталог на модель. Восстанавливаем её
@@ -52,14 +145,29 @@ def consolidate(run_dir):
         write_json(root/mdir/'summary.json',by_model[model])
     summary={'schema_version':1,'run_id':manifest['run_id'],'models':by_model,'methodology':MODES,
       'warning':'No cross-tool aggregate ASR. Adapted evaluations are not official leaderboard scores.'}
+    # Вердикт кладём в summary.json: печатная страница в приложении читает
+    # именно его, и она должна показать тот же текст, что в report.md и
+    # report.html. Иначе три файла об одном прогоне разойдутся.
+    if verdicts:
+        summary['verdicts'] = verdicts
     write_json(root/'summary.json',summary)
     (root/'all_records.jsonl').write_text(''.join(json.dumps(r,ensure_ascii=False)+'\n' for r in all_records),encoding='utf-8')
     md=['# Итоговая проверка моделей','',f"Run: `{manifest['run_id']}`",'',
         'Оценки относятся к выбранным наборам и профилю запуска. Единый ASR между инструментами не вычисляется.',
         'FAIL — срабатывание проверки; ERROR/UNSCORED/SKIPPED не считаются PASS. Результат судьи требует ручной проверки.','']
+    # Врезка о демо-режиме была только в HTML: скачанный .md выглядел
+    # настоящим отчётом, хотя вердикты в нём синтетические. Это опаснее
+    # отсутствия врезки в обоих файлах.
+    if str(manifest.get('engine_mode') or manifest.get('mode') or '') == 'mock':
+        md += ['> **Прогон выполнен в демонстрационном режиме (mock).** Вердикты '
+               'синтетические и не являются оценкой безопасности какой-либо модели.','']
     for model,m in by_model.items():
-        md += [f'## {esc(model)}','',f"Результат: **{m['conclusion']}**",'',
-          '| Инструмент | Полнота | Pass | Fail | Error | Unscored | Skipped | Доля Fail |',
+        md += [f'## {esc(model)}','',f"Результат: **{m['conclusion']}**",'']
+        # Вердикт судьи идёт сразу после машинного заключения: заключение —
+        # это факт («есть FAIL»), вердикт — его трактовка. Показываем рядом,
+        # чтобы читатель не принял одно за другое.
+        md += verdict_block_ru((verdicts or {}).get(model))
+        md += ['| Инструмент | Полнота | Pass | Fail | Error | Unscored | Skipped | Доля Fail |',
           '|---|---|---:|---:|---:|---:|---:|---:|']
         for t in m['tools']:
             c=t['counts'];pct='N/A' if t['failed_check_rate'] is None else f"{t['failed_check_rate']:.1%}"
@@ -230,8 +338,37 @@ td.tool { font-weight: 500; }
   font-size: 10px; color: #8A8580;
 }
 
-details { margin: 6px 0; }
-details.dump { page-break-inside: avoid; }
+/* Вердикт судьи: суждение, а не измерение, поэтому визуально отличается от
+   таблиц — рамка слева и светлый фон, как у врезки. Внутри карточки модели,
+   сразу под машинным заключением, чтобы их не читали как одно и то же. */
+.judge-verdict {
+  background: #FBFAF7; border-left: 3px solid #14141A;
+  padding: 12px 15px; margin: 12px 0 18px; border-radius: 0 3px 3px 0;
+  break-inside: avoid; page-break-inside: avoid;
+}
+.judge-verdict-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.judge-chip {
+  display: inline-block; padding: 2px 8px; border-radius: 3px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .03em;
+}
+.judge-chip.ok   { background: #E4F0E9; color: #1F7A4D; }
+.judge-chip.warn { background: #F6F1E6; color: #8A5A0E; }
+.judge-chip.bad  { background: #FAF0ED; color: #A8321E; }
+.judge-chip.idle { background: #EDE8DF; color: #4A453E; }
+.judge-code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9.5px; color: #8A8580; letter-spacing: .04em;
+}
+.judge-behaviour { font-size: 12px; color: #14141A; margin: 9px 0 0; line-height: 1.55; }
+.judge-tools { margin: 9px 0 0; padding-left: 16px; font-size: 11.5px; color: #4A453E; }
+.judge-tools code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px; color: #14141A;
+}
+.judge-problems { margin: 9px 0 0; padding-left: 16px; font-size: 11px; color: #A8321E; }
+.judge-disclaimer { margin-top: 10px; font-size: 10px; color: #8A8580; }
+
+details { margin: 6px 0; }details.dump { page-break-inside: avoid; }
 summary { cursor: pointer; font-size: 11px; color: #6B6660; padding: 4px 0; }
 pre {
   white-space: pre-wrap; overflow-wrap: anywhere; background: #FBFAF7;
@@ -383,6 +520,7 @@ pre {
         parts.append('<div class="model">')
         parts.append(f'<div class="model-id">{html.escape(model)}</div>')
         parts.append(f'<div class="verdict">{m["conclusion"]}</div>')
+        parts.extend(verdict_block_html((verdicts or {}).get(model)))
 
         parts.append('<h3>Итоги по инструментам</h3>')
         parts.append('<table><tr><th>Инструмент</th><th>Полнота</th>'

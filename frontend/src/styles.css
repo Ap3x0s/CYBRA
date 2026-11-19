@@ -384,6 +384,129 @@ table.data tbody tr.clickable { cursor: pointer; }
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 .textarea { min-height: 84px; resize: vertical; font-family: var(--font-mono); font-size: 12px; }
+
+/* ---------------------------------------------------- общий вердикт судьи
+   Бокс на шаге «Параметры». Переключатель собран из токенов темы, а не взят
+   нативным checkbox: он должен читаться как «функция включена», а не как
+   «поле отмечено». Критерий — обычный .textarea: у него уже есть и фокус,
+   и моноширинный шрифт из общего правила выше. */
+
+/* Карточка занимает всю высоту правой колонки: она лежит в flex-колонке,
+   поэтому нужен flex-grow, а не min-height: 100% (процент от неопределённой
+   высоты ряда не считается) и не align-items: stretch (у flex-колонки он
+   работает по горизонтали). */
+.judge-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+}
+.judge-box { display: grid; gap: 11px; }
+
+/* Поле забирает остаток высоты карточки: всё, что не заняли переключатель,
+   памятка и подпись, уходит в textarea. Отступ сверху отделяет критерий от
+   переключателя — без него подпись прилипала к плашке включения. */
+.judge-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 18px 0 0;
+}
+.judge-field > label { font-size: 12px; color: var(--muted); }
+.judge-field .help { font-size: 11px; color: var(--muted-dim); }
+
+.judge-toggle {
+  position: relative; display: flex; align-items: center;
+  justify-content: space-between; gap: 10px; cursor: pointer;
+  font-size: 13px; color: var(--text);
+  padding: 9px 11px; border: 1px solid var(--edge); border-radius: 8px;
+  background: var(--ink-800);
+}
+.judge-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.judge-track {
+  position: relative; flex: 0 0 auto; width: 38px; height: 21px;
+  border-radius: 999px; background: var(--ink-600);
+  border: 1px solid var(--edge);
+  transition: background 140ms var(--ease), border-color 140ms var(--ease);
+}
+.judge-knob {
+  position: absolute; top: 2px; left: 2px; width: 15px; height: 15px;
+  border-radius: 50%; background: var(--muted-dim);
+  transition: transform 140ms var(--ease), background 140ms var(--ease);
+}
+/* Соседний селектор, а не :has(): переключатель должен работать и в старых
+   движках, а разметка у нас фиксированная. */
+.judge-toggle input:checked ~ .judge-track {
+  background: var(--accent-dim); border-color: var(--accent-deep);
+}
+.judge-toggle input:checked ~ .judge-track .judge-knob {
+  transform: translateX(17px); background: var(--accent);
+}
+.judge-toggle input:focus-visible ~ .judge-track {
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+/* Критерий — главное содержимое шага «Параметры»: памятка и шкала с этого
+   шага убраны ради него. Поэтому поле растягивается на всю высоту карточки
+   и получает крупный кегль: это текст, который человек читает и правит, а не
+   служебная подпись. Минимум 120 px — нижняя граница для очень узких окон;
+   на обычном экране поле забирает всю разницу высот с формой. */
+.judge-prompt {
+  flex: 1 1 auto;
+  min-height: 120px; max-height: none;
+  font-size: 12.5px; line-height: 1.6;
+  resize: vertical;
+}
+.judge-prompt[disabled] { opacity: .45; }
+
+/* Памятка (шаги «Цель» и «Инструменты»): компактные абзацы с тонкими
+   разделителями. Обычные hr.sep с отступом 18 px давали лишние 100+ px. */
+.memo-line { font-size: 12px; line-height: 1.55; margin: 0; }
+.memo-line-sep {
+  border-top: 1px solid var(--edge-soft);
+  margin-top: 10px; padding-top: 10px;
+}
+
+/* Список версий датасетов. Раньше у него стоял maxHeight: 220 — при десяти
+   версиях появлялась вторая полоса прокрутки внутри страницы, и «Параметры»
+   выглядели как двухэтажный скролл. Теперь список идёт в поток и растёт
+   вместе с формой, а страница остаётся без прокрутки: поле критерия в правой
+   колонке забирает остаток высоты через flex. */
+.dataset-list { display: grid; gap: 6px; }
+
+/* Шаг «Параметры» занимает почти всё окно, а у .main нижний отступ 60 px —
+   ровно на нём страница уходила в прокрутку (917 px при окне 900). Убираем
+   лишний отступ только на этом шаге: остальным страницам он нужен, чтобы
+   контент не упирался в край. */
+.new-run-params { margin-bottom: -30px; }
+
+/* Шкала уровней под полем критерия. Это не памятка: там речь про запуск,
+   а здесь — про значения, которые судья может вернуть.
+   В две колонки по 216 px пояснение рвалось на три-четыре слова («блокирующих
+   находок нет, / объёма достаточно для / вывода»). В одну колонку каждая
+   строка идёт целиком и блок занимает те же ~160 px. */
+.judge-scale {
+  margin-top: 10px; padding-top: 9px;
+  border-top: 1px solid var(--edge-soft);
+  flex: 0 0 auto;
+}
+.judge-scale-grid { display: grid; gap: 3px; }
+.judge-scale-item {
+  display: flex; gap: 8px; align-items: baseline; min-width: 0;
+}
+.judge-scale-tag {
+  flex: 0 0 auto; font-family: var(--font-mono); font-size: 9px;
+  padding: 0 4px; border-radius: 3px; border: 1px solid var(--edge);
+  color: var(--muted); line-height: 1.45; white-space: nowrap;
+}
+.judge-scale-meaning {
+  flex: 1 1 auto; min-width: 0; font-size: 10.5px; line-height: 1.35;
+  color: var(--muted);
+}
+.judge-note { font-size: 10.5px; line-height: 1.45; margin: 8px 0 0; }
+
 .row { display: flex; gap: 12px; flex-wrap: wrap; }
 .row > * { flex: 1 1 200px; }
 .checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }

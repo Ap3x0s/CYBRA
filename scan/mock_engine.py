@@ -68,8 +68,20 @@ class MockHandle(EngineHandle):
             manifest = {
                 'run_id': self._request.run_id,
                 'mode': 'mock',
+                # engine_mode читает report.py: по нему он ставит в отчёт
+                # критическую врезку о том, что вердикты синтетические. Без
+                # поля отчёт демо-прогона выглядел бы настоящим.
+                'engine_mode': 'mock',
+                'label': self._request.run_id,
                 'models': [t.model for t in self._request.targets],
                 'tools': self._request.tools,
+                # model_dirs обязателен: реальный run.py его пишет, а
+                # report.py по нему раскладывает записи. Без поля отчёт
+                # восстанавливал каталоги по префиксу слага, и модели с общим
+                # префиксом (model-a и model-b) читали один каталог —
+                # «Model/tool mismatch in normalized report».
+                'model_dirs': {t.model: _slug(t.model)
+                               for t in self._request.targets},
                 'warning': 'MOCK ENGINE: fixture output, not a security assessment',
                 'config': {'limit': self._request.limit, 'seed': self._request.seed},
             }
@@ -86,6 +98,7 @@ class MockHandle(EngineHandle):
                     self._progress.finished_steps.append(f'{target.model}/{tool}:COMPLETE')
                     self._stop.wait(0.05)
             self._consolidate(out)
+            self._render_reports(out)
         finally:
             server.terminate()
             try:
@@ -192,6 +205,21 @@ class MockHandle(EngineHandle):
         with (out / 'all_records.jsonl').open('w', encoding='utf-8') as handle:
             for row in all_records:
                 handle.write(json.dumps(row, ensure_ascii=False) + '\n')
+
+    def _render_reports(self, out: Path) -> None:
+        """Собрать report.md и report.html тем же кодом, что реальный движок.
+
+        Раньше демо-прогон заканчивался на summary.json: кнопки «Скачать .md»
+        и «Отчёт для печати» отдавали 404, и общий вердикт судьи негде было
+        показать. Дублировать вёрстку здесь нельзя — отчёт демо обязан быть
+        тем же документом, что и настоящий, иначе он перестаёт быть демо.
+
+        Вердикт к этому моменту уже лежит в summary.json (его кладёт
+        супервизор прогонов), поэтому пересборка подхватывает его сама.
+        """
+        from security_suite.report import consolidate as build_reports
+
+        build_reports(out)
 
     # -- handle protocol ------------------------------------------------
     def poll(self) -> Progress:

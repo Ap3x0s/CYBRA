@@ -157,6 +157,12 @@ class Run(Base):
     started_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str] = mapped_column(Text, default='')
+    # Общий вердикт судьи: {model_label: {verdict, behaviour, tools, problems}}.
+    # Хранится копией из summary.json, а не считается на чтении: вердикт даёт
+    # LLM, и повторный запрос при каждом открытии страницы был бы и дороже, и
+    # недетерминированным — два открытия одного отчёта дали бы два разных
+    # вывода. NULL у прогонов без вердикта и у архивных прогонов.
+    verdicts: Mapped[dict | None] = mapped_column(JSON)
 
     steps: Mapped[list['RunStep']] = relationship(
         back_populates='run', cascade='all, delete-orphan')

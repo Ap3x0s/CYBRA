@@ -143,6 +143,8 @@ class RunManager:
             verify_tls=bool(first_endpoint.verify_tls and judge_endpoint.verify_tls),
             garak_probes=spec.get('garak_probes', ''),
             bipia_attacks=int(spec.get('bipia_attacks', 4)),
+            verdict_enabled=bool(spec.get('judge_verdict')),
+            verdict_prompt=str(spec.get('judge_verdict_prompt') or ''),
         )
 
     @staticmethod
@@ -177,6 +179,16 @@ class RunManager:
                 self._run_pk = None
 
             run = db.get(Run, run_pk)
+            # Порядок важен, и он не косметический. Судья — сетевой запрос к
+            # LLM и может занять минуты, поэтому финальный статус ставится
+            # ПОСЛЕ него: клиент, увидевший COMPLETE, обязан увидеть и шаги, и
+            # вердикт. Пока судья работает, прогон остаётся RUNNING — это
+            # честно, он ещё не отдал полный отчёт. Импорт шагов идёт до
+            # судьи: вердикт строится по уже нормализованным записям.
+            import_results(db, run, spec)
+            verdicts = self._ask_verdict(run, request, spec)
+            if verdicts:
+                run.verdicts = verdicts
             if cancelled:
                 run.status = 'CANCELLED'
             elif code == 0:
@@ -187,7 +199,6 @@ class RunManager:
                 run.status = 'ERROR'
             run.finished_at = utcnow()
             db.commit()
-            import_results(db, run, spec)
         except Exception as error:  # noqa: BLE001 - must never kill the worker
             traceback.print_exc()
             run = db.get(Run, run_pk)
@@ -201,6 +212,75 @@ class RunManager:
                 self._run_pk = None
         finally:
             db.close()
+
+    # -- judge verdict --------------------------------------------------
+    @staticmethod
+    def _ask_verdict(run: Run, request: RunRequest, spec: dict) -> None:
+        """Спросить у судьи общий вердикт и вписать его в summary.json.
+
+        Вердикт считается ЗДЕСЬ, а не в run.py, потому что тогда он работал бы
+        только у subprocess-движка: демо-прогон (mock) не запускает run.py
+        вовсе, и в его отчёте вердикта не было бы никогда. Супервизор же
+        видит готовый summary.json у любого движка.
+
+        Провал судьи не должен ломать прогон, который уже отработал: ошибка
+        остаётся в логе, отчёт собирается без вердикта, а сам прогон
+        сохраняет свой статус.
+
+        Возвращает вердикты или None. В БД их пишет вызывающий: статус
+        прогона и вердикт должны стать видимыми клиенту одновременно.
+        """
+        if not request.verdict_enabled:
+            return None
+        session_dir = _find_session_dir(Path(run.out_dir))
+        if session_dir is None:
+            return None
+        summary_path = session_dir / 'summary.json'
+        try:
+            summary = json.loads(summary_path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return None
+
+        try:
+            from security_suite.verdict import collect, effective_criterion
+
+            cfg = {
+                'judge_endpoint': request.judge.endpoint,
+                'judge_model': request.judge.model,
+                'judge_key': request.judge.api_key,
+                'judge_extra_body': request.judge.extra_body or {},
+                'judge_headers': {},
+                'timeout': request.timeout,
+                'max_requests': request.max_requests,
+                'max_tokens': request.max_tokens,
+                'judge_max_tokens': request.judge.max_tokens,
+                'token_parameter': request.token_parameter,
+                'temperature': request.temperature,
+                'drop_params': list(request.drop_params),
+                'insecure_skip_tls_verify': not request.verify_tls,
+                'limit': request.limit,
+                'seed': request.seed,
+                'variants': list(request.variants),
+            }
+            verdicts = collect(cfg, session_dir, summary,
+                                effective_criterion(request.verdict_prompt))
+        except Exception as error:  # noqa: BLE001 — вердикт не ломает прогон
+            traceback.print_exc()
+            run.error = (run.error + '; ' if run.error else '') + \
+                f'Verdict judge failed: {type(error).__name__}: {error}'
+            return None
+
+        if not verdicts:
+            return None
+        # Отчёт пересобираем здесь же: report.md и report.html обязаны
+        # содержать вердикт, иначе он будет только в БД.
+        try:
+            from security_suite.report import consolidate as build_reports
+
+            build_reports(session_dir, verdicts)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+        return verdicts
 
 
 manager = RunManager()
@@ -246,6 +326,12 @@ def import_results(db: OrmSession, run: Run, spec: dict) -> None:
     # summary найден — прошлая ошибка о его отсутствии больше не актуальна.
     if run.error in ('Engine produced no summary.json',):
         run.error = ''
+
+    # Вердикт судьи приезжает вместе с summary. Копируем целиком, а не
+    # пересчитываем на чтении: это ответ LLM, и повторный вызов при каждом
+    # открытии отчёта дал бы другой текст про тот же прогон.
+    verdicts = summary.get('verdicts')
+    run.verdicts = verdicts if isinstance(verdicts, dict) else None
 
     # Replace previous steps for idempotent re-import.
     for old in db.scalars(select(RunStep).where(RunStep.run_id == run.id)).all():
