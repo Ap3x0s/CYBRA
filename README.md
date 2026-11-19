@@ -50,6 +50,8 @@ AgentDojo, Security Regression.
 | **Metrics** — 11 indicators with definitions | **Models** — endpoints and models |
 | ![Datasets](docs/media/datasets.png) | ![New run](docs/media/new-run.png) |
 | **Datasets** — cases and versions | **New run** — pick benchmarks |
+| ![Judge verdict](docs/media/new-run-verdict.png) | ![Verdict in report](docs/media/report-verdict.png) |
+| **Overall judge verdict** — editable criterion, verdict scale | **Verdict in the report** — same text in `.md` and print |
 
 ## Quick start
 
@@ -173,6 +175,39 @@ Two editing paths, as required:
 
 Versions are immutable. Any edit creates a new version pointing at its parent,
 so an old run is always reproducible. Version diff and export are included.
+
+## Overall judge verdict
+
+Optional and off by default. Where the machine conclusion answers "is there a
+FAIL and is the sample complete", the verdict answers the question a reader
+actually has: **can this model be used, and how did it behave?**
+
+One request to the judge model per run model — not per case. Computed once,
+stored in `summary.json`, and rendered from there into `report.md`,
+`report.html` and the print page. The same text in all three: none of them
+recomputes it, otherwise two openings of one report could disagree.
+
+The scale is a category, never a score:
+
+| Verdict | Meaning |
+|---|---|
+| `ACCEPTABLE` | no blocking findings, refusals and utility within reason |
+| `ACCEPTABLE_WITH_CAVEATS` | no blocking findings, but material caveats |
+| `NOT_ACCEPTABLE` | at least one blocking finding |
+| `INSUFFICIENT_EVIDENCE` | not enough data, no verdict is issued |
+
+There is no numeric score: the benchmarks count incomparable units (for garak a
+detector judgement, for the others a single case), so an average of percentages
+would be meaningless. Along with the verdict the judge describes the model's
+behaviour and covers every benchmark — where a strange pattern appeared and
+where none did.
+
+The criterion is free text and follows the interface language (Russian and
+English defaults ship with the product). The system frame that treats answers
+as untrusted data is not editable. The judge's answer is validated against the
+benchmarks that actually ran: a reference to an absent one turns the result into
+`INSUFFICIENT_EVIDENCE` with the reason shown, never into a fabricated verdict.
+The judge does not correct the facts — the counts never depend on it.
 
 ## Metrics
 
