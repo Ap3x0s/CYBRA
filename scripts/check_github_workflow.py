@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -20,6 +21,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = ROOT / '.github' / 'workflows'
+
+# Правило GitHub для идентификатора job-а: буква или "_", дальше буквы,
+# цифры, "-" и "_". Двоеточие запрещено, хотя в YAML это обычный ключ.
+JOB_ID = re.compile(r'[A-Za-z_][A-Za-z0-9_-]*')
 
 
 def check_workflow(path: Path) -> list[str]:
@@ -33,6 +38,17 @@ def check_workflow(path: Path) -> list[str]:
         return [f'{path.name}: нет ни одного job']
 
     for name, body in jobs.items():
+        # Имя job-а GitHub проверяет по своему правилу: буквы, цифры, "-", "_"
+        # и первым символом не цифра. Двоеточие недопустимо, хотя YAML его
+        # принимает: из-за этого весь workflow отвергался ЦЕЛИКОМ, прогон
+        # числился failed с нулём задач, и проверка этого не видела.
+        # fullmatch, а не match: match проверяет только начало строки, и
+        # 'build:image' проходил проверку, потому что начинается с буквы.
+        # Именно из-за этого баг с двоеточиями жил незамеченным.
+        if not JOB_ID.fullmatch(name):
+            problems.append(
+                f'{name}: недопустимое имя job-а. GitHub разрешает только '
+                f'буквы, цифры, "-" и "_", первым символом не цифру')
         if not isinstance(body, dict):
             problems.append(f'{name}: job должен быть словарём')
             continue

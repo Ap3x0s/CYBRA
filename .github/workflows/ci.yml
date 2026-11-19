@@ -8,24 +8,24 @@
 # Соответствие 18 этапам:
 #
 #   №  Этап схемы              Где в этом файле
-#   0  Локальные pre-commit    validate:precommit
+#   0  Локальные pre-commit    validate-precommit
 #   1  Ветка + MR              on: pull_request + branch protection (см. ниже)
 #   2  Format                  ✖ ruff format не подключён в проекте
-#   3  Lint                    lint:backend, lint:frontend
-#   4  Unit tests (compile)    test:unit; компиляции нет — Python/JS
-#   5  SAST                    security:sast (bandit, только HIGH)
-#   6  Secrets scan            security:secrets (gitleaks по истории)
-#   7  IaC / K8s / CI scan     security:iac
-#   8  Build (+ SBOM)          build:image, build:sbom
-#   9  SCA / Image scan        security:sca (+ лицензии), security:image
-#  10  Deploy to Test          deploy:test
+#   3  Lint                    lint:backend, lint-frontend
+#   4  Unit tests (compile)    test-unit; компиляции нет — Python/JS
+#   5  SAST                    security-sast (bandit, только HIGH)
+#   6  Secrets scan            security-secrets (gitleaks по истории)
+#   7  IaC / K8s / CI scan     security-iac
+#   8  Build (+ SBOM)          build-image, build-sbom
+#   9  SCA / Image scan        security-sca (+ лицензии), security-image
+#  10  Deploy to Test          deploy-test
 #  11  DAST                    ✖ требует стенда с моделью; ручная процедура
-#  12  Smoke / Integration     deploy:test (проверка API и SPA)
-#  13  Подписание артефактов   release:checksums (SHA256SUMS)
-#  14  Release                 release:publish (публикация версионного тега)
-#  15  Approve to Prod         deploy:prod (environment: production)
-#  16  Deploy to Prod          deploy:prod
-#  17  Smoke после деплоя      deploy:prod (второй шаг)
+#  12  Smoke / Integration     deploy-test (проверка API и SPA)
+#  13  Подписание артефактов   release-checksums (SHA256SUMS)
+#  14  Release                 release-publish (публикация версионного тега)
+#  15  Approve to Prod         deploy-prod (environment: production)
+#  16  Deploy to Prod          deploy-prod
+#  17  Smoke после деплоя      deploy-prod (второй шаг)
 #  18  Rollback                rollback (workflow_dispatch)
 #
 # Ветка + MR (этап 1): правила запускаются на pull_request, но чтобы в main
@@ -70,7 +70,7 @@ jobs:
 
   # Этап 0 — локальные pre-commit. Проверяем, что хук на месте и исполняем:
   # иначе «у меня локально проходило» остаётся словами.
-  validate:precommit:
+  validate-precommit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
   # Шага нет намеренно — здесь только пояснение для ревьюера.
 
   # Этап 3 — Lint фронта: сборка ловит и синтаксис, и битые импорты.
-  lint:frontend:
+  lint-frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -116,7 +116,7 @@ jobs:
   # №4. Unit tests
   # ====================================================================
 
-  test:unit:
+  test-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -147,7 +147,7 @@ jobs:
   # ====================================================================
 
   # Этап 5 — SAST. ruff-B (bugbear) плюс bandit по высокому уровню.
-  security:sast:
+  security-sast:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -174,7 +174,7 @@ jobs:
 
   # Этап 6 — Secrets scan. fetch-depth: 0 обязателен: секрет остаётся в
   # истории даже после удаления файла, и мелкий клон его не увидит.
-  security:secrets:
+  security-secrets:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -194,7 +194,7 @@ jobs:
 
   # Этап 7 — IaC / CI scan. Опечатка в конфиге пайплайна ломает все job'ы
   # сразу, поэтому проверяем и его, а не только Dockerfile.
-  security:iac:
+  security-iac:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -224,9 +224,9 @@ jobs:
   # Этапы 8-9 — сборка образа и публикация в ghcr.io.
   # Сборка и публикация в одном job'е: на GitHub docker нативный, но
   # публиковать надо в том же шаге, где собран образ — иначе его нет.
-  build:image:
+  build-image:
     runs-on: ubuntu-latest
-    needs: [test:unit, security:sast]
+    needs: [test-unit, security-sast]
     outputs:
       image: ${{ steps.meta.outputs.image }}
     steps:
@@ -275,9 +275,9 @@ jobs:
           path: image-digest.txt
 
   # Этап 8 — SBOM: перечень компонентов образа.
-  build:sbom:
+  build-sbom:
     runs-on: ubuntu-latest
-    needs: [build:image]
+    needs: [build-image]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -296,7 +296,7 @@ jobs:
           path: ${{ env.SECURITY_REPORTS }}/sbom.spdx.json
 
   # Этап 9 — SCA: уязвимости зависимостей И проверка лицензий.
-  security:sca:
+  security-sca:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -325,9 +325,9 @@ jobs:
   # Этап 9b — скан образа: HIGH/CRITICAL не блокируют, потому что базовый
   # python:3.12-slim регулярно имеет свежие CVE, и красный пайплайн из-за
   # них приучил бы игнорировать красное.
-  security:image:
+  security-image:
     runs-on: ubuntu-latest
-    needs: [build:image]
+    needs: [build-image]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -355,9 +355,9 @@ jobs:
   # Проверяем и API, и отдачу SPA: health-чек ловит «не стартует»,
   # grep по index.html — «стартует, но UI не собран».
 
-  deploy:test:
+  deploy-test:
     runs-on: ubuntu-latest
-    needs: [build:image, security:sca]
+    needs: [build-image, security-sca]
     environment:
       name: test
       url: http://localhost:8000
@@ -406,10 +406,10 @@ jobs:
   # Этап 13 — Подписание артефактов. cosign keyless требует OIDC-провайдера,
   # но работающая часть того же этапа — контрольные суммы: по ним получатель
   # проверяет, что скачанные SBOM и digest не подменены по дороге.
-  release:checksums:
+  release-checksums:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build:sbom, build:image]
+    needs: [build-sbom, build-image]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -431,10 +431,10 @@ jobs:
 
   # Этап 14 — Release: публикация версионного тега образа. latest
   # перезаписывается ветками, а версия должна быть неизменной.
-  release:publish:
+  release-publish:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build:image]
+    needs: [build-image]
     steps:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -457,10 +457,10 @@ jobs:
   # Чтобы этап 15 работал по схеме, в Settings → Environments → production
   # включи Required reviewers: тогда job висит, пока его не подтвердит
   # человек с правами. Без этой настройки GitHub запустит job сразу.
-  deploy:prod:
+  deploy-prod:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [release:publish]
+    needs: [release-publish]
     environment:
       name: production
       url: http://localhost:8080
