@@ -680,7 +680,10 @@ def judge_criterion(lang: str = Query('ru', pattern='^(ru|en)$'),
     прочитать на своём языке, иначе он подписывает текст, которого не понимает.
     """
     from security_suite.verdict import (
-        DEFAULT_CRITERION, DEFAULT_CRITERION_EN, PROMPT_LIMIT, VERDICTS,
+        DEFAULT_CRITERION,
+        DEFAULT_CRITERION_EN,
+        PROMPT_LIMIT,
+        VERDICTS,
     )
     return {
         'criterion': DEFAULT_CRITERION_EN if lang == 'en' else DEFAULT_CRITERION,
