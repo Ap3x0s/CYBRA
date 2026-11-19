@@ -40,11 +40,43 @@ for _suffix, _type in (
 STATIC_DIR = Path(__file__).resolve().parents[1] / 'static'
 
 
-def bootstrap_admin() -> None:
-    """Create the first admin and print the one-time password.
+def _initial_password_path() -> Path:
+    """Куда положить пароль первого старта."""
+    return settings.data_dir / 'initial-password'
 
-    Printing to stdout is deliberate: it is the only channel an operator has on
-    a fresh install, and it is visible only to whoever started the process.
+
+def _write_initial_password(password: str) -> Path | None:
+    """Сохранить пароль первого старта в файл рядом с базой.
+
+    Зачем файл, если пароль печатается в лог: stdout теряется вместе с
+    консолью (docker run -d, перезапуск CI, закрытый терминал). После этого
+    пароль восстановить было нельзя — в базе только argon2-хеш, и мы на этом
+    уже обжигались. Файл переживает потерю консоли и лежит рядом с данными,
+    которые и так нужно бэкапить.
+
+    Права 600: пароль читает только владелец каталога данных.
+    """
+    path = _initial_password_path()
+    try:
+        path.write_text(password + '\n', encoding='utf-8')
+        path.chmod(0o600)
+        return path
+    except OSError as error:  # noqa: BLE001 - файл не должен ломать старт
+        print(f'  ! не удалось записать {path}: {error}', file=sys.stderr, flush=True)
+        return None
+
+
+def bootstrap_admin() -> None:
+    """Create the first admin and show the one-time password.
+
+    Two channels on purpose, both visible only to the operator:
+
+      * stdout — видно в `docker logs`, привычный путь;
+      * ``<data_dir>/initial-password`` — переживает потерю консоли.
+
+    Пароль не попадает в README и не бывает общим для установок: у каждого
+    развёртывания он свой, иначе один публичный пароль открывал бы админку
+    любому, кто прочитал документацию.
     """
     db = SessionLocal()
     try:
@@ -61,13 +93,15 @@ def bootstrap_admin() -> None:
         )
         db.add(admin)
         db.commit()
+        written = _write_initial_password(password)
         banner = (
-            '\n' + '=' * 64 + '\n'
+            '\n' + '=' * 68 + '\n'
             '  CYBRA: создан администратор\n'
             '  email:    admin@cybra.local\n'
             f'  пароль:   {password}\n'
-            '  Смените пароль после первого входа.\n'
-            + '=' * 64 + '\n'
+            + (f'  файл:     {written}\n' if written else '')
+            + '  Смените пароль после первого входа.\n'
+            + '=' * 68 + '\n'
         )
         print(banner, flush=True)
         _seed_datasets(db)

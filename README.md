@@ -61,8 +61,45 @@ docker build -f docker/Dockerfile -t cybra/cybra .
 docker run -p 8000:8000 -v cybra-data:/data cybra/cybra
 ```
 
-Open http://localhost:8000. On first start the admin login and password are
-printed to the log — change them in **Settings**.
+Open http://localhost:8000.
+
+### Signing in the first time
+
+The admin password is generated on first start and is **unique to your
+deployment** — it is not in this README and never repeated across installs.
+Two places, both readable only by whoever runs the container:
+
+```bash
+# 1. container log
+docker logs cybra | grep -A3 "создан администратор"
+
+# 2. file next to the database (survives a lost console)
+docker exec cybra cat /data/initial-password
+```
+
+```
+================================================
+  CYBRA: создан администратор
+  email:    admin@cybra.local
+  пароль:   DpGsMUk5MGQRsQXd
+  файл:     /data/initial-password
+================================================
+```
+
+Log in as `admin@cybra.local` and **change the password in Settings** right
+away. The file stays at mode `600` next to your data and is not needed after
+the first change.
+
+Lost both? Reset from the console — the command is idempotent and prints the
+new password:
+
+```bash
+docker exec cybra cybra reset-password
+```
+
+The image listens on `0.0.0.0:8000` so it is reachable from other machines.
+Put it behind a reverse proxy with TLS and set `CYBRA_COOKIE_SECURE=1` before
+exposing it, and change the default password regardless.
 
 The image is two-stage: Node builds the SPA, then it is copied into the Python
 stage and served by the same process. One image, one port — no CORS, no second
