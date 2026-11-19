@@ -1,9 +1,7 @@
 """Tests for the scan layer: engine selection, capabilities and mock artifacts."""
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -125,7 +123,7 @@ def test_mock_engine_handles_models_sharing_a_prefix(tmp_path):
 
     summary = load_summary(request.out_dir)
     assert set(summary['models']) == {'model-a', 'model-b'}
-    for model, result in summary['models'].items():
+    for result in summary['models'].values():
         assert result['tools'][0]['counts']['PASS'] >= 0
     assert (request.out_dir / 'report.md').exists()
 
