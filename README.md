@@ -6,9 +6,8 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/ap3x0/cybra)](https://hub.docker.com/r/ap3x0/cybra)
 [![Image Size](https://img.shields.io/docker/image-size/ap3x0/cybra/latest)](https://hub.docker.com/r/ap3x0/cybra)
-[![Pipeline](https://gitlab.com/Ap3x0/cybra/badges/main/pipeline.svg)](https://gitlab.com/Ap3x0/cybra/-/pipelines)
+
 
 
 </div>
