@@ -138,7 +138,16 @@ def run(args):
                                 time.sleep(.25)
                         ws=read_json(out/'worker_status.json') if (out/'worker_status.json').exists() else {'complete':False,'error':'Worker stopped without status; see worker.log'}
                         rows=jsonl(out/'records.jsonl') if (out/'records.jsonl').exists() else []
-                        complete=ws['complete'] and not relay.errors and rows and all(r['status'] in ('PASS','FAIL') for r in rows)
+                        # UNSCORED с пометкой disputed_reference — это НЕ сбой:
+                        # кейс сознательно исключён из провалов, потому что
+                        # разметка набора противоречива (см. adapted.py,
+                        # disputed_ideal). Такой шаг остаётся COMPLETE, иначе
+                        # исправление методики само помечало бы прогон неполным.
+                        def settled(r):
+                            if r['status'] in ('PASS','FAIL'):
+                                return True
+                            return r['status']=='UNSCORED' and r.get('disputed_reference')
+                        complete=ws['complete'] and not relay.errors and rows and all(settled(r) for r in rows)
                         status={'status':'COMPLETE' if complete else 'PARTIAL' if rows else 'ERROR','error':ws.get('error'),'exit_code':p.returncode}
                     except KeyboardInterrupt:
                         if p is not None and p.poll() is None:terminate(p)
