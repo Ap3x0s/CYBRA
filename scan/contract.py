@@ -49,7 +49,7 @@ class RunRequest:
     max_tokens: int = 2048
     temperature: float | None = 0.0
     timeout: int = 120
-    tool_timeout: int = 3600
+    tool_timeout: int = 7200
     token_parameter: str = 'max_tokens'
     drop_params: tuple[str, ...] = ()
     developer_as_system: bool = False

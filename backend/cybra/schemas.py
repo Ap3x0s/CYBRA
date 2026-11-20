@@ -147,11 +147,21 @@ class RunIn(BaseModel):
     seed: int = 42
     variants: list[str] = Field(default_factory=lambda: ['direct', 'roleplay', 'authority'])
     max_requests: int = 1000
-    max_tokens: int = 2048
-    judge_max_tokens: int = 4096
+    # 8192, а не 2048: у моделей с цепочкой рассуждений квота completion
+    # уходит в reasoning_tokens, и на текст не остаётся ничего. Замер на
+    # реальном промпте garak: при 2048 и 4096 reasoning забирает ВСЁ
+    # (text_tokens=0, finish_reason=length), при 8192 приходит 579 символов
+    # ответа. С прежним дефолтом 111 из 123 запросов garak были обрезаны.
+    max_tokens: int = 8192
+    # Судье нужно ещё больше: он получает выдержки из ответов модели и
+    # разбирает каждый инструмент, то есть его собственный ответ длинный.
+    judge_max_tokens: int = 16384
     temperature: float | None = 0.0
     timeout: int = 120
-    tool_timeout: int = 3600
+    # Стенной бюджет инструмента. Час (3600) был мал для garak с 12 кейсами
+    # на reasoning-модели: он честно исчерпал бюджет на третьей пробе из
+    # трёх и завершился ERROR. Два часа покрывают прогон целиком.
+    tool_timeout: int = 7200
     garak_probes: str = ''
     bipia_attacks: int = 4
     # Общий вердикт судьи — опциональная надстройка над обычными метриками.
