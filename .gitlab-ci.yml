@@ -665,7 +665,12 @@ release:artifacts:
     # переписывать его на shell ради одного вызова незачем. Первый прогон
     # упал именно здесь: в alpine python нет, ветка || подставила пустоту,
     # после чего sha256sum -c не нашёл файла сумм.
-    - apk add --no-cache curl jq python3
+    #
+    # docker-cli нужен, чтобы запускать cosign контейнером. Пакет называется
+    # docker-cli, а не docker: `docker` — это демон, которого в job'е нет и
+    # быть не должно. Второй прогон упал именно на этом: проверка наличия
+    # клиента отработала честно и остановила job, а не продолжила молча.
+    - apk add --no-cache curl jq python3 docker-cli
     # image-digest.txt пишет build:image и отдаёт артефактом. В этой стадии
     # его НЕТ, пока не скачать: артефакты передаются между стадиями только
     # через needs. Первый прогон подписывал пустоту — «digest неизвестен,
@@ -692,7 +697,7 @@ release:artifacts:
     # Работающая часть этапа, не зависящая от Sigstore: по ним получатель
     # сверяет скачанное без всякой инфраструктуры.
     - echo "--- SHA256SUMS ---"
-    - python3 scripts/make_checksums.py "$SECURITY_REPORTS" || sh -c 'echo "python нет — считаем sha256sum"'
+    - python3 scripts/make_checksums.py "$SECURITY_REPORTS"
     - echo "--- проверка сумм ---"
     - cd "$SECURITY_REPORTS" && sha256sum -c SHA256SUMS && cd "$CI_PROJECT_DIR"
     # --- 13b. подпись образа -----------------------------------------
