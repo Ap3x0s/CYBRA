@@ -114,6 +114,24 @@ The digest is signed, not the tag. A tag can be repointed at a different image;
 a digest cannot. The SBOM is signed too, otherwise the component list could be
 swapped without touching the signed image.
 
+Verified on tag v0.2.3: both signatures reached the transparency log
+(`tlog entry created with index: 4027397135`), and `cosign verify` reported
+`The cosign claims were validated`.
+
+Getting there took four tag runs, each exposing one missing piece. Recorded
+because each one is a trap worth recognising:
+
+| Run | Failure | Cause |
+|---|---|---|
+| v0.2.0 | `sha256sum: SHA256SUMS: No such file` | No `python3` in alpine; the script line hid it behind `\|\| echo` |
+| v0.2.1 | `digest неизвестен` | `image-digest.txt` did not cross the stage boundary; needs explicit `artifacts: true` |
+| v0.2.2 | `Cannot connect to the Docker daemon` | `docker-cli` provides the command, not a daemon — and this job must not have one |
+| v0.2.3 | success | cosign installed as a binary instead of run as a container |
+
+The pattern in the first three: a check that reports success when it fails.
+`|| echo` substitutes a message for a real failure; an empty digest is passed
+onward as if it were a value. Both now `exit 1`.
+
 Notes that cost time to rediscover:
 
 - **Builds use kaniko, not `docker build`.** The canonical GitLab recipe
