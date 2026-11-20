@@ -627,7 +627,15 @@ release:publish:
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   script:
-    - docker pull "$IMAGE_NAME:$CI_TAG_SHA" || docker pull "$IMAGE_NAME:$CI_COMMIT_SHA"
+    # build:image по тегу публикует :<commit-sha> и :latest — версионного
+    # тега он не знает. Здесь переносим :<sha> на :<tag>: версия должна быть
+    # неизменной, а latest перезаписывается каждой сборкой из main.
+    #
+    # Первая версия строки содержала `docker pull "$IMAGE_NAME:$CI_TAG_SHA"`.
+    # Такой переменной у GitLab нет: опечатка от $CI_COMMIT_TAG. Строка
+    # спасалась только `||` со вторым pull — то есть половина условия была
+    # мёртвой, а читателю казалось, что есть запасной путь.
+    - docker pull "$IMAGE_NAME:$CI_COMMIT_SHA"
     - docker tag "$IMAGE_NAME:$CI_COMMIT_SHA" "$IMAGE_NAME:$CI_COMMIT_TAG"
     - docker push "$IMAGE_NAME:$CI_COMMIT_TAG"
     - echo "опубликовано $IMAGE_NAME:$CI_COMMIT_TAG"
@@ -661,7 +669,16 @@ deploy:prod:
 # Этап 16 + 17 — Deploy to Prod и smoke после него.
 smoke:prod:
   stage: deploy-prod
+  needs: [deploy:prod]
   image: docker:29
+  services:
+    - name: docker:29-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
   environment:
     name: production
     url: http://localhost:8080
