@@ -80,7 +80,7 @@ merge request
    ├── security:sast       ruff + bandit (HIGH)
    ├── security:secrets    gitleaks
    ├── security:iac        Dockerfile, .dockerignore, both pipelines
-   ├── build:image         kaniko → :<commit-sha> and :latest
+   ├── build:image         kaniko → :<commit-sha> always, :latest only from main/tag
    ├── build:sbom          syft reads the image from the registry
    ├── security:sca        pip-audit + licenses
    ├── security:image      trivy reads the image from the registry

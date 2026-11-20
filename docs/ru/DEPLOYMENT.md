@@ -80,7 +80,7 @@ python scripts/verify_migration.py /path/to/cybra.sqlite3
    ├── security:sast       ruff + bandit (только HIGH)
    ├── security:secrets    gitleaks
    ├── security:iac        Dockerfile, .dockerignore, оба пайплайна
-   ├── build:image         kaniko → :<commit-sha> и :latest
+   ├── build:image         kaniko → :<commit-sha> всегда, :latest — только из main/тега
    ├── build:sbom          syft читает образ из registry
    ├── security:sca        pip-audit и лицензии
    ├── security:image      trivy читает образ из registry
