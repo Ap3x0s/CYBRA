@@ -25,8 +25,25 @@ The application talks to PostgreSQL through `CYBRA_DATABASE_URL`, for example:
 CYBRA_DATABASE_URL=postgresql+psycopg://cybra:secret@db:5432/cybra
 ```
 
+The driver (`psycopg[binary]`) is part of the image, so no extra install step is
+needed and no compiler or `libpq-dev` is required.
+
 The database is **not** part of the image: it is a separate service, so it
 survives container replacement and can be backed up on its own schedule.
+
+`docker/compose.prod.yaml` ships a PostgreSQL service under the `db` profile. It
+is off by default so that a first run needs nothing but one secret:
+
+```
+# SQLite in the volume, no second service
+docker compose -f docker/compose.prod.yaml up -d
+
+# PostgreSQL, with CYBRA_DATABASE_URL pointing at the `db` service
+printf 'POSTGRES_PASSWORD=...\nCYBRA_DATABASE_URL=postgresql+psycopg://cybra:...@db:5432/cybra\n' >> docker/.env
+docker compose -f docker/compose.prod.yaml --profile db up -d
+```
+
+See [`docker/.env.example`](../docker/.env.example) for every variable.
 
 If `CYBRA_DATABASE_URL` is not set, the app falls back to SQLite in
 `/data/cybra.sqlite3`. That mode exists for a local run without Docker and for
@@ -59,7 +76,7 @@ push to main
    │
    ├── lint:backend    ruff check backend scan
    ├── lint:frontend   npm ci && npm run build
-   ├── test:backend    pytest tests/ -q            (89 tests, no API key needed)
+   ├── test:backend    pytest tests/ -q            (90 tests, no API key needed)
    ├── build:image     docker build → :<commit-sha> and :latest
    ├── publish:registry  push both tags             (default branch only)
    └── verify:smoke    pull :<sha>, start it, wait for /api/v1/health

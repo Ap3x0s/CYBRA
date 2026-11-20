@@ -36,8 +36,19 @@ services:
       CYBRA_COOKIE_SECURE: "0"          # включите 1 за HTTPS-прокси
       CYBRA_ENGINE: subprocess
       CYBRA_SESSION_TTL_HOURS: "12"
+      # Если задана — приложение работает на PostgreSQL, иначе на SQLite в
+      # томе cybra-data. По умолчанию пусто: `docker compose up` должен
+      # подниматься без второго сервиса, иначе первый запуск требует ещё и
+      # пароля к базе.
+      CYBRA_DATABASE_URL: ${CYBRA_DATABASE_URL:-}
     volumes:
       - cybra-data:/data
+    depends_on:
+      # Не ждём healthcheck: при пустом CYBRA_DATABASE_URL база не нужна,
+      # а условие service_started не блокирует запуск без неё.
+      db:
+        condition: service_started
+        required: false
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v1/health"]
       interval: 30s
@@ -45,5 +56,31 @@ services:
       retries: 3
       start_period: 20s
 
+  # PostgreSQL — отдельный сервис, а не встроенная база: состояние переживает
+  # замену контейнера приложения и бэкапится своим расписанием.
+  # Профиль `db` означает, что этот сервис не поднимается по умолчанию:
+  #   docker compose -f docker/compose.prod.yaml --profile db up -d
+  # и тогда в .env нужно задать CYBRA_DATABASE_URL (см. docs/DEPLOYMENT.md).
+  db:
+    image: postgres:16-alpine
+    profiles: ["db"]
+    container_name: cybra-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cybra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-cybra}
+    volumes:
+      - cybra-pg:/var/lib/postgresql/data
+    # Порт наружу не публикуем: приложение ходит по внутренней сети compose.
+    # Для отладки добавьте "127.0.0.1:5432:5432" вручную.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cybra}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   cybra-data:
+  cybra-pg:

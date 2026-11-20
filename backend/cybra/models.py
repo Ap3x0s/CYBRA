@@ -20,7 +20,15 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+# JSON с диалектным вариантом: в PostgreSQL это jsonb, во всех остальных —
+# обычный JSON. Без варианта create_all создаёт колонку типа json, и тогда
+# теряется то, ради чего переезжали: jsonb умеет индексироваться и хранится
+# в разобранном виде. Переносимость при этом сохраняется — SQLite получает
+# свой JSON, а не пытается создать несуществующий jsonb.
+JSON_TYPE = JSON().with_variant(JSONB(), 'postgresql')
 
 
 def utcnow() -> dt.datetime:
@@ -162,7 +170,7 @@ class Run(Base):
     # LLM, и повторный запрос при каждом открытии страницы был бы и дороже, и
     # недетерминированным — два открытия одного отчёта дали бы два разных
     # вывода. NULL у прогонов без вердикта и у архивных прогонов.
-    verdicts: Mapped[dict | None] = mapped_column(JSON)
+    verdicts: Mapped[dict | None] = mapped_column(JSON_TYPE)
 
     steps: Mapped[list['RunStep']] = relationship(
         back_populates='run', cascade='all, delete-orphan')

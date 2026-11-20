@@ -13,6 +13,11 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
     "sqlalchemy>=2.0",
+    # Драйвер PostgreSQL. [binary] тянет готовые колёса с libpq внутри, поэтому
+    # в python:3.12-slim (Debian) не нужны ни libpq-dev, ни компилятор.
+    # Без этой строки образ работал только на SQLite: CYBRA_DATABASE_URL с
+    # postgresql+psycopg падал на импорте модуля драйвера.
+    "psycopg[binary]>=3.1",
     "pyyaml>=6",
     "argon2-cffi>=23",
     "cryptography>=42",

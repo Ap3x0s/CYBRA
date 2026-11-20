@@ -29,6 +29,23 @@ CYBRA_DATABASE_URL=postgresql+psycopg://cybra:secret@db:5432/cybra
 Отдельный сервис выбран сознательно: база переживает замену контейнера и
 бэкапится по своему расписанию, а не вместе с образом.
 
+Драйвер `psycopg[binary]` входит в образ, поэтому доустанавливать ничего не
+нужно и компилятор с `libpq-dev` не требуются.
+
+В `docker/compose.prod.yaml` сервис PostgreSQL лежит под профилем `db` и по
+умолчанию не поднимается: первый запуск не должен требовать второго сервиса.
+
+```
+# SQLite в томе, без второго сервиса
+docker compose -f docker/compose.prod.yaml up -d
+
+# PostgreSQL: CYBRA_DATABASE_URL указывает на сервис `db`
+printf 'POSTGRES_PASSWORD=...\nCYBRA_DATABASE_URL=postgresql+psycopg://cybra:...@db:5432/cybra\n' >> docker/.env
+docker compose -f docker/compose.prod.yaml --profile db up -d
+```
+
+Все переменные перечислены в [`docker/.env.example`](../../docker/.env.example).
+
 Если `CYBRA_DATABASE_URL` не задана, приложение работает на SQLite в
 `/data/cybra.sqlite3`. Этот режим нужен для локального запуска без Docker и
 для тестов, где поднимать сервер БД на каждый прогон несоразмерно. Для
@@ -59,7 +76,7 @@ push в main
    │
    ├── lint:backend      ruff check backend scan
    ├── lint:frontend     npm ci && npm run build
-   ├── test:backend      pytest tests/ -q            (89 тестов, без API-ключа)
+   ├── test:backend      pytest tests/ -q            (90 тестов, без API-ключа)
    ├── build:image       docker build → :<commit-sha> и :latest
    ├── publish:registry  публикация обоих тегов      (только default branch)
    └── verify:smoke      pull :<sha>, запуск, ожидание /api/v1/health
