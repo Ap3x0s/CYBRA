@@ -12,9 +12,40 @@ CYBRA — веб-консоль: один процесс раздаёт и SPA, 
 
 | Слой | Содержимое |
 |---|---|
-| Python 3.12 | FastAPI-приложение, база SQLite, супервизор прогонов |
+| Python 3.12 | FastAPI-приложение, супервизор прогонов |
 | Статика SPA | React-сборка, раздаётся тем же процессом из `backend/static` |
 | Точка входа | `python -m cybra --host 0.0.0.0` |
+
+База данных в образ **не входит**: это отдельный сервис.
+
+## База данных
+
+Приложение ходит в PostgreSQL через `CYBRA_DATABASE_URL`:
+
+```
+CYBRA_DATABASE_URL=postgresql+psycopg://cybra:secret@db:5432/cybra
+```
+
+Отдельный сервис выбран сознательно: база переживает замену контейнера и
+бэкапится по своему расписанию, а не вместе с образом.
+
+Если `CYBRA_DATABASE_URL` не задана, приложение работает на SQLite в
+`/data/cybra.sqlite3`. Этот режим нужен для локального запуска без Docker и
+для тестов, где поднимать сервер БД на каждый прогон несоразмерно. Для
+промышленного стенда он не рекомендуется: всё состояние оказывается в одном
+файле, который уходит вместе с контейнером.
+
+Перенос существующей установки с SQLite на PostgreSQL:
+
+```
+python scripts/migrate_to_postgres.py /path/to/cybra.sqlite3
+python scripts/verify_migration.py /path/to/cybra.sqlite3
+```
+
+Переносятся все строки вместе с id, после чего последовательности сдвигаются
+за максимальный id: иначе первая же вставка через API упала бы на дубликате
+ключа. Проверочный скрипт сверяет обе базы построчно и сравнивает не только
+количество, но и содержимое — хеши паролей, JSON-поля и даты.
 
 В образе **нет** `garak`, `PyRIT`, `AgentDojo`, `Promptfoo` и `HarmBench`: они
 тянут torch или Node-бинарь на гигабайты. Консоль определяет, что доступно, и
@@ -28,7 +59,7 @@ push в main
    │
    ├── lint:backend      ruff check backend scan
    ├── lint:frontend     npm ci && npm run build
-   ├── test:backend      pytest tests/ -q            (40 тестов, без API-ключа)
+   ├── test:backend      pytest tests/ -q            (89 тестов, без API-ключа)
    ├── build:image       docker build → :<commit-sha> и :latest
    ├── publish:registry  публикация обоих тегов      (только default branch)
    └── verify:smoke      pull :<sha>, запуск, ожидание /api/v1/health

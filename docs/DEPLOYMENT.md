@@ -12,9 +12,39 @@ A single container image. Inside it:
 
 | Layer | Contents |
 |---|---|
-| Python 3.12 | FastAPI app, SQLite database, run supervisor |
+| Python 3.12 | FastAPI app, run supervisor |
+| PostgreSQL | Application database, outside the image (see below) |
 | Static SPA | React build, served by the same process from `backend/static` |
 | Entrypoint | `python -m cybra --host 0.0.0.0` |
+
+### Database
+
+The application talks to PostgreSQL through `CYBRA_DATABASE_URL`, for example:
+
+```
+CYBRA_DATABASE_URL=postgresql+psycopg://cybra:secret@db:5432/cybra
+```
+
+The database is **not** part of the image: it is a separate service, so it
+survives container replacement and can be backed up on its own schedule.
+
+If `CYBRA_DATABASE_URL` is not set, the app falls back to SQLite in
+`/data/cybra.sqlite3`. That mode exists for a local run without Docker and for
+the test suite, where starting a database server per test is disproportionate.
+It is not recommended for a production stand: the whole state then lives in one
+file that a container restart can take with it.
+
+Moving an existing SQLite install to PostgreSQL:
+
+```
+python scripts/migrate_to_postgres.py /path/to/cybra.sqlite3
+python scripts/verify_migration.py /path/to/cybra.sqlite3
+```
+
+The migration keeps every row and all ids; sequences are advanced past the
+maximum id afterwards, so the first insert through the API does not collide.
+The verification script compares both databases row by row and checks password
+hashes, JSON fields and timestamps, not just row counts.
 
 The image does **not** contain `garak`, `PyRIT`, `AgentDojo`, `Promptfoo` or
 `HarmBench`. They pull torch or a Node binary measured in gigabytes. The console
@@ -29,7 +59,7 @@ push to main
    │
    ├── lint:backend    ruff check backend scan
    ├── lint:frontend   npm ci && npm run build
-   ├── test:backend    pytest tests/ -q            (40 tests, no API key needed)
+   ├── test:backend    pytest tests/ -q            (89 tests, no API key needed)
    ├── build:image     docker build → :<commit-sha> and :latest
    ├── publish:registry  push both tags             (default branch only)
    └── verify:smoke    pull :<sha>, start it, wait for /api/v1/health
@@ -112,16 +142,26 @@ log once; change it in **Settings**.
 
 ### State
 
-Everything lives under `CYBRA_DATA_DIR`:
+Two separate things to back up, and they have different schedules:
 
 ```
-cybra.sqlite3    database (WAL)
-runs/            one directory per run: manifest, progress, records, report
-secret.key       only if CYBRA_SECRET_KEY was not set
+PostgreSQL          users, endpoints, datasets, runs, steps, findings
+                    (a separate service: see Database above)
 ```
 
-Back up that directory. The SQLite database and the run artefacts are the only
-state; the container itself is disposable.
+```
+CYBRA_DATA_DIR/
+  runs/            one directory per run: manifest, progress, records, report
+  secret.key       only if CYBRA_SECRET_KEY was not set
+  cybra.sqlite3    ONLY when running without CYBRA_DATABASE_URL
+```
+
+Back up both. The database holds the console state and the run artefacts hold
+the evidence the reports point at; one without the other is not reproducible.
+The container itself is disposable.
+
+Do not copy `cybra.sqlite3` expecting a backup of a PostgreSQL install: in that
+mode the file does not exist at all, and the database lives in its own service.
 
 ## Updating
 
@@ -130,10 +170,13 @@ docker pull ap3x0/cybra:latest
 docker compose -f docker/compose.prod.yaml up -d
 ```
 
-The database schema is created on start and has no migrations yet: a release
-that changes it needs a fresh `CYBRA_DATA_DIR` or a manual migration. This is
-recorded in [VALIDATION-CYBRA.md](VALIDATION-CYBRA.md) as a known limitation
-rather than a guarantee.
+The schema is created on start. Adding a nullable column does not need a
+release step: `create_all()` handles new tables and `db.py` adds missing
+columns idempotently (`_ADDED_COLUMNS`), so an existing install picks them up
+on the next start without a fresh data directory. A change that renames or
+retypes a column goes beyond that rule and still needs a manual migration.
+This is recorded in [VALIDATION-CYBRA.md](VALIDATION-CYBRA.md) as a known
+limitation rather than a guarantee.
 
 ## What is not built
 

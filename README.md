@@ -30,7 +30,7 @@ you can hand to leadership.
 | `security_suite/` | Evaluation core: 8 adapters, judge, relay with a request budget. Pre-existing, already-validated code. |
 | `scan/` | Supervisor: spawns a run, tracks progress, cancels, detects available tools. |
 | `scan/` surface | Exposes capabilities so the UI can show an honest "not installed" state instead of failing mid-run. |
-| `backend/` | FastAPI + SQLite: auth, CRUD, live progress, dataset versioning, 11 metrics. |
+| `backend/` | FastAPI + PostgreSQL (SQLite works for a local run): auth, CRUD, live progress, dataset versioning, 11 metrics. |
 | `frontend/` | React SPA: dark console and a light printable report. |
 
 **Benchmarks:** garak, Promptfoo, PyRIT, HarmBench, JailbreakBench, BIPIA,
@@ -266,7 +266,7 @@ pytest tests/ -q
 ruff check backend scan
 ```
 
-40 tests: API (`test_api.py`), report core (`test_core.py`), scan layer
+89 tests: API (`test_api.py`), report core (`test_core.py`), scan layer
 (`test_scan.py`), metrics (`test_metrics_new.py`). `test_api.py` needs no API
 key: it uses the mock engine and covers auth, CSRF, dataset versioning, a full
 run and metrics.
