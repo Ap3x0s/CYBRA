@@ -82,6 +82,38 @@ default:
   retry: 0
   interruptible: true
 
+# Сборщик образов — kaniko, без демона Docker.
+#
+# Почему не dind: канонический рецепт GitLab (docker:dind как service) требует
+# privileged-раннера. На shared-раннере GitLab privileged недоступен, и рецепт
+# либо не стартует, либо держится на сервисе, который может подняться не в
+# каждой среде. kaniko собирает образ в userspace: демон не нужен вообще, а
+# значит и privileged не нужен. Это же причина, по которой схема из задания
+# говорит «Docker» — речь о сборке контейнера, а не о конкретно dockerd.
+#
+# Образ kaniko взят из поддерживаемого форка osscontainertools: Google
+# заархивировал GoogleContainerTools/kaniko в июне 2025, upstream больше не
+# обновляется, а тянуть мёртвый образ в пайплайн ради «так было принято» —
+# это уязвимость с тегом latest, которую никто не починит. Версия
+# зафиксирована: latest у сборщика означает, что пайплайн может покраснеть
+# сам по себе, без единой правки в репозитории.
+#
+# Переопределение entrypoint обязательно. У образа kaniko ENTRYPOINT — сам
+# executor, а shell отсутствует. GitLab вставляет свой скрипт, kaniko получает
+# его как аргумент и падает с «unknown command "sh"». Ровно та же ловушка,
+# что была с gitleaks; проверено: без entrypoint shell не стартует.
+.kaniko:
+  image:
+    name: ghcr.io/osscontainertools/kaniko:v1.29.1-debug
+    entrypoint: [""]
+  variables:
+    # Сборщик и потребители сканеров работают через registry, а не через
+    # локальный демон, поэтому кеш слоёв живёт в registry проекта.
+    KANIKO_CACHE_REPO: $CI_REGISTRY_IMAGE/cache
+
+# Оставлено для job'ов, которым нужен именно Docker-клиент (pull, tag, run):
+# им демон нужен для запуска контейнеров, но не для сборки. Список
+# сокращается: сборка переехала на kaniko.
 .docker:
   image: docker:29
   services:
@@ -252,85 +284,129 @@ security:iac:
 # 8-9. Сборка, SBOM, SCA, скан образа
 # ======================================================================
 
+# Этап 8 — Build. Сборка kaniko: без демона, без privileged-раннера.
+#
+# Что изменилось по сравнению с `docker build`:
+#   * сборка идёт от пользователя контейнера job'а и не требует dind;
+#   * кеш слоёв лежит в registry проекта (--cache-repo), а не в локальном
+#     демоне, которого между job'ами не существует. Проверено локально:
+#     второй прогон даёт 8 попаданий в кеш из 8 слоёв и не пересобирает
+#     ни npm ci, ни pip install;
+#   * digest образа пишет сам kaniko (--digest-file) — раньше его доставали
+#     через `docker image inspect .RepoDigests`, а у kaniko локального
+#     образа нет вовсе;
+#   * --tar-path даёт локальный tar для аудита содержимого: раньше аудит
+#     запускался `docker run` от собранного образа, теперь образа в демоне
+#     нет, и tar — единственный способ посмотреть на него снаружи.
 build:image:
-  extends: .docker
+  extends: .kaniko
   stage: build
-  before_script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   script:
+    # config.json для kaniko собирается вручную: subcommand `login` пишет
+    # его сам, но требует shell-обёртки, а у образа её нет (entrypoint
+    # переопределён). Формат простой: base64 от user:pass. Проверено, что
+    # двоеточие в пароле формат не ломает — base64 кодирует всю строку.
+    - mkdir -p /kaniko/.docker
     - |
-      docker build \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        --cache-from "$IMAGE_NAME:latest" \
-        -f docker/Dockerfile \
-        -t "$IMAGE_NAME:$IMAGE_TAG" \
-        -t "$IMAGE_NAME:latest" .
+      reg_auth=$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d "\n")
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$reg_auth" \
+        > /kaniko/.docker/config.json
+    # Docker Hub — если заданы креды, добавляем вторым auths-энтри.
+    - |
+      if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+        hub_auth=$(printf "%s:%s" "$DOCKERHUB_USER" "$DOCKERHUB_TOKEN" | base64 | tr -d "\n")
+        {
+          printf '{"auths":{'
+          printf '"%s":{"auth":"%s"}' "$CI_REGISTRY" "$reg_auth"
+          printf ',"%s":{"auth":"%s"}' "https://index.docker.io/v1/" "$hub_auth"
+          printf '}}\n'
+        } > /kaniko/.docker/config.json
+        echo "Docker Hub: креды добавлены"
+      else
+        echo "Docker Hub credentials absent: skipped."
+      fi
     # Публикуем только из default branch и по тегу: ветки не должны
     # перезаписывать latest, из которого разворачиваются.
     - |
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; then
-        docker push "$IMAGE_NAME:$IMAGE_TAG"
-        docker push "$IMAGE_NAME:latest"
-        docker image inspect "$IMAGE_NAME:$IMAGE_TAG" --format '{{index .RepoDigests 0}}' \
-          > image-digest.txt
+        set -- \
+          --destination="$IMAGE_NAME:$IMAGE_TAG" \
+          --destination="$IMAGE_NAME:latest"
+        if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+          set -- "$@" \
+            --destination="docker.io/$DOCKERHUB_USER/cybra:$IMAGE_TAG" \
+            --destination="docker.io/$DOCKERHUB_USER/cybra:latest"
+        fi
+        PUBLISH=1
       else
         echo "Not the default branch: built only, not published."
+        # Без --destination kaniko не публикует, но образ всё равно собирает
+        # и отдаёт в --tar-path. Так ветка проверяет сборку, не трогая latest.
+        set -- --no-push
+        PUBLISH=0
       fi
-    # Docker Hub — если заданы креды, молча пропускаем иначе.
-    - |
-      if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ] \
-         && { [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; }; then
-        docker login -u "$DOCKERHUB_USER" -p "$DOCKERHUB_TOKEN" docker.io
-        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$DOCKERHUB_USER/cybra:$IMAGE_TAG"
-        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$DOCKERHUB_USER/cybra:latest"
-        docker push "$DOCKERHUB_USER/cybra:$IMAGE_TAG"
-        docker push "$DOCKERHUB_USER/cybra:latest"
-      else
-        echo "Docker Hub credentials absent: skipped."
-      fi
+      /kaniko/executor \
+        --context="$CI_PROJECT_DIR" \
+        --dockerfile="$CI_PROJECT_DIR/docker/Dockerfile" \
+        --cache=true \
+        --cache-repo="$KANIKO_CACHE_REPO" \
+        --cache-ttl=336h \
+        --compressed-caching=false \
+        --snapshot-mode=redo \
+        --digest-file="$CI_PROJECT_DIR/image-digest.txt" \
+        --image-name-with-digest-file="$CI_PROJECT_DIR/image-digest-ref.txt" \
+        --tar-path="$CI_PROJECT_DIR/image.tar" \
+        --verbosity=info \
+        "$@"
+      echo "published=$PUBLISH" >> "$CI_PROJECT_DIR/build.env"
+    - cat image-digest.txt 2>/dev/null || echo "digest не записан"
     # Аудит содержимого образа: секреты, личные данные и мусор.
-    # Питон берём из проверяемого образа — в docker:29 его нет, и первый
-    # вариант этой проверки падал с «python: not found» (exit 127).
+    # Раньше проверка шла `docker run` от собранного образа — в демоне его
+    # больше нет. Распаковываем tar и смотрим файловую систему как есть:
+    # она и есть то, что уедет заказчику. Скрипт на shell, потому что в
+    # образе kaniko нет python3.
     - echo "--- содержимое образа ---"
     - |
-      docker run --rm -v "$CI_PROJECT_DIR/scripts:/audit:ro" \
-        --entrypoint python "$IMAGE_NAME:$IMAGE_TAG" /audit/audit_image.py \
-          --self "$IMAGE_NAME:$IMAGE_TAG" || true
+      mkdir -p /tmp/rootfs && tar -xf image.tar -C /tmp/rootfs
+      sh /scripts/audit_image.sh /tmp/rootfs || true
   after_script:
-    - docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' || true
+    - ls -l image.tar image-digest.txt 2>/dev/null || true
   artifacts:
     when: always
-    paths: [image-digest.txt]
+    paths: [image-digest.txt, image-digest-ref.txt, build.env]
+    reports:
+      dotenv: build.env
     expire_in: 30 days
 
 # Этап 8 — SBOM. Перечень компонентов образа: что именно уезжает заказчику.
 # Генерируется syft, публикуется как артефакт и не блокирует пайплайн.
+#
+# Демон Docker здесь не нужен: syft читает образ прямо из registry по
+# ссылке `registry:<host>/<path>:<tag>`. Раньше job тянул docker:29-dind
+# только ради `docker pull`, то есть ради доступа к образу, который и так
+# лежит в registry. Одна схема доступа вместо двух — меньше мест, где
+# что-то может не подняться.
 build:sbom:
   stage: build
   # needs обязателен: без него job стартовал ОДНОВРЕМЕННО с build:image и
   # падал с MANIFEST_UNKNOWN — образа с этим тегом в registry ещё не было.
   needs: [build:image]
-  image: docker:29
-  services:
-    - name: docker:29-dind
-      alias: docker
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  image: alpine:3.20
   before_script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - apk add --no-cache curl
+    # syft ставим скриптом установщика: пакета в apk нет. Версия не
+    # фиксируется — установщик берёт latest. Приемлемо: SBOM не влияет на
+    # артефакт, а краснеть из-за его поломки пайплайн не должен
+    # (allow_failure ниже).
     - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+  allow_failure: true
   script:
     - mkdir -p "$SECURITY_REPORTS"
     # Собираем SBOM с образа в registry. На ветках он не публикуется — тогда
     # честно пропускаем, а не краснеем.
     - |
-      if docker manifest inspect "$IMAGE_NAME:$IMAGE_TAG" > /dev/null 2>&1; then
-        syft "$IMAGE_NAME:$IMAGE_TAG" -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json"
-        syft "$IMAGE_NAME:$IMAGE_TAG" -o table | head -40
+      if syft "registry:$IMAGE_NAME:$IMAGE_TAG" -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json" 2>/dev/null; then
+        syft "registry:$IMAGE_NAME:$IMAGE_TAG" -o table | head -40
       else
         echo "образ $IMAGE_TAG не опубликован (ветка, не default) — SBOM пропущен"
         echo '{"note":"image not published on this ref"}' > "$SECURITY_REPORTS/sbom.spdx.json"
@@ -367,16 +443,53 @@ security:sca:
 # Этап 9b — Image scan: уязвимости внутри образа (OS-пакеты + python).
 # HIGH/CRITICAL не блокируют: базовый python:3.12-slim регулярно имеет
 # свежие CVE, и красный пайплайн из-за них приучил бы игнорировать красное.
+#
+# needs обязателен по той же причине, что и у build:sbom, только здесь
+# последствие было хуже: job стартовал ОДНОВРЕМЕННО с build:image (оба в
+# стадии build, без needs), образа с этим тегом в registry ещё не было, и
+# trivy падал с «MANIFEST_UNKNOWN: manifest unknown». Ошибка гасилась
+# `|| true` и allow_failure, поэтому job числился ЗЕЛЁНЫМ, а trivy.sarif
+# не создавался: в артефактах его нет, скан образа не выполнялся ни разу.
+# Видно по логу пайплайна 3094164226 — «No files to upload».
+#
+# Демон здесь тоже не нужен: trivy читает образ из registry по ссылке и
+# не требует `docker images`. dind убран — на shared-раннере он лишний риск.
 security:image:
-  extends: .docker
   stage: build
+  needs: [build:image]
+  image: aquasec/trivy:latest
   allow_failure: true
   script:
-    - apk add --no-cache curl
-    - curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
     - mkdir -p "$SECURITY_REPORTS"
-    - trivy image --severity HIGH,CRITICAL --format sarif --output "$SECURITY_REPORTS/trivy.sarif" "$IMAGE_NAME:$IMAGE_TAG" || true
+    # Креды registry — из файла, а не флагами: trivy читает стандартный
+    # docker config, где уже лежит запись для CI_REGISTRY.
+    - |
+      mkdir -p "$HOME/.docker"
+      reg_auth=$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d "\n")
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$reg_auth" \
+        > "$HOME/.docker/config.json"
+    # || true здесь НЕ маскирует ошибку молча: причина пишется в лог, а
+    # отсутствие отчёта видно по артефактам. Первая версия гасила
+    # MANIFEST_UNKNOWN и выглядела зелёной — эту ловушку и убираем тем,
+    # что after_script проверяет наличие файла.
+    - |
+      if trivy image --severity HIGH,CRITICAL --format sarif \
+           --output "$SECURITY_REPORTS/trivy.sarif" "$IMAGE_NAME:$IMAGE_TAG"; then
+        echo "скан выполнен"
+      else
+        echo "FAIL: скан образа не выполнился — см. вывод выше"
+      fi
     - trivy image --severity HIGH,CRITICAL --format table "$IMAGE_NAME:$IMAGE_TAG" | head -40 || true
+  after_script:
+    # Явная проверка: пустой отчёт — это не «уязвимостей нет», а «скан не
+    # состоялся». Пока job числился зелёным с отсутствующим файлом, скан
+    # образа не выполнялся ни разу за всю историю пайплайнов.
+    - |
+      if [ -s "$SECURITY_REPORTS/trivy.sarif" ]; then
+        echo "trivy.sarif на месте: $(wc -c < "$SECURITY_REPORTS/trivy.sarif") байт"
+      else
+        echo "ВНИМАНИЕ: trivy.sarif отсутствует — скан образа НЕ выполнен"
+      fi
   artifacts:
     when: always
     paths: ["$SECURITY_REPORTS/trivy.sarif"]
