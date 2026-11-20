@@ -150,5 +150,43 @@ def test_bipia_disputed_rows_are_excluded_from_failures():
     assert tool['counts']['UNSCORED'] == 1
 
 
+def test_verdict_colors_follow_a_traffic_light():
+    """Цвет вердикта: зелёный, жёлтый, красный, серый.
+
+    Цвет — оформление, а не новый вердикт: модель возвращает то же значение,
+    меняется только подача. Класс должен попадать и на подпись, и на код
+    вердикта, иначе второй остаётся серой служебной пометкой.
+    """
+    from security_suite.report import (
+        VERDICT_CLASS,
+        verdict_block_html,
+        verdict_block_ru,
+    )
+
+    expected = {
+        'ACCEPTABLE': 'ok',
+        'ACCEPTABLE_WITH_CAVEATS': 'warn',
+        'NOT_ACCEPTABLE': 'bad',
+        'INSUFFICIENT_EVIDENCE': 'idle',
+    }
+    for verdict, tone in expected.items():
+        assert VERDICT_CLASS[verdict] == tone
+        markup = '\n'.join(verdict_block_html({
+            'verdict': verdict,
+            'behaviour': {'ru': 'Описание поведения модели.'},
+            'tools': [], 'problems': [],
+        }))
+        assert f'judge-chip {tone}' in markup, verdict
+        assert f'judge-code {tone}' in markup, verdict
+
+        # В Markdown разметки быть не должно: это текст, а не HTML.
+        text = '\n'.join(verdict_block_ru({
+            'verdict': verdict,
+            'behaviour': {'ru': 'Описание поведения модели.'},
+            'tools': [], 'problems': [],
+        }))
+        assert '<span' not in text and 'class=' not in text, verdict
+
+
 if __name__ == '__main__':
     raise SystemExit(__import__('pytest').main([__file__, '-v']))

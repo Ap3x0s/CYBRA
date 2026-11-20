@@ -18,6 +18,24 @@ const VERDICT_RU = {
   INSUFFICIENT_EVIDENCE: 'данных недостаточно',
 }
 
+/**
+ * Цвета вердикта по принципу светофора.
+ *
+ * Зелёный — годна, жёлтый — годна с оговорками, красный — не годна,
+ * серый — вывода нет. Цвет не единственный носитель смысла: рядом всегда
+ * стоит текст, иначе на чёрно-белой печати и при дальтонизме состояние
+ * неразличимо.
+ *
+ * «Допустима с оговорками» — жёлтый, а не зелёный: там есть что предъявить,
+ * и это должно быть заметно при просмотре списка, а не только в тексте.
+ */
+const VERDICT_TONE = {
+  ACCEPTABLE: 'ok',
+  ACCEPTABLE_WITH_CAVEATS: 'warn',
+  NOT_ACCEPTABLE: 'bad',
+  INSUFFICIENT_EVIDENCE: 'idle',
+}
+
 /** Длительность прогона человеческим языком: 45 с, 23 мин, 1 ч 12 мин. */
 function formatDuration(seconds) {
   if (seconds === null || seconds === undefined) return null
@@ -222,21 +240,25 @@ export default function RunDetail() {
           {/* Вердикт судьи - отдельной врезкой над таблицей, а не строкой в
               ней: это суждение о поведении модели, а таблица — измерения.
               Показываем тот же текст, что в .md и в печатном отчёте. */}
-          {(data.verdicts || {})[model] ? (
+          {(data.verdicts || {})[model] ? (() => {
+            // Тон выносим наружу: от него зависят и полоса слева, и цвет
+            // подписи, и цвет кода вердикта — иначе блок остаётся серым при
+            // любом выводе судьи.
+            const raw = (data.verdicts[model].verdict || '').toUpperCase()
+            const tone = VERDICT_TONE[raw] || 'idle'
+            return (
             <div
               style={{
-                borderLeft: '3px solid var(--accent)',
+                borderLeft: `3px solid var(--${tone === 'ok' ? 'ok' : tone === 'warn' ? 'warn' : tone === 'bad' ? 'danger' : 'edge'})`,
                 background: 'var(--ink-800)',
                 padding: '10px 13px', margin: '0 0 14px', borderRadius: '0 8px 8px 0',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                <span className="pill" style={{ textTransform: 'none' }}>
-                  {t('Вердикт судьи:')} {t(VERDICT_RU[(data.verdicts[model].verdict || '').toUpperCase()] || data.verdicts[model].verdict)}
+                <span className={`pill ${tone}`} style={{ textTransform: 'none' }}>
+                  {t('Вердикт судьи:')} {t(VERDICT_RU[raw] || raw)}
                 </span>
-                <span className="dim mono-sm">
-                  {(data.verdicts[model].verdict || '').toUpperCase()}
-                </span>
+                <span className={`mono-sm verdict-code ${tone}`}>{raw}</span>
               </div>
               {(() => {
                 const entry = data.verdicts[model]
@@ -259,7 +281,8 @@ export default function RunDetail() {
                 {t('Вердикт - суждение судьи, а не сертификат безопасности. Подсчёты в таблицах от него не зависят.')}
               </div>
             </div>
-          ) : null}
+            )
+          })() : null}
 
           {/* The table has seven columns and a long artifact path; on narrower
               windows it would push out of the card instead of scrolling. */}

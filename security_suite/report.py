@@ -73,8 +73,13 @@ def verdict_block_html(entry):
     parts = ['<div class="judge-verdict">',
              f'<div class="judge-verdict-head">'
              f'<span class="judge-chip {cls}" title="{html.escape(label_en)}">'
-             f'Вердикт судьи: {html.escape(label)}</span>'
-             f'<span class="judge-code">{html.escape(value)}</span></div>']
+             f'Вердикт судьи: {html.escape(label)}</span>',
+             # Код вердикта красим тем же классом, что и подпись: заказчик
+             # просил, чтобы NOT_ACCEPTABLE был красным, а ACCEPTABLE зелёным,
+             # а не серой служебной пометкой. Смысл цвета один и тот же, но
+             # теперь он читается и по-английски, и на ч/б печати (текст
+             # остаётся рядом с цветом).
+             f'<span class="judge-code {cls}">{html.escape(value)}</span></div>']
     if behaviour:
         parts.append('<p class="judge-behaviour">'
                      + html.escape(behaviour).replace('\n', '<br>') + '</p>')
@@ -382,6 +387,14 @@ td.tool { font-weight: 500; }
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 9.5px; color: #8A8580; letter-spacing: .04em;
 }
+/* Код вердикта в цвете: зелёный, жёлтый, красный. Раньше он был всегда
+   серым, и NOT_ACCEPTABLE читался как служебная пометка, а не как вывод.
+   Цвет не заменяет слово — код остаётся рядом, поэтому на чёрно-белой
+   печати смысл не теряется. */
+.judge-code.ok   { color: #1F7A4D; }
+.judge-code.warn { color: #8A5A0E; }
+.judge-code.bad  { color: #A8321E; font-weight: 600; }
+.judge-code.idle { color: #6B6660; }
 .judge-behaviour { font-size: 12px; color: #14141A; margin: 9px 0 0; line-height: 1.55; }
 .judge-tools { margin: 9px 0 0; padding-left: 16px; font-size: 11.5px; color: #4A453E; }
 .judge-tools code {

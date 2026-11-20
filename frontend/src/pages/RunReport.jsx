@@ -169,7 +169,16 @@ function JudgeVerdict({ entry }) {
         >
           {t('Вердикт судьи:')} {t(style.label)}
         </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: MUTED }}>
+        {/* Код вердикта в том же цвете, что и подпись: зелёный, жёлтый,
+            красный. Раньше он был всегда серым, и NOT_ACCEPTABLE читался как
+            служебная пометка, а не как вывод отчёта. */}
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)', fontSize: 9.5,
+            color: style.fg,
+            fontWeight: value === 'NOT_ACCEPTABLE' ? 600 : 400,
+          }}
+        >
           {value}
         </span>
       </div>
