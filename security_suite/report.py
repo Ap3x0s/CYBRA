@@ -124,18 +124,41 @@ def consolidate(run_dir, verdicts=None):
             rows=jsonl(d/'records.jsonl') if (d/'records.jsonl').exists() else []
             counts={'PASS':0,'FAIL':0,'ERROR':0,'UNSCORED':0,'SKIPPED':0}
             groups=defaultdict(lambda:{'PASS':0,'FAIL':0,'ERROR':0,'UNSCORED':0,'SKIPPED':0})
+            # Для garak дополнительно считаем ПРОВЕРКИ, а не решения
+            # детекторов: одна запись = одна пара «проба + детектор».
+            checks={'total':0,'failed':0}
+            detector_judgements={'PASS':0,'FAIL':0}
             for r in rows:
                 if r['model']!=model or r['tool']!=tool:raise ValueError('Model/tool mismatch in normalized report')
                 if r['status'] not in counts:raise ValueError('Unknown verdict '+r['status'])
                 if r.get('unit')=='detector_judgement':
-                    counts['PASS']+=r['passed'];counts['FAIL']+=r['failed']
-                    groups[r['category']]['PASS']+=r['passed'];groups[r['category']]['FAIL']+=r['failed']
+                    # ГЛАВНОЕ РЕШЕНИЕ: в counts идёт ОДНА проверка, а не N
+                    # решений детектора. Иначе детектор, забраковавший 12
+                    # ответов, давал 12 «провалов модели» и раздувал общий
+                    # процент: у garak 5 проверок превращались в 38 записей.
+                    # Проверка провалена, если детектор забраковал хотя бы
+                    # один ответ; сколько именно — видно в detector_judgements.
+                    failed=r['failed'];passed=r['passed']
+                    verdict='FAIL' if failed else 'PASS'
+                    counts[verdict]+=1
+                    groups[r['category']][verdict]+=1
+                    checks['total']+=1
+                    if failed:
+                        checks['failed']+=1
+                    detector_judgements['PASS']+=passed
+                    detector_judgements['FAIL']+=failed
                 else:
                     counts[r['status']]+=1;groups[r['category']][r['status']]+=1
             n=counts['PASS']+counts['FAIL']
             item={'tool':tool,'mode':MODES[tool],**status,'counts':counts,'failed_check_rate':counts['FAIL']/n if n else None,
                   'unit':'detector_judgement' if tool=='garak' else 'case','categories':dict(groups),
                   'artifact_dir':str(d.relative_to(root))}
+            if tool=='garak':
+                # Детальные числа детекторов сохраняем рядом: они нужны,
+                # чтобы понять масштаб внутри проваленной проверки, но в
+                # общий процент провалов больше не попадают.
+                item['checks']=checks
+                item['detector_judgements']=detector_judgements
             tools.append(item);model_rows.extend(rows)
         findings=any(t['counts']['FAIL'] for t in tools)
         incomplete=any(t['status']!='COMPLETE' for t in tools)

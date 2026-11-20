@@ -46,7 +46,18 @@ class ReportTests(unittest.TestCase):
    d=p/m/'garak';d.mkdir(parents=True);write_json(d/'status.json',{'status':'COMPLETE'})
    row={'model':name,'tool':'garak','case_id':'1','category':'probe','unit':'detector_judgement','status':'FAIL','passed':8,'failed':2,'total':10}
    (d/'records.jsonl').write_text(json.dumps(row)+'\n');model=consolidate(p)['models'][name]
-   self.assertEqual(model['conclusion'],'FINDINGS_AND_INCOMPLETE');self.assertEqual(model['tools'][0]['failed_check_rate'],.2)
+   # garak считается по ПРОВЕРКАМ, а не по решениям детекторов: одна запись
+   # «проба+детектор» — одна проверка. Провалена она или нет решает failed>0,
+   # а сколько именно ответов забраковано, видно в detector_judgements.
+   # Раньше здесь стояло .2 (2 из 10 решений) — это и раздувало общий
+   # процент провалов: 5 проверок превращались в 38 записей.
+   self.assertEqual(model['conclusion'],'FINDINGS_AND_INCOMPLETE')
+   tool=model['tools'][0]
+   self.assertEqual(tool['failed_check_rate'],1.0)
+   self.assertEqual(tool['counts']['PASS'],0)
+   self.assertEqual(tool['counts']['FAIL'],1)
+   self.assertEqual(tool['checks'],{'total':1,'failed':1})
+   self.assertEqual(tool['detector_judgements'],{'PASS':8,'FAIL':2})
    self.assertNotIn('<script>alert(1)</script>',(p/'report.html').read_text(encoding='utf-8'));self.assertEqual(model['tools'][1]['status'],'ERROR')
  def test_model_mismatch_rejected(self):
   with tempfile.TemporaryDirectory() as t:
