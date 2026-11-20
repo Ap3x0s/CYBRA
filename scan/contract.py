@@ -5,6 +5,7 @@ is physically executed. Today the only real implementation starts the existing
 ``run.py`` as a child process; later one could reimplement ``Engine`` in-process
 without touching the HTTP layer.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -18,7 +19,7 @@ class Target:
 
     endpoint: str
     model: str
-    api_key: str = ''
+    api_key: str = ""
     extra_body: dict | None = None
     headers: dict | None = None
 
@@ -27,7 +28,7 @@ class Target:
 class JudgeConfig:
     endpoint: str
     model: str
-    api_key: str = ''
+    api_key: str = ""
     extra_body: dict | None = None
     max_tokens: int = 4096
 
@@ -44,23 +45,23 @@ class RunRequest:
     datasets_dir: Path
     limit: int = 10
     seed: int = 42
-    variants: tuple[str, ...] = ('direct', 'roleplay', 'authority')
+    variants: tuple[str, ...] = ("direct", "roleplay", "authority")
     max_requests: int = 1000
     max_tokens: int = 2048
     temperature: float | None = 0.0
     timeout: int = 120
     tool_timeout: int = 7200
-    token_parameter: str = 'max_tokens'
+    token_parameter: str = "max_tokens"
     drop_params: tuple[str, ...] = ()
     developer_as_system: bool = False
     verify_tls: bool = True
-    garak_probes: str = ''
+    garak_probes: str = ""
     bipia_attacks: int = 4
     # Общий вердикт судьи — опциональная функция поверх обычных метрик.
     # Выключен по умолчанию: это дополнительный запрос к модели-судье, и
     # администратор должен включать его сознательно.
     verdict_enabled: bool = False
-    verdict_prompt: str = ''
+    verdict_prompt: str = ""
 
 
 @dataclasses.dataclass
@@ -68,8 +69,8 @@ class Progress:
     """A snapshot of a running scan."""
 
     requests: dict[str, int] = dataclasses.field(default_factory=dict)
-    current_model: str = ''
-    current_tool: str = ''
+    current_model: str = ""
+    current_tool: str = ""
     finished_steps: list[str] = dataclasses.field(default_factory=list)
     errors: list[str] = dataclasses.field(default_factory=list)
 
@@ -83,8 +84,7 @@ class Engine(Protocol):
 
     name: str
 
-    def start(self, request: RunRequest) -> 'EngineHandle':
-        ...
+    def start(self, request: RunRequest) -> "EngineHandle": ...
 
 
 class EngineHandle(Protocol):

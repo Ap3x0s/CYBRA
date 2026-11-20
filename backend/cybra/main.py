@@ -3,6 +3,7 @@
 The SPA is served by the same process: one container, one port, no CORS puzzle
 in production. During development Vite proxies /api to this server.
 """
+
 from __future__ import annotations
 
 import mimetypes
@@ -26,23 +27,23 @@ from .security import hash_password
 # Browsers then refuse the ES module ("strict MIME type checking"). Pinning the
 # types here makes the bundle work regardless of the host OS.
 for _suffix, _type in (
-    ('.js', 'text/javascript'),
-    ('.mjs', 'text/javascript'),
-    ('.css', 'text/css'),
-    ('.json', 'application/json'),
-    ('.svg', 'image/svg+xml'),
-    ('.woff2', 'font/woff2'),
-    ('.woff', 'font/woff'),
-    ('.map', 'application/json'),
+    (".js", "text/javascript"),
+    (".mjs", "text/javascript"),
+    (".css", "text/css"),
+    (".json", "application/json"),
+    (".svg", "image/svg+xml"),
+    (".woff2", "font/woff2"),
+    (".woff", "font/woff"),
+    (".map", "application/json"),
 ):
     mimetypes.add_type(_type, _suffix)
 
-STATIC_DIR = Path(__file__).resolve().parents[1] / 'static'
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 
 def _initial_password_path() -> Path:
     """Куда положить пароль первого старта."""
-    return settings.data_dir / 'initial-password'
+    return settings.data_dir / "initial-password"
 
 
 def _write_initial_password(password: str) -> Path | None:
@@ -58,11 +59,11 @@ def _write_initial_password(password: str) -> Path | None:
     """
     path = _initial_password_path()
     try:
-        path.write_text(password + '\n', encoding='utf-8')
+        path.write_text(password + "\n", encoding="utf-8")
         path.chmod(0o600)
         return path
     except OSError as error:  # noqa: BLE001 - файл не должен ломать старт
-        print(f'  ! не удалось записать {path}: {error}', file=sys.stderr, flush=True)
+        print(f"  ! не удалось записать {path}: {error}", file=sys.stderr, flush=True)
         return None
 
 
@@ -80,28 +81,29 @@ def bootstrap_admin() -> None:
     """
     db = SessionLocal()
     try:
-        if db.scalar(select(User).where(User.role == 'admin')) is not None:
+        if db.scalar(select(User).where(User.role == "admin")) is not None:
             # Self-heal: seed datasets once an admin exists.
             _seed_datasets(db)
             return
         password = secrets.token_urlsafe(12)
         admin = User(
-            email='admin@cybra.local',
-            display_name='Администратор',
+            email="admin@cybra.local",
+            display_name="Администратор",
             password_hash=hash_password(password),
-            role='admin',
+            role="admin",
         )
         db.add(admin)
         db.commit()
         written = _write_initial_password(password)
         banner = (
-            '\n' + '=' * 68 + '\n'
-            '  CYBRA: создан администратор\n'
-            '  email:    admin@cybra.local\n'
-            f'  пароль:   {password}\n'
-            + (f'  файл:     {written}\n' if written else '')
-            + '  Смените пароль после первого входа.\n'
-            + '=' * 68 + '\n'
+            "\n" + "=" * 68 + "\n"
+            "  CYBRA: создан администратор\n"
+            "  email:    admin@cybra.local\n"
+            f"  пароль:   {password}\n"
+            + (f"  файл:     {written}\n" if written else "")
+            + "  Смените пароль после первого входа.\n"
+            + "=" * 68
+            + "\n"
         )
         print(banner, flush=True)
         _seed_datasets(db)
@@ -118,14 +120,15 @@ def _seed_datasets(db) -> None:
 
     if db.scalar(select(func.count()).select_from(DatasetVersion)):
         return
-    admin = db.scalar(select(User).where(User.role == 'admin'))
-    datasets_dir = settings.root / 'datasets'
+    admin = db.scalar(select(User).where(User.role == "admin"))
+    datasets_dir = settings.root / "datasets"
     for name in dataset_service.BUILTIN_SOURCES:
         try:
             dataset_service.import_builtin(
-                db, datasets_dir, name, created_by=admin.id if admin else None)
+                db, datasets_dir, name, created_by=admin.id if admin else None
+            )
         except Exception as error:  # noqa: BLE001 - a missing file must not block start
-            print(f'  ! dataset {name} skipped: {error}', file=sys.stderr, flush=True)
+            print(f"  ! dataset {name} skipped: {error}", file=sys.stderr, flush=True)
 
 
 @asynccontextmanager
@@ -136,31 +139,33 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title='CYBRA', version='0.1.0', lifespan=lifespan)
+    app = FastAPI(title="CYBRA", version="0.1.0", lifespan=lifespan)
     app.include_router(router)
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):  # noqa: ANN001
         # Never leak a traceback to the browser; keep it in the server log.
         import traceback
+
         traceback.print_exc()
-        return JSONResponse({'detail': 'Внутренняя ошибка сервера'}, status_code=500)
+        return JSONResponse({"detail": "Внутренняя ошибка сервера"}, status_code=500)
 
     if STATIC_DIR.exists():
-        assets = STATIC_DIR / 'assets'
+        assets = STATIC_DIR / "assets"
         if assets.exists():
-            app.mount('/assets', StaticFiles(directory=assets), name='assets')
+            app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
-        @app.get('/{full_path:path}', include_in_schema=False)
+        @app.get("/{full_path:path}", include_in_schema=False)
         async def spa(full_path: str):
             candidate = STATIC_DIR / full_path
             if full_path and candidate.is_file():
                 return FileResponse(candidate)
-            index = STATIC_DIR / 'index.html'
+            index = STATIC_DIR / "index.html"
             if not index.exists():
                 return JSONResponse(
-                    {'detail': 'UI не собран. Выполните: cd frontend && npm run build'},
-                    status_code=503)
+                    {"detail": "UI не собран. Выполните: cd frontend && npm run build"},
+                    status_code=503,
+                )
             return FileResponse(index)
 
     return app

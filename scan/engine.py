@@ -13,6 +13,7 @@ The child contract is a directory of files:
     <out>/all_records.jsonl every normalised case
     <out>/<model>/<tool>/   per-step artifacts (records, http log, status)
 """
+
 from __future__ import annotations
 
 import json
@@ -33,17 +34,17 @@ ROOT = Path(__file__).resolve().parents[1]
 class SubprocessEngine:
     """Runs ``python run.py run ...`` and follows its artifact directory."""
 
-    name = 'subprocess'
+    name = "subprocess"
 
     def __init__(self, python: str | None = None) -> None:
         self.python = python or sys.executable
 
-    def start(self, request: RunRequest) -> 'SubprocessHandle':
+    def start(self, request: RunRequest) -> "SubprocessHandle":
         request.out_dir.mkdir(parents=True, exist_ok=True)
         command = self._command(request)
         env = self._environment(request)
-        log_path = request.out_dir / 'engine.log'
-        log = log_path.open('w', encoding='utf-8')
+        log_path = request.out_dir / "engine.log"
+        log = log_path.open("w", encoding="utf-8")
         try:
             process = subprocess.Popen(
                 command,
@@ -51,75 +52,99 @@ class SubprocessEngine:
                 env=env,
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                start_new_session=(os.name == 'posix'),
-                creationflags=(
-                    subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
-                ),
+                start_new_session=(os.name == "posix"),
+                creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0),
             )
         except OSError as error:
             log.close()
-            raise EngineError(f'Cannot start engine: {error}') from error
+            raise EngineError(f"Cannot start engine: {error}") from error
         return SubprocessHandle(process, request, log)
 
     def _command(self, request: RunRequest) -> list[str]:
         command = [
-            self.python, 'run.py', 'run',
-            '--endpoint', request.targets[0].endpoint,
-            '--models', *[target.model for target in request.targets],
-            '--judge-endpoint', request.judge.endpoint,
-            '--judge-model', request.judge.model,
-            '--tools', *request.tools,
-            '--limit', str(request.limit),
-            '--seed', str(request.seed),
-            '--variants', *request.variants,
-            '--max-requests', str(request.max_requests),
-            '--max-tokens', str(request.max_tokens),
-            '--judge-max-tokens', str(request.judge.max_tokens),
-            '--timeout', str(request.timeout),
-            '--tool-timeout', str(request.tool_timeout),
-            '--token-parameter', request.token_parameter,
-            '--out', str(request.out_dir),
+            self.python,
+            "run.py",
+            "run",
+            "--endpoint",
+            request.targets[0].endpoint,
+            "--models",
+            *[target.model for target in request.targets],
+            "--judge-endpoint",
+            request.judge.endpoint,
+            "--judge-model",
+            request.judge.model,
+            "--tools",
+            *request.tools,
+            "--limit",
+            str(request.limit),
+            "--seed",
+            str(request.seed),
+            "--variants",
+            *request.variants,
+            "--max-requests",
+            str(request.max_requests),
+            "--max-tokens",
+            str(request.max_tokens),
+            "--judge-max-tokens",
+            str(request.judge.max_tokens),
+            "--timeout",
+            str(request.timeout),
+            "--tool-timeout",
+            str(request.tool_timeout),
+            "--token-parameter",
+            request.token_parameter,
+            "--out",
+            str(request.out_dir),
         ]
-        command += ['--temperature', 'omit' if request.temperature is None else str(request.temperature)]
+        command += [
+            "--temperature",
+            "omit" if request.temperature is None else str(request.temperature),
+        ]
         if request.developer_as_system:
-            command.append('--developer-as-system')
+            command.append("--developer-as-system")
         if request.drop_params:
-            command += ['--drop-params', *request.drop_params]
+            command += ["--drop-params", *request.drop_params]
         if not request.verify_tls:
-            command.append('--insecure-skip-tls-verify')
+            command.append("--insecure-skip-tls-verify")
         if request.garak_probes:
-            command += ['--garak-probes', request.garak_probes]
+            command += ["--garak-probes", request.garak_probes]
         if request.bipia_attacks:
-            command += ['--bipia-attacks', str(request.bipia_attacks)]
+            command += ["--bipia-attacks", str(request.bipia_attacks)]
 
         # Endpoint-level request decoration travels through files, never argv:
         # argv is visible in the process list and in logs.
         if request.targets[0].extra_body:
-            path = request.out_dir / 'extra-body.json'
-            path.write_text(json.dumps(request.targets[0].extra_body), encoding='utf-8')
-            command += ['--extra-body', str(path)]
+            path = request.out_dir / "extra-body.json"
+            path.write_text(json.dumps(request.targets[0].extra_body), encoding="utf-8")
+            command += ["--extra-body", str(path)]
         if request.targets[0].headers:
-            path = request.out_dir / 'headers.json'
-            path.write_text(json.dumps(request.targets[0].headers), encoding='utf-8')
-            command += ['--headers', str(path)]
+            path = request.out_dir / "headers.json"
+            path.write_text(json.dumps(request.targets[0].headers), encoding="utf-8")
+            command += ["--headers", str(path)]
         if request.judge.extra_body:
-            path = request.out_dir / 'judge-extra-body.json'
-            path.write_text(json.dumps(request.judge.extra_body), encoding='utf-8')
-            command += ['--judge-extra-body', str(path)]
+            path = request.out_dir / "judge-extra-body.json"
+            path.write_text(json.dumps(request.judge.extra_body), encoding="utf-8")
+            command += ["--judge-extra-body", str(path)]
         return command
 
     def _environment(self, request: RunRequest) -> dict:
         env = os.environ.copy()
-        env['TARGET_API_KEY'] = request.targets[0].api_key or ''
-        env['JUDGE_API_KEY'] = request.judge.api_key or request.targets[0].api_key or ''
-        env['PYTHONPATH'] = str(ROOT)
-        env['PYTHONIOENCODING'] = 'utf-8'
-        env['NO_PROXY'] = 'localhost,127.0.0.1'
-        env['no_proxy'] = 'localhost,127.0.0.1'
-        env['PROMPTFOO_DISABLE_TELEMETRY'] = '1'
-        env['TOKENIZERS_PARALLELISM'] = 'false'
-        for name in ('http_proxy', 'https_proxy', 'all_proxy',
-                     'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'):
+        env["TARGET_API_KEY"] = request.targets[0].api_key or ""
+        env["JUDGE_API_KEY"] = request.judge.api_key or request.targets[0].api_key or ""
+        env["PYTHONPATH"] = str(ROOT)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["NO_PROXY"] = "localhost,127.0.0.1"
+        env["no_proxy"] = "localhost,127.0.0.1"
+        env["PROMPTFOO_DISABLE_TELEMETRY"] = "1"
+        env["TOKENIZERS_PARALLELISM"] = "false"
+        for name in (
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+        ):
             env.pop(name, None)
         return env
 
@@ -127,9 +152,9 @@ class SubprocessEngine:
 class SubprocessHandle(EngineHandle):
     """Follows one child run."""
 
-    _COUNT = re.compile(r'requests=\{' + "'target': (\\d+), 'judge': (\\d+)" + r'\}')
-    _STARTING = re.compile(r'^\[(.+?)\] (.+?): starting$')
-    _FINISHED = re.compile(r'^\[(.+?)\] (.+?): (\w+)$')
+    _COUNT = re.compile(r"requests=\{" + "'target': (\\d+), 'judge': (\\d+)" + r"\}")
+    _STARTING = re.compile(r"^\[(.+?)\] (.+?): starting$")
+    _FINISHED = re.compile(r"^\[(.+?)\] (.+?): (\w+)$")
 
     def __init__(self, process: subprocess.Popen, request: RunRequest, log) -> None:
         self._process = process
@@ -155,18 +180,18 @@ class SubprocessHandle(EngineHandle):
                 finished_steps=list(self._progress.finished_steps),
                 errors=list(self._progress.errors),
             )
-        progress.requests.setdefault('target', 0)
-        progress.requests['elapsed_seconds'] = int(time.monotonic() - self._started_at)
+        progress.requests.setdefault("target", 0)
+        progress.requests["elapsed_seconds"] = int(time.monotonic() - self._started_at)
         return progress
 
     def _drain_log(self) -> None:
         """Parse whatever the child has appended since the last call."""
-        path = self._request.out_dir / 'engine.log'
+        path = self._request.out_dir / "engine.log"
         try:
-            text = path.read_text(encoding='utf-8', errors='replace')
+            text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return
-        seen = getattr(self, '_log_offset', 0)
+        seen = getattr(self, "_log_offset", 0)
         if len(text) <= seen:
             return
         self._log_offset = len(text)
@@ -181,16 +206,16 @@ class SubprocessHandle(EngineHandle):
             if match:
                 model, tool, status = match.groups()
                 with self._lock:
-                    self._progress.finished_steps.append(f'{model}/{tool}:{status}')
+                    self._progress.finished_steps.append(f"{model}/{tool}:{status}")
                     self._finished_codes[(model, tool)] = status
-                    if status in ('ERROR', 'PARTIAL'):
-                        self._progress.errors.append(f'{model}/{tool}: {status}')
+                    if status in ("ERROR", "PARTIAL"):
+                        self._progress.errors.append(f"{model}/{tool}: {status}")
                 continue
             match = self._COUNT.search(line)
             if match:
                 with self._lock:
-                    self._progress.requests['target'] = int(match.group(1))
-                    self._progress.requests['judge'] = int(match.group(2))
+                    self._progress.requests["target"] = int(match.group(1))
+                    self._progress.requests["judge"] = int(match.group(2))
 
     # -- lifecycle ------------------------------------------------------
     @property
@@ -211,7 +236,7 @@ class SubprocessHandle(EngineHandle):
         if self._process.poll() is not None:
             return
         self._cancelled = True
-        if os.name == 'posix':
+        if os.name == "posix":
             try:
                 os.killpg(self._process.pid, signal.SIGTERM)
             except ProcessLookupError:
@@ -221,7 +246,7 @@ class SubprocessHandle(EngineHandle):
         try:
             self._process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            if os.name == 'posix':
+            if os.name == "posix":
                 os.killpg(self._process.pid, signal.SIGKILL)
             else:
                 self._process.kill()

@@ -12,6 +12,7 @@ Postgres снимает ограничение «одна установка —
 Выбор — переменная CYBRA_DATABASE_URL. Если она не задана, берётся SQLite
 в каталоге данных: так `python -m cybra` работает из коробки, без сервера.
 """
+
 from __future__ import annotations
 
 import os
@@ -28,40 +29,40 @@ from .models import Base
 
 def _database_url() -> str:
     """Строка подключения: явная, из окружения, или SQLite по умолчанию."""
-    explicit = os.environ.get('CYBRA_DATABASE_URL', '').strip()
+    explicit = os.environ.get("CYBRA_DATABASE_URL", "").strip()
     if explicit:
         return explicit
-    return f'sqlite:///{settings.db_path}'
+    return f"sqlite:///{settings.db_path}"
 
 
 DATABASE_URL = _database_url()
-_IS_SQLITE = DATABASE_URL.startswith('sqlite')
+_IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 
 def _make_engine(url: str) -> Engine:
-    if url.startswith('sqlite'):
+    if url.startswith("sqlite"):
         return create_engine(
             url,
-            connect_args={'check_same_thread': False, 'timeout': 30},
+            connect_args={"check_same_thread": False, "timeout": 30},
             future=True,
         )
     # pool_pre_ping: соединение в пуле могло умереть, пока шёл долгий прогон;
     # без проверки первый же запрос после паузы падает с OperationalError.
-    return create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10,
-                         future=True)
+    return create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10, future=True)
 
 
 engine = _make_engine(DATABASE_URL)
 
 
 if _IS_SQLITE:
-    @event.listens_for(engine, 'connect')
+
+    @event.listens_for(engine, "connect")
     def _sqlite_pragmas(dbapi_connection, _record):
         """WAL keeps readers alive during a run; foreign keys are off by default."""
         cursor = dbapi_connection.cursor()
-        cursor.execute('PRAGMA journal_mode=WAL')
-        cursor.execute('PRAGMA foreign_keys=ON')
-        cursor.execute('PRAGMA busy_timeout=30000')
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 
 
@@ -78,8 +79,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 # умеет индексироваться и отдаётся драйвером уже разобранным.
 _ADDED_COLUMNS: tuple[tuple[str, str, str, str], ...] = (
     # таблица, колонка, тип для SQLite, тип для PostgreSQL
-    ('run_steps', 'planned', 'INTEGER', 'INTEGER'),
-    ('runs', 'verdicts', 'JSON', 'JSONB'),
+    ("run_steps", "planned", "INTEGER", "INTEGER"),
+    ("runs", "verdicts", "JSON", "JSONB"),
 )
 
 
@@ -89,11 +90,11 @@ def _migrate(connection) -> None:
     for table, column, sqlite_type, pg_type in _ADDED_COLUMNS:
         if table not in tables:
             continue  # create_all уже создаст таблицу целиком
-        existing = {col['name'] for col in inspector.get_columns(table)}
+        existing = {col["name"] for col in inspector.get_columns(table)}
         if column in existing:
             continue
         sql_type = sqlite_type if _IS_SQLITE else pg_type
-        connection.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {sql_type}'))
+        connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
         connection.commit()
 
 

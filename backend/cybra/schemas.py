@@ -1,4 +1,5 @@
 """Pydantic schemas for the public API."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -19,18 +20,18 @@ class UserOut(BaseModel):
     is_active: bool
     last_login_at: dt.datetime | None = None
 
-    model_config = {'from_attributes': True}
+    model_config = {"from_attributes": True}
 
 
 class MeOut(UserOut):
-    csrf_token: str = ''
+    csrf_token: str = ""
 
 
 class UserIn(BaseModel):
     email: str
     password: str = Field(min_length=10)
-    display_name: str = ''
-    role: str = 'viewer'
+    display_name: str = ""
+    role: str = "viewer"
 
 
 class PasswordIn(BaseModel):
@@ -41,14 +42,14 @@ class PasswordIn(BaseModel):
 class EndpointIn(BaseModel):
     name: str
     base_url: str
-    chat_url: str = ''
-    auth_type: str = 'bearer'
-    api_key: str = ''
+    chat_url: str = ""
+    auth_type: str = "bearer"
+    api_key: str = ""
     verify_tls: bool = True
-    ca_pem: str = ''
+    ca_pem: str = ""
     default_headers: dict = Field(default_factory=dict)
     extra_body: dict = Field(default_factory=dict)
-    notes: str = ''
+    notes: str = ""
 
 
 class EndpointOut(BaseModel):
@@ -65,21 +66,22 @@ class EndpointOut(BaseModel):
     notes: str
     created_at: dt.datetime
 
-    @field_validator('created_at', mode='after')
+    @field_validator("created_at", mode="after")
     @classmethod
     def _tz_aware(cls, value):
         return _as_utc(value)
 
+
 class TargetIn(BaseModel):
     endpoint_id: int
     model_id: str
-    label: str = ''
+    label: str = ""
     temperature: float | None = 0.0
-    token_parameter: str = 'max_tokens'
+    token_parameter: str = "max_tokens"
     drop_params: list[str] = Field(default_factory=list)
     developer_as_system: bool = False
     extra_body: dict = Field(default_factory=dict)
-    group_name: str = ''
+    group_name: str = ""
     is_judge: bool = False
 
 
@@ -95,9 +97,9 @@ class TargetOut(BaseModel):
     extra_body: dict
     group_name: str
     is_judge: bool
-    endpoint_name: str = ''
+    endpoint_name: str = ""
 
-    model_config = {'from_attributes': True}
+    model_config = {"from_attributes": True}
 
 
 class DatasetVersionOut(BaseModel):
@@ -112,10 +114,11 @@ class DatasetVersionOut(BaseModel):
     case_count: int = 0
     created_at: dt.datetime
 
-    @field_validator('created_at', mode='after')
+    @field_validator("created_at", mode="after")
     @classmethod
     def _tz_aware(cls, value):
         return _as_utc(value)
+
 
 class DatasetCaseOut(BaseModel):
     id: int
@@ -129,15 +132,15 @@ class DatasetCaseOut(BaseModel):
 
 class CaseEditIn(BaseModel):
     case_id: str
-    category: str = ''
-    prompt: str = ''
-    goal: str = ''
-    kind: str = 'harmful'
+    category: str = ""
+    prompt: str = ""
+    goal: str = ""
+    kind: str = "harmful"
     metadata: dict = Field(default_factory=dict)
 
 
 class RunIn(BaseModel):
-    label: str = ''
+    label: str = ""
     target_ids: list[int]
     judge_target_id: int | None = None
     tools: list[str]
@@ -145,7 +148,7 @@ class RunIn(BaseModel):
     engine_mode: str | None = None
     limit: int = 10
     seed: int = 42
-    variants: list[str] = Field(default_factory=lambda: ['direct', 'roleplay', 'authority'])
+    variants: list[str] = Field(default_factory=lambda: ["direct", "roleplay", "authority"])
     max_requests: int = 1000
     # 16384, а не 2048: у моделей с цепочкой рассуждений квота completion
     # уходит в reasoning_tokens, и на текст не остаётся ничего. Замер на
@@ -163,12 +166,12 @@ class RunIn(BaseModel):
     # на reasoning-модели: он честно исчерпал бюджет на третьей пробе из
     # трёх и завершился ERROR. Два часа покрывают прогон целиком.
     tool_timeout: int = 7200
-    garak_probes: str = ''
+    garak_probes: str = ""
     bipia_attacks: int = 4
     # Общий вердикт судьи — опциональная надстройка над обычными метриками.
     # Стоит одного запроса на модель, поэтому по умолчанию выключен.
     judge_verdict: bool = False
-    judge_verdict_prompt: str = ''
+    judge_verdict_prompt: str = ""
 
 
 class RunStepOut(BaseModel):
@@ -210,16 +213,17 @@ class RunOut(BaseModel):
     # Длительность считает API: клиенту не нужно повторять арифметику с
     # часовыми поясами, а в отчёте время должно быть одинаковым везде.
     duration_seconds: float | None = None
-    error: str = ''
+    error: str = ""
     # Вердикт судьи по каждой модели: {model_label: {verdict, behaviour, ...}}.
     # Пусто, если функция была выключена или прогон архивный.
     verdicts: dict | None = None
     steps: list[RunStepOut] = Field(default_factory=list)
 
-    @field_validator('created_at', 'started_at', 'finished_at', mode='after')
+    @field_validator("created_at", "started_at", "finished_at", mode="after")
     @classmethod
     def _tz_aware(cls, value):
         return _as_utc(value)
+
 
 class FindingOut(BaseModel):
     id: int
@@ -230,13 +234,13 @@ class FindingOut(BaseModel):
     answer: str
     reason: str
 
-    model_config = {'from_attributes': True}
+    model_config = {"from_attributes": True}
 
 
 class ProgressOut(BaseModel):
     status: str
     requests: dict = Field(default_factory=dict)
-    current_model: str = ''
-    current_tool: str = ''
+    current_model: str = ""
+    current_tool: str = ""
     finished_steps: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
