@@ -657,20 +657,25 @@ release:artifacts:
       aud: sigstore
   variables:
     COSIGN_YES: "true"
-    # Отпечаток cosign фиксирован, как и версия сборщика: незакреплённый
-    # инструмент, подписывающий артефакты, — худшее место для latest.
-    COSIGN_IMAGE: ghcr.io/sigstore/cosign/cosign:v2.4.1
+    # Версия фиксирована, как и у сборщика: незакреплённый инструмент,
+    # подписывающий артефакты, — худшее место для latest.
+    COSIGN_VERSION: v2.4.1
   before_script:
     # python3 нужен для make_checksums.py: скрипт — часть проекта, и
     # переписывать его на shell ради одного вызова незачем. Первый прогон
     # упал именно здесь: в alpine python нет, ветка || подставила пустоту,
     # после чего sha256sum -c не нашёл файла сумм.
     #
-    # docker-cli нужен, чтобы запускать cosign контейнером. Пакет называется
-    # docker-cli, а не docker: `docker` — это демон, которого в job'е нет и
-    # быть не должно. Второй прогон упал именно на этом: проверка наличия
-    # клиента отработала честно и остановила job, а не продолжила молча.
-    - apk add --no-cache curl jq python3 docker-cli
+    # cosign ставим БИНАРНИКОМ, а не контейнером. Через контейнер не вышло:
+    # docker run требует демона, а в этом job'е его нет и не должно быть —
+    # ровно от dind мы и уходили. Третий прогон упал на «Cannot connect to
+    # the Docker daemon», хотя клиент стоял.
+    - apk add --no-cache curl jq python3
+    - |
+      curl -sSfL -o /usr/local/bin/cosign \
+        "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+      chmod +x /usr/local/bin/cosign
+      cosign version
     # image-digest.txt пишет build:image и отдаёт артефактом. В этой стадии
     # его НЕТ, пока не скачать: артефакты передаются между стадиями только
     # через needs. Первый прогон подписывал пустоту — «digest неизвестен,
@@ -683,13 +688,14 @@ release:artifacts:
         echo "FAIL: image-digest.txt не передан из build:image"
         exit 1
       fi
-    # cosign запускаем контейнером: ставить его в alpine нечем, а тянуть
-    # отдельный образ проще. Docker-клиент нужен именно для этого.
+    # Проверяем, что подпись возможна в этом окружении: без токена дальше
+    # идти незачем, а падать лучше здесь, чем на «sign: no identity token».
     - |
-      if ! command -v docker > /dev/null; then
-        echo "FAIL: docker-клиент нужен для запуска cosign"
+      if [ -z "${SIGSTORE_ID_TOKEN:-}" ]; then
+        echo "FAIL: OIDC-токен не выдан — id_tokens не сработал"
         exit 1
       fi
+      echo "OIDC-токен получен" 
   script:
     - echo "релиз $CI_COMMIT_TAG"
     - mkdir -p "$SECURITY_REPORTS"
@@ -714,27 +720,16 @@ release:artifacts:
       mkdir -p "$HOME/.docker"
       printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$reg_auth" \
         > "$HOME/.docker/config.json"
-      docker run --rm \
-        -v "$HOME/.docker:/root/.docker:ro" \
-        -e SIGSTORE_ID_TOKEN="$SIGSTORE_ID_TOKEN" \
-        -e COSIGN_EXPERIMENTAL=1 \
-        "$COSIGN_IMAGE" \
-        sign --yes "$IMAGE_NAME@$digest"
+      cosign sign --yes "$IMAGE_NAME@$digest"
     # --- 13c. подпись SBOM -------------------------------------------
     # Подписываем и SBOM: иначе перечень компонентов можно подменить, не
     # трогая подписанный образ, и проверка «что внутри» станет бессмысленной.
     - echo "--- cosign, подпись SBOM ---"
     - |
       if [ -f "$SECURITY_REPORTS/sbom.spdx.json" ]; then
-        docker run --rm \
-          -v "$CI_PROJECT_DIR:/work" \
-          -v "$HOME/.docker:/root/.docker:ro" \
-          -e SIGSTORE_ID_TOKEN="$SIGSTORE_ID_TOKEN" \
-          -e COSIGN_EXPERIMENTAL=1 \
-          -w /work "$COSIGN_IMAGE" \
-          sign-blob --yes \
-            --bundle "$SECURITY_REPORTS/sbom.cosign.bundle" \
-            "$SECURITY_REPORTS/sbom.spdx.json"
+        cosign sign-blob --yes \
+          --bundle "$SECURITY_REPORTS/sbom.cosign.bundle" \
+          "$SECURITY_REPORTS/sbom.spdx.json"
       else
         echo "SBOM отсутствует — подписывать нечего"
       fi
@@ -743,9 +738,7 @@ release:artifacts:
     # совпадает с той личностью, которую мы ожидаем увидеть.
     - echo "--- cosign, проверка подписи ---"
     - |
-      docker run --rm \
-        -v "$HOME/.docker:/root/.docker:ro" \
-        "$COSIGN_IMAGE" verify "$IMAGE_NAME@$(cat image-digest.txt)" \
+      cosign verify "$IMAGE_NAME@$(cat image-digest.txt)" \
           --certificate-identity "${CI_PROJECT_URL}//.gitlab-ci.yml@refs/tags/${CI_COMMIT_TAG}" \
           --certificate-oidc-issuer "${CI_SERVER_URL}"
   artifacts:
