@@ -17,11 +17,12 @@ set -eu
 TARBALL="${1:?нужен путь к tar образа}"
 DEST="${2:?нужен каталог назначения}"
 
-# Каталог под временные файлы создаём сами: в образе kaniko нет /tmp
-# (образ собран FROM scratch, /tmp там просто отсутствует — проверено).
-# mktemp от этого и падал: «No such file or directory».
-mkdir -p /tmp
-work=$(mktemp -d /tmp/unpack.XXXXXX)
+# Каталог под временные файлы создаём сами и рядом с целью, а не в /tmp:
+# в образе kaniko /tmp отсутствует вовсе (образ собран FROM scratch), и
+# mktemp падал с «No such file or directory» ещё до начала работы. Привязка
+# к DEST заодно убирает зависимость от TMPDIR, который в CI тоже не задан.
+mkdir -p "$DEST"
+work=$(mktemp -d "$DEST/.unpack.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
 
 # manifest.json — единственное место, где перечислены слои. Без него образ
@@ -37,8 +38,6 @@ if [ -z "$order" ]; then
   echo "в manifest.json нет слоёв — tar не похож на docker save" >&2
   exit 1
 fi
-
-mkdir -p "$DEST"
 
 count=0
 for layer in $order; do

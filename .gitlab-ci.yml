@@ -366,13 +366,20 @@ build:image:
     - cat image-digest.txt 2>/dev/null || echo "digest не записан"
     # Аудит содержимого образа: секреты, личные данные и мусор.
     # Раньше проверка шла `docker run` от собранного образа — в демоне его
-    # больше нет. Распаковываем tar и смотрим файловую систему как есть:
-    # она и есть то, что уедет заказчику. Скрипт на shell, потому что в
-    # образе kaniko нет python3.
+    # больше нет. Смотрим на tar, который отдал kaniko: это ровно те файлы,
+    # что уедут заказчику.
+    #
+    # tar — это формат `docker save` (манифест плюс сжатые слои), а не
+    # готовый rootfs, поэтому сначала unpack_image.sh накладывает слои по
+    # порядку. Прямой `tar -xf` дал бы каталог с файлами слоёв и ни одного
+    # файла приложения: аудит отрапортовал бы «run.py отсутствует» на
+    # исправном образе.
+    #
+    # Скрипт на shell: в образе kaniko нет python3 (проверено), а тащить его
+    # нечем — образ собран FROM scratch без пакетного менеджера.
     - echo "--- содержимое образа ---"
-    - |
-      mkdir -p /tmp/rootfs && tar -xf image.tar -C /tmp/rootfs
-      sh /scripts/audit_image.sh /tmp/rootfs || true
+    - sh "$CI_PROJECT_DIR/scripts/unpack_image.sh" image.tar /tmp/rootfs
+    - sh "$CI_PROJECT_DIR/scripts/audit_image.sh" /tmp/rootfs
   after_script:
     - ls -l image.tar image-digest.txt 2>/dev/null || true
   artifacts:
