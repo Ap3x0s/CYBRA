@@ -490,7 +490,14 @@ security:sca:
 security:image:
   stage: build
   needs: [build:image]
-  image: aquasec/trivy:latest
+  # entrypoint [""] обязателен. У образа aquasec/trivy ENTRYPOINT -- сам
+  # бинарь, а shell отсутствует. GitLab вставляет свой скрипт, trivy получает
+  # его как команду и падает с «unknown command sh». Ровно та же ловушка,
+  # что с gitleaks и с kaniko; здесь я её повторил, потому что при смене
+  # образа проверил только сам trivy, но не способ его запуска.
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
   allow_failure: true
   script:
     - mkdir -p "$SECURITY_REPORTS"
