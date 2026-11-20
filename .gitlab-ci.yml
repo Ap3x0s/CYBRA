@@ -10,23 +10,27 @@
 #   2  Format                ✖ ruff format в проекте не подключён (18 файлов),
 #                              вводить его в CI = красный пайплайн на ровном месте
 #   3  Lint                  ✔ ruff, сборка фронта, аудит i18n
-#   4  Unit tests (compile)  ✔ pytest (48 тестов); компиляции нет — Python/JS
-#   5  SAST                  ✔ ruff-B (bugbear) + pip-audit; полноценный
-#                              bandit/semgrep не тянем: шум на FastAPI-паттернах
-#   6  Secrets scan          ✔ gitleaks по истории + проверка .env в индексе
-#   7  IaC / K8s / CI scan   ✔ проверка Dockerfile + валидация самого .gitlab-ci.yml
-#   8  Build (+ SBOM)        ✔ docker build (multi-stage) + SBOM через syft
-#   9  SCA / Image scan      ✔ pip-audit (зависимости) + trivy (образ, HIGH/CRITICAL)
-#  10  Deploy to Test        ✔ docker compose поднимает образ на раннере
+#   4  Unit tests (compile)  ✔ pytest (90 тестов); компиляции нет — Python/JS
+#   5  SAST                  ✔ ruff-B (bugbear) + bandit (HIGH); полноценный
+#                              semgrep не тянем: шум на FastAPI-паттернах
+#   6  Secrets scan          ✔ gitleaks по рабочему дереву + проверка .env в индексе
+#   7  IaC / K8s / CI scan   ✔ проверка Dockerfile, .dockerignore и обоих пайплайнов
+#   8  Build (+ SBOM)        ✔ kaniko без демона (multi-stage) + SBOM через syft
+#   9  SCA / Image scan      ✔ pip-audit и лицензии (зависимости) + trivy (образ)
+#  10  Deploy to Test        ✔ образ из registry поднимается на раннере
 #  11  DAST                  ✖ требует живого стенда с моделью; вне CI
 #  12  Smoke / Integration  ✔ curl /api/v1/health + проверка отдачи SPA
 #  13  Подписание артефактов ✔ cosign keyless не настроить без OIDC-провайдера;
-#                              вместо этого SBOM и digest в артефактах job'а
+#                              вместо этого SHA256SUMS по SBOM и digest
 #  14  Release               ✔ git-тег → образ с версионным тегом в registry
 #  15  Approve to Prod       ✔ protected environment (ручное подтверждение)
 #  16  Deploy to Prod        ✔ только по тегу, через environment
 #  17  Smoke после деплоя    ✔ тот же health-чек против выпущенного тега
 #  18  Rollback              ✔ job rollback: возврат тега latest на предыдущий
+#
+# Сборка идёт kaniko, а не docker:dind: см. комментарий к шаблону .kaniko.
+# Остальные job'ы, которым нужен запуск контейнеров (deploy, smoke, release),
+# берут docker-клиент с демоном — им сборка не требуется.
 #
 # Тяжёлые инструменты (garak, PyRIT, AgentDojo, Promptfoo) в CI НЕ ставятся:
 # они тянут torch и Node-бинарь на гигабайты. Проверяются вручную по

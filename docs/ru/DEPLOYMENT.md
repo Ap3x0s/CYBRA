@@ -72,30 +72,46 @@ python scripts/verify_migration.py /path/to/cybra.sqlite3
 ## Как производится артефакт
 
 ```
-push в main
+запрос на слияние
    │
-   ├── lint:backend      ruff check backend scan
-   ├── lint:frontend     npm ci && npm run build
-   ├── test:backend      pytest tests/ -q            (90 тестов, без API-ключа)
-   ├── build:image       docker build → :<commit-sha> и :latest
-   ├── publish:registry  публикация обоих тегов      (только default branch)
-   └── verify:smoke      pull :<sha>, запуск, ожидание /api/v1/health
+   ├── validate:precommit  ruff, аудит i18n, pytest -q
+   ├── lint:frontend       npm ci && npm run build
+   ├── test:unit           pytest tests/ -q            (90 тестов, без API-ключа)
+   ├── security:sast       ruff + bandit (только HIGH)
+   ├── security:secrets    gitleaks
+   ├── security:iac        Dockerfile, .dockerignore, оба пайплайна
+   ├── build:image         kaniko → :<commit-sha> и :latest
+   ├── build:sbom          syft читает образ из registry
+   ├── security:sca        pip-audit и лицензии
+   ├── security:image      trivy читает образ из registry
+   └── deploy:test         pull :<sha>, запуск, ожидание /api/v1/health
 ```
 
 Определено в [`.gitlab-ci.yml`](../../.gitlab-ci.yml). GitHub Actions выполняет
-эквивалентную проверку, но ничего не публикует: публичное зеркало подтверждает,
-что код цел, а путь доставки — GitLab. Публикация из обоих мест дала бы два
-разных тега «latest».
+те же стадии тем же сборщиком; отличается только registry (ghcr.io там, реестр
+GitLab здесь). Публикация из обоих мест в одно имя дала бы два разных тега
+«latest», поэтому каждая площадка публикует в свой.
 
 Детали, на которых легко потерять время:
 
-- Раннер **не** привилегированный, поэтому `docker:dind` не поднимается. Job'ы
-  используют демон хоста через смонтированный `/var/run/docker.sock`. Поэтому
-  слои живут между job'ами и образ не пересобирается с нуля каждый раз.
-- `verify` стягивает образ обратно из registry и запускает его. Сборка, которая
+- **Сборка идёт kaniko, а не `docker build`.** Канонический рецепт GitLab
+  (`docker:dind` сервисом) требует привилегированного раннера, а на
+  shared-раннере его нет. kaniko собирает в userspace: ни демона, ни
+  привилегий. Образ — `ghcr.io/osscontainertools/kaniko`, поддерживаемый форк:
+  Google заархивировал `GoogleContainerTools/kaniko` в июне 2025. Версия
+  зафиксирована: `latest` у сборщика означает, что пайплайн краснеет сам по
+  себе, без единой правки в репозитории.
+- **Кеш слоёв живёт в registry** (`--cache-repo`): между job'ами нет демона,
+  который мог бы его хранить. Второй прогон переиспользует все восемь слоёв.
+- **kaniko не понимает `**/__pycache__` глубже второго уровня.** Docker
+  понимает. Без дополнительных правил `**/__pycache__/**` и `**/*.pyc` в
+  образ уезжает байткод локального интерпретатора разработчика — проверено
+  на реальной сборке.
+- Сканеры образа читают его **из registry**, поэтому им нужен `needs` на
+  сборку. Без него тега ещё нет, trivy падает с `MANIFEST_UNKNOWN`, а ошибка
+  прячется за `allow_failure`.
+- `deploy:test` стягивает образ обратно и запускает его. Сборка, которая
   компилируется, но не стартует, падает здесь, а не в продакшене.
-- В образе `docker:29` нет `curl`; `verify` использует `wget`.
-- Порт 18080, не 8000: на хосте обычно занят дев-сервер.
 
 ## Развёртывание
 

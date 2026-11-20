@@ -72,30 +72,45 @@ deployment needs real benchmarks.
 ## How the artefact is produced
 
 ```
-push to main
+merge request
    │
-   ├── lint:backend    ruff check backend scan
-   ├── lint:frontend   npm ci && npm run build
-   ├── test:backend    pytest tests/ -q            (90 tests, no API key needed)
-   ├── build:image     docker build → :<commit-sha> and :latest
-   ├── publish:registry  push both tags             (default branch only)
-   └── verify:smoke    pull :<sha>, start it, wait for /api/v1/health
+   ├── validate:precommit  ruff, i18n audit, pytest -q
+   ├── lint:frontend       npm ci && npm run build
+   ├── test:unit           pytest tests/ -q            (90 tests, no API key needed)
+   ├── security:sast       ruff + bandit (HIGH)
+   ├── security:secrets    gitleaks
+   ├── security:iac        Dockerfile, .dockerignore, both pipelines
+   ├── build:image         kaniko → :<commit-sha> and :latest
+   ├── build:sbom          syft reads the image from the registry
+   ├── security:sca        pip-audit + licenses
+   ├── security:image      trivy reads the image from the registry
+   └── deploy:test         pull :<sha>, start it, wait for /api/v1/health
 ```
 
-Defined in [`.gitlab-ci.yml`](../.gitlab-ci.yml). GitHub Actions runs an
-equivalent check but does not publish: the public mirror proves the code is
-sound, GitLab is the delivery path. Publishing from both would give two
-different "latest" tags.
+Defined in [`.gitlab-ci.yml`](../.gitlab-ci.yml). GitHub Actions runs the same
+stages with the same builder; only the registry differs (ghcr.io there, the
+GitLab registry here). Publishing from both to the same name would give two
+different "latest" tags, so each platform publishes to its own.
 
 Notes that cost time to rediscover:
 
-- The runner is **not** privileged, so `docker:dind` does not start. Jobs use the
-  host daemon through a mounted `/var/run/docker.sock`. Layers therefore survive
-  between jobs and the image is not rebuilt from scratch each time.
-- `verify` pulls the image back from the registry and starts it. A build that
-  compiles but does not boot fails there, not in production.
-- The `docker:29` job image has no `curl`; `verify` uses `wget`.
-- Port 18080, not 8000: the host usually has a dev server on 8000.
+- **Builds use kaniko, not `docker build`.** The canonical GitLab recipe
+  (`docker:dind` as a service) needs a privileged runner, which shared runners
+  do not provide. kaniko builds in userspace: no daemon, no privilege. The
+  image is `ghcr.io/osscontainertools/kaniko`, the maintained fork — Google
+  archived `GoogleContainerTools/kaniko` in June 2025. The version is pinned;
+  `latest` on a builder means the pipeline can turn red with no change in the
+  repository.
+- **Layer cache lives in the registry** (`--cache-repo`), because there is no
+  daemon between jobs to hold it. A second build reuses all eight layers.
+- **kaniko does not honour `**/__pycache__` below the second directory level.**
+  Docker does. Without the extra `**/__pycache__/**` and `**/*.pyc` rules, the
+  developer's `.pyc` files ship inside the image — verified on a real build.
+- Image scans read the image **from the registry**, so they need `needs` on the
+  build. Without it the tag does not exist yet, trivy fails with
+  `MANIFEST_UNKNOWN`, and the failure hides behind `allow_failure`.
+- `deploy:test` pulls the image back and starts it. A build that compiles but
+  does not boot fails there, not in production.
 
 ## Deploying
 
