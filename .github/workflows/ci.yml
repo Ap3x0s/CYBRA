@@ -222,13 +222,21 @@ jobs:
   # ====================================================================
 
   # Этапы 8-9 — сборка образа и публикация в ghcr.io.
-  # Сборка и публикация в одном job'е: на GitHub docker нативный, но
-  # публиковать надо в том же шаге, где собран образ — иначе его нет.
+  #
+  # Сборщик — kaniko, как и на GitLab. На GitHub docker и так нативный, но
+  # сборка одним инструментом на обеих площадках значит, что результат
+  # совпадает: одинаковый .dockerignore, одинаковый набор слоёв, одна и та же
+  # маска для байткода. Пока здесь был docker build, а на GitLab kaniko,
+  # .pyc попадали в образ на одной площадке и не попадали на другой.
+  #
+  # Никаких QEMU и privileged: kaniko работает в userspace, а образ
+  # собирается под ту же архитектуру, что у раннера.
   build-image:
     runs-on: ubuntu-latest
     needs: [test-unit, security-sast]
     outputs:
       image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - name: Метаданные образа
@@ -238,7 +246,6 @@ jobs:
           image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "образ: $image"
-      - uses: docker/setup-buildx-action@v3
       - name: Login в ghcr.io
         # На pull_request из форка GITHUB_TOKEN без packages: write — честно
         # пропускаем публикацию, а не краснеем.
@@ -248,48 +255,91 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Сборка
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile
-          load: true
-          tags: |
-            ${{ steps.meta.outputs.image }}:${{ github.sha }}
-            ${{ steps.meta.outputs.image }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Публикация
-        if: github.event_name != 'pull_request' && (github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/'))
+      - name: Подготовка конфига registry для kaniko
+        # kaniko читает стандартный docker config.json. На pull_request
+        # логина не было — тогда config просто пустой, и сборка идёт без push.
         run: |
-          docker push "${{ steps.meta.outputs.image }}:${{ github.sha }}"
-          docker push "${{ steps.meta.outputs.image }}:latest"
-      - name: Digest
+          mkdir -p "$HOME/.docker"
+          if [ -f "$HOME/.docker/config.json" ]; then
+            echo "config.json от login-action уже на месте"
+          else
+            echo '{"auths":{}}' > "$HOME/.docker/config.json"
+            echo "логина не было — сборка без публикации"
+          fi
+      - name: Сборка kaniko
+        id: build
         run: |
-          docker image inspect "${{ steps.meta.outputs.image }}:${{ github.sha }}" \
-            --format '{{index .RepoDigests 0}}' > image-digest.txt || true
-          cat image-digest.txt || true
+          # Публикуем только из main и по тегу: ветки не должны затирать
+          # latest, из которого разворачиваются. Проверяем по ref, а не по
+          # ref_name: у тега ref_name — это имя тега, и перепутать легко.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            publish=0
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            publish=1
+          elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            publish=1
+          else
+            publish=0
+          fi
+          if [ "$publish" = "1" ]; then
+            set -- \
+              --destination="${{ steps.meta.outputs.image }}:${{ github.sha }}" \
+              --destination="${{ steps.meta.outputs.image }}:latest"
+          else
+            echo "Публикация не требуется (PR или не main): сборка без push"
+            set -- --no-push
+          fi
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -v "$HOME/.docker:/kaniko/.docker" \
+            ghcr.io/osscontainertools/kaniko:v1.29.1 \
+            --context=dir:///workspace \
+            --dockerfile=/workspace/docker/Dockerfile \
+            --cache=true \
+            --cache-repo="${{ steps.meta.outputs.image }}/cache" \
+            --compressed-caching=false \
+            --snapshot-mode=redo \
+            --digest-file=/workspace/image-digest.txt \
+            --tar-path=/workspace/image.tar \
+            "$@"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          cat image-digest.txt
+          echo "digest=$(cat image-digest.txt)" >> "$GITHUB_OUTPUT"
+      - name: Аудит содержимого образа
+        # Проверяем то, что реально уезжает заказчику: распакованный rootfs.
+        # Скрипт на shell — в образе kaniko нет python3.
+        run: |
+          mkdir -p rootfs
+          sh scripts/unpack_image.sh image.tar rootfs
+          sh scripts/audit_image.sh rootfs
       - uses: actions/upload-artifact@v4
         with:
           name: image-digest
           path: image-digest.txt
 
   # Этап 8 — SBOM: перечень компонентов образа.
+  #
+  # Демон здесь больше не нужен: syft читает образ прямо из registry по
+  # ссылке `registry:<host>/<path>:<tag>`. Раньше job заново собирал образ
+  # только ради того, чтобы syft мог его увидеть — и на это уходили минуты.
+  # needs нужен, иначе образа с этим тегом в registry ещё нет: та же гонка,
+  # из-за которой на GitLab падал MANIFEST_UNKNOWN.
   build-sbom:
     runs-on: ubuntu-latest
     needs: [build-image]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Сборка образа для SBOM
-        run: docker build -f docker/Dockerfile -t cybra:sbom .
       - name: syft
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
             | sh -s -- -b /usr/local/bin
           mkdir -p "$SECURITY_REPORTS"
-          syft cybra:sbom -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json"
-          syft cybra:sbom -o table | head -40
+          image="${{ needs.build-image.outputs.image }}:${GITHUB_SHA}"
+          if syft "registry:$image" -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json" 2>/dev/null; then
+            syft "registry:$image" -o table | head -40
+          else
+            echo "образ не опубликован (PR или не main) — SBOM пропущен"
+            echo '{"note":"image not published on this ref"}' > "$SECURITY_REPORTS/sbom.spdx.json"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
@@ -325,23 +375,29 @@ jobs:
   # Этап 9b — скан образа: HIGH/CRITICAL не блокируют, потому что базовый
   # python:3.12-slim регулярно имеет свежие CVE, и красный пайплайн из-за
   # них приучил бы игнорировать красное.
+  #
+  # Демон не нужен: trivy читает образ из registry. Раньше здесь была
+  # локальная пересборка — то есть сканировался НЕ тот образ, который
+  # публикуется, а его копия, собранная заново в другом job'е.
   security-image:
     runs-on: ubuntu-latest
     needs: [build-image]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Сборка
-        run: docker build -f docker/Dockerfile -t cybra:scan .
       - name: trivy
         continue-on-error: true
         run: |
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
           mkdir -p "$SECURITY_REPORTS"
-          trivy image --severity HIGH,CRITICAL --format table cybra:scan | head -40
+          image="registry:${{ needs.build-image.outputs.image }}:${GITHUB_SHA}"
+          trivy image --severity HIGH,CRITICAL --format table "$image" | head -40 || true
           trivy image --severity HIGH,CRITICAL --format sarif \
-            --output "$SECURITY_REPORTS/trivy.sarif" cybra:scan || true
+            --output "$SECURITY_REPORTS/trivy.sarif" "$image" || true
+          if [ -s "$SECURITY_REPORTS/trivy.sarif" ]; then
+            echo "trivy.sarif на месте: $(wc -c < "$SECURITY_REPORTS/trivy.sarif") байт"
+          else
+            echo "ВНИМАНИЕ: trivy.sarif отсутствует — скан образа НЕ выполнен"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -351,7 +407,7 @@ jobs:
   # ====================================================================
   # №10, №12. Тестовый контур: развёртывание и smoke
   # ====================================================================
-  # Один job: образ собран в предыдущем шаге и здесь же поднимается.
+  # Один job: образ берётся из registry и здесь же поднимается.
   # Проверяем и API, и отдачу SPA: health-чек ловит «не стартует»,
   # grep по index.html — «стартует, но UI не собран».
 
@@ -363,14 +419,26 @@ jobs:
       url: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Сборка
-        run: docker build -f docker/Dockerfile -t cybra:test .
-      - name: Запуск
+      - name: Запуск образа из registry
+        # Пересборки нет намеренно: проверяем ровно тот образ, который
+        # собран и опубликован, а не его свежую копию. Иначе smoke может
+        # пройти на локальной сборке, пока в registry лежит другая.
+        #
+        # На pull_request образа в registry нет (публикация только из main
+        # и по тегу), поэтому там job собирает локально: проверить код PR
+        # всё равно надо, а registry недоступен для записи.
         run: |
+          image="${{ needs.build-image.outputs.image }}:${GITHUB_SHA}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PR: образа в registry нет — собираем локально"
+            docker build -f docker/Dockerfile -t cybra:test .
+            image=cybra:test
+          else
+            docker pull "$image"
+          fi
           docker run -d --name cybra-test -p 8000:8000 \
             -e CYBRA_SECRET_KEY="ci-smoke-secret-key-not-for-production-use-32b" \
-            cybra:test
+            "$image"
       - name: Smoke, API
         run: |
           ok=0
