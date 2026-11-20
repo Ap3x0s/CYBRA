@@ -663,7 +663,7 @@ release:artifacts:
     - echo "--- проверка сумм ---"
     - cd "$SECURITY_REPORTS" && sha256sum -c SHA256SUMS && cd "$CI_PROJECT_DIR"
     # --- 13b. подпись образа -----------------------------------------
-    - echo "--- cosign: подпись digest ---"
+    - echo "--- cosign, подпись digest ---"
     - |
       digest=$(cat image-digest.txt 2>/dev/null || echo "")
       if [ -z "$digest" ]; then
@@ -685,7 +685,7 @@ release:artifacts:
     # --- 13c. подпись SBOM -------------------------------------------
     # Подписываем и SBOM: иначе перечень компонентов можно подменить, не
     # трогая подписанный образ, и проверка «что внутри» станет бессмысленной.
-    - echo "--- cosign: подпись SBOM ---"
+    - echo "--- cosign, подпись SBOM ---"
     - |
       if [ -f "$SECURITY_REPORTS/sbom.spdx.json" ]; then
         docker run --rm \
@@ -703,7 +703,7 @@ release:artifacts:
     # --- 13d. проверка своей же подписи ------------------------------
     # Подпись без проверки — это ритуал. Убеждаемся, что она читается и
     # совпадает с той личностью, которую мы ожидаем увидеть.
-    - echo "--- cosign: проверка подписи ---"
+    - echo "--- cosign, проверка подписи ---"
     - |
       docker run --rm \
         -v "$HOME/.docker:/root/.docker:ro" \

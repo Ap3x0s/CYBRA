@@ -57,6 +57,19 @@ def main() -> int:
             target = need if isinstance(need, str) else need.get('job')
             if target and target not in jobs:
                 problems.append(f'{name}: needs {target!r}, а такого job нет')
+        # Каждый элемент script обязан быть строкой. YAML разбирает
+        # `- echo "--- шаг: текст ---"` как СЛОВАРЬ, потому что двоеточие с
+        # пробелом после него — разделитель ключа и значения. Локально YAML
+        # валиден, а GitLab отвергает весь пайплайн: «script config should be
+        # a string or a nested array of strings». Проверка ловила бы это до
+        # пуша, а не после — на пуше выяснилось, что пайплайн не создаётся.
+        for key in ('script', 'before_script', 'after_script'):
+            for index, item in enumerate(body.get(key) or [], 1):
+                if not isinstance(item, str):
+                    problems.append(
+                        f'{name}: {key} элемент {index} — {type(item).__name__}, '
+                        f'а не строка. Частая причина — двоеточие с пробелом '
+                        f'внутри echo: YAML видит в нём словарь')
 
     if not jobs:
         problems.append('в пайплайне нет ни одного job')
