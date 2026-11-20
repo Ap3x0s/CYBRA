@@ -92,10 +92,24 @@ jobs:
           ruff check backend scan
           python scripts/audit_i18n_keys.py
 
-  # Этап 2 — Format: ruff format в проекте НЕ подключён (`--check`
-  # переформатировал бы 18 файлов). Включать в CI значит получить красный
-  # пайплайн на ровном месте. Действующее правило проверяет ruff check.
-  # Шага нет намеренно — здесь только пояснение для ревьюера.
+  # Этап 2 — Format: `ruff format --check` на коде проекта.
+  # Раньше шага не было: `--check` показывал 18 файлов к переформатированию.
+  # Аргумент был верный, вывод — нет: это накопленное расхождение, а не шум.
+  # Форматирование применено один раз, теперь шаг блокирующий — иначе через
+  # месяц правка снова будет на 18 файлов.
+  # Проверяются только свои каталоги: vendor/ — сторонний код, он должен
+  # оставаться сравнимым с upstream.
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: pip install ruff
+      - name: Формат
+        run: ruff format --check backend/cybra scan run.py
 
   # Этап 3 — Lint фронта: сборка ловит и синтаксис, и битые импорты.
   lint-frontend:

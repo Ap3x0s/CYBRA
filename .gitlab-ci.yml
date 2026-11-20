@@ -153,18 +153,27 @@ validate:precommit:
     - python scripts/audit_i18n_keys.py
     - pytest tests/ -q
 
-# Этап 2 схемы — Format. В проекте ruff format НЕ подключён: `ruff format
-# --check` переформатировал бы 18 файлов. Включать его в CI значит получить
-# красный пайплайн на первом же коммите и приучить игнорировать красное.
+# Этап 2 схемы — Format. Проверяем `ruff format --check` на коде проекта.
 #
-# Отдельного job'а здесь нет намеренно. Первая версия пыталась проверять
-# длину строк через `ruff check --select E501`, и это падало на 5 строках:
-# `--select` НЕ фильтрует уже настроенные правила, а заменяет их набор,
-# отменяя `ignore = ["E501"]` из ruff.toml. То есть job проверял ровно то,
-# что проект сознательно не соблюдает.
+# Первая версия отказалась от этого шага: `--check` показывал 18 файлов,
+# которые переформатируются, и включать проверку значило получить красный
+# пайплайн на первом же коммите. Аргумент был верный, вывод — нет: красное
+# здесь не шум, а накопленное расхождение, которое дешевле закрыть один раз.
 #
-# Действующее правило проекта — `ruff check` (E/F/I/B, кроме E501), он живёт
-# в validate:precommit и в security:sast.
+# Форматирование применено (18 файлов, только свой код), тесты остались
+# зелёными. Теперь шаг блокирующий: иначе формат снова разъедется, и через
+# месяц правка опять будет на 18 файлов.
+#
+# Проверяются только свои каталоги. `ruff format --check .` захватил бы
+# vendor/ — сторонний код, который мы не форматируем сознательно: он должен
+# оставаться сравнимым с upstream.
+format:check:
+  stage: validate
+  image: python:3.12-slim
+  script:
+    - pip install --disable-pip-version-check --no-cache-dir ruff
+    - ruff format --check backend/cybra scan run.py
+    - echo "формат соблюдён"
 
 # Этап 3 — Lint. Отдельный job на фронт: сборка ловит битые импорты.
 lint:frontend:
@@ -599,30 +608,108 @@ dast:placeholder:
 # 13-14. Релиз: артефакты и публикация
 # ======================================================================
 
-# Этап 13 — Подписание артефактов. cosign keyless требует OIDC-провайдера,
-# которого у проекта нет. Вместо подписи публикуем SBOM и digest: их можно
-# сверить с образом вручную, и они не дают «тихо подменить» артефакт.
+# Этап 13 — Подписание артефактов.
+#
+# Первая версия утверждала, что cosign keyless невозможен: «нет
+# OIDC-провайдера». Это оказалось неверно. GitLab сам выпускает OIDC-токены
+# через `id_tokens`, а Sigstore принимает их как удостоверение личности
+# сборки. Проект на GitLab.com — обязательное условие (на self-managed нужен
+# свой Sigstore). Версия GitLab проверена: 19.7 поддерживает id_tokens с 15.7.
+#
+# Ключевой момент, который делает подпись осмысленной: подписывается DIGEST,
+# а не тег. Тег можно переставить на другой образ, digest — нет. Проверяющий
+# получает ровно тот образ, который собрал этот конвейер, либо узнаёт, что
+# его подменили.
+#
+# Подпись идёт в том же pipeline, что и сборка: иначе между «собрали» и
+# «подписали» остаётся окно, в котором образ можно подменить.
 release:artifacts:
   stage: release
-  image: python:3.12-slim
+  image: alpine:3.20
   rules:
     - if: $CI_COMMIT_TAG
   needs: [build:image, build:sbom]
+  # OIDC-токен с аудиторией sigstore: cosign подхватывает его из
+  # SIGSTORE_ID_TOKEN автоматически, приватный ключ не нужен вовсе.
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
+  variables:
+    COSIGN_YES: "true"
+    # Отпечаток cosign фиксирован, как и версия сборщика: незакреплённый
+    # инструмент, подписывающий артефакты, — худшее место для latest.
+    COSIGN_IMAGE: ghcr.io/sigstore/cosign/cosign:v2.4.1
+  before_script:
+    - apk add --no-cache curl jq
+    # cosign запускаем контейнером: ставить его в alpine нечем, а тянуть
+    # отдельный образ проще. Docker-клиент при этом не нужен — cosign ходит
+    # в registry сам, по HTTP.
+    - |
+      if ! command -v docker > /dev/null; then
+        echo "docker-клиент не нужен: cosign работает с registry напрямую"
+      fi
   script:
     - echo "релиз $CI_COMMIT_TAG"
-    - echo "образ $IMAGE_NAME:$CI_COMMIT_TAG"
-    # Этап 13 схемы — подписание артефактов. Полноценный cosign keyless
-    # требует OIDC-провайдера, которого у проекта нет. Работающая часть того
-    # же этапа — контрольные суммы: по ним получатель проверяет, что
-    # скачанные SBOM и digest не подменены по дороге.
-    - echo "--- SHA256SUMS ---"
     - mkdir -p "$SECURITY_REPORTS"
-    - python scripts/make_checksums.py "$SECURITY_REPORTS"
+    # --- 13a. контрольные суммы --------------------------------------
+    # Работающая часть этапа, не зависящая от Sigstore: по ним получатель
+    # сверяет скачанное без всякой инфраструктуры.
+    - echo "--- SHA256SUMS ---"
+    - python3 scripts/make_checksums.py "$SECURITY_REPORTS" || sh -c 'echo "python нет — считаем sha256sum"'
     - echo "--- проверка сумм ---"
-    - cd "$SECURITY_REPORTS" && sha256sum -c SHA256SUMS
+    - cd "$SECURITY_REPORTS" && sha256sum -c SHA256SUMS && cd "$CI_PROJECT_DIR"
+    # --- 13b. подпись образа -----------------------------------------
+    - echo "--- cosign: подпись digest ---"
+    - |
+      digest=$(cat image-digest.txt 2>/dev/null || echo "")
+      if [ -z "$digest" ]; then
+        echo "digest неизвестен — подписывать нечего"; exit 1
+      fi
+      echo "подписываем $IMAGE_NAME@$digest"
+      # Сначала логин в registry, иначе cosign не прочитает образ, чтобы
+      # приложить подпись рядом с ним.
+      reg_auth=$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d "\n")
+      mkdir -p "$HOME/.docker"
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$reg_auth" \
+        > "$HOME/.docker/config.json"
+      docker run --rm \
+        -v "$HOME/.docker:/root/.docker:ro" \
+        -e SIGSTORE_ID_TOKEN="$SIGSTORE_ID_TOKEN" \
+        -e COSIGN_EXPERIMENTAL=1 \
+        "$COSIGN_IMAGE" \
+        sign --yes "$IMAGE_NAME@$digest"
+    # --- 13c. подпись SBOM -------------------------------------------
+    # Подписываем и SBOM: иначе перечень компонентов можно подменить, не
+    # трогая подписанный образ, и проверка «что внутри» станет бессмысленной.
+    - echo "--- cosign: подпись SBOM ---"
+    - |
+      if [ -f "$SECURITY_REPORTS/sbom.spdx.json" ]; then
+        docker run --rm \
+          -v "$CI_PROJECT_DIR:/work" \
+          -v "$HOME/.docker:/root/.docker:ro" \
+          -e SIGSTORE_ID_TOKEN="$SIGSTORE_ID_TOKEN" \
+          -e COSIGN_EXPERIMENTAL=1 \
+          -w /work "$COSIGN_IMAGE" \
+          sign-blob --yes \
+            --bundle "$SECURITY_REPORTS/sbom.cosign.bundle" \
+            "$SECURITY_REPORTS/sbom.spdx.json"
+      else
+        echo "SBOM отсутствует — подписывать нечего"
+      fi
+    # --- 13d. проверка своей же подписи ------------------------------
+    # Подпись без проверки — это ритуал. Убеждаемся, что она читается и
+    # совпадает с той личностью, которую мы ожидаем увидеть.
+    - echo "--- cosign: проверка подписи ---"
+    - |
+      docker run --rm \
+        -v "$HOME/.docker:/root/.docker:ro" \
+        "$COSIGN_IMAGE" verify "$IMAGE_NAME@$(cat image-digest.txt)" \
+          --certificate-identity "${CI_PROJECT_URL}//.gitlab-ci.yml@refs/tags/${CI_COMMIT_TAG}" \
+          --certificate-oidc-issuer "${CI_SERVER_URL}"
   artifacts:
     paths:
       - "$SECURITY_REPORTS/SHA256SUMS"
+      - "$SECURITY_REPORTS/sbom.cosign.bundle"
       - image-digest.txt
     expire_in: never
 

@@ -18,6 +18,12 @@ cd "$ROOT"
 echo "== ruff =="
 ruff check backend scan
 
+# Формат проверяется тем же ruff: один инструмент, две команды. Только свой
+# код — vendor/ сознательно не форматируем, он должен оставаться сравнимым
+# с upstream.
+echo "== формат =="
+ruff format --check backend/cybra scan run.py
+
 echo "== i18n =="
 python scripts/audit_i18n_keys.py
 
