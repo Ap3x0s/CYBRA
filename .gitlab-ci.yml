@@ -5,10 +5,9 @@
 # компилируемого языка и нет продакшен-среды, куда деплоит CI.
 #
 #   №  Этап схемы            У нас
-#   0  Локальные pre-commit  ✔ git-хук: ruff + i18n + быстрый pytest
+#   0  Локальные pre-commit  ✔ git-хук: ruff check + ruff format + i18n + pytest
 #   1  Ветка + MR            ✔ правила stages и rules
-#   2  Format                ✖ ruff format в проекте не подключён (18 файлов),
-#                              вводить его в CI = красный пайплайн на ровном месте
+#   2  Format                ✔ ruff format --check (18 файлов приведены один раз)
 #   3  Lint                  ✔ ruff, сборка фронта, аудит i18n
 #   4  Unit tests (compile)  ✔ pytest (90 тестов); компиляции нет — Python/JS
 #   5  SAST                  ✔ ruff-B (bugbear) + bandit (HIGH); полноценный
@@ -20,13 +19,18 @@
 #  10  Deploy to Test        ✔ образ из registry поднимается на раннере
 #  11  DAST                  ✖ требует живого стенда с моделью; вне CI
 #  12  Smoke / Integration  ✔ curl /api/v1/health + проверка отдачи SPA
-#  13  Подписание артефактов ✔ cosign keyless не настроить без OIDC-провайдера;
-#                              вместо этого SHA256SUMS по SBOM и digest
+#  13  Подписание артефактов ✔ cosign keyless через id_tokens GitLab: подпись
+#                              digest образа и SBOM + собственная проверка
 #  14  Release               ✔ git-тег → образ с версионным тегом в registry
 #  15  Approve to Prod       ✔ protected environment (ручное подтверждение)
 #  16  Deploy to Prod        ✔ только по тегу, через environment
 #  17  Smoke после деплоя    ✔ тот же health-чек против выпущенного тега
 #  18  Rollback              ✔ job rollback: возврат тега latest на предыдущий
+#
+# Единственный этап, которого нет совсем, — 11 (DAST): ему нужен живой стенд
+# с подключённой моделью, а поднимать модель в CI — гигабайты и часы.
+# Остальные либо выполняются, либо выполняются частично, и это указано
+# прямо в строке, а не спрятано в комментарии ниже.
 #
 # Сборка идёт kaniko, а не docker:dind: см. комментарий к шаблону .kaniko.
 # Остальные job'ы, которым нужен запуск контейнеров (deploy, smoke, release),

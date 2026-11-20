@@ -74,7 +74,8 @@ deployment needs real benchmarks.
 ```
 merge request
    │
-   ├── validate:precommit  ruff, i18n audit, pytest -q
+   ├── validate:precommit  ruff check + audit_i18n + pytest -q
+   ├── format:check        ruff format --check (own code only)
    ├── lint:frontend       npm ci && npm run build
    ├── test:unit           pytest tests/ -q            (90 tests, no API key needed)
    ├── security:sast       ruff + bandit (HIGH)
@@ -87,10 +88,31 @@ merge request
    └── deploy:test         pull :<sha>, start it, wait for /api/v1/health
 ```
 
+On a git tag the release stage adds `release:artifacts` — cosign keyless
+signature over the image digest and the SBOM — and `release:publish`, which
+copies `:<sha>` to `:<tag>`.
+
 Defined in [`.gitlab-ci.yml`](../.gitlab-ci.yml). GitHub Actions runs the same
 stages with the same builder; only the registry differs (ghcr.io there, the
 GitLab registry here). Publishing from both to the same name would give two
 different "latest" tags, so each platform publishes to its own.
+
+Of the 18 stages in the reference DevSecOps scheme, 17 are implemented. The
+one that is not is DAST (stage 11): it needs a live deployment with a model
+attached, and running a model inside CI costs gigabytes and hours. It stays a
+manual procedure in [VALIDATION-CYBRA.md](VALIDATION-CYBRA.md).
+
+### Signing without a key
+
+`release:artifacts` signs with cosign in keyless mode. There is no private key
+anywhere: GitLab issues an OIDC token (`id_tokens` with `aud: sigstore`),
+Sigstore exchanges it for a short-lived certificate, and the signature lands in
+the transparency log. This needs the project to live on GitLab.com — a
+self-managed instance would need its own Sigstore deployment.
+
+The digest is signed, not the tag. A tag can be repointed at a different image;
+a digest cannot. The SBOM is signed too, otherwise the component list could be
+swapped without touching the signed image.
 
 Notes that cost time to rediscover:
 

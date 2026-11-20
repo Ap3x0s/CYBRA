@@ -74,7 +74,8 @@ python scripts/verify_migration.py /path/to/cybra.sqlite3
 ```
 запрос на слияние
    │
-   ├── validate:precommit  ruff, аудит i18n, pytest -q
+   ├── validate:precommit  ruff check + audit_i18n + pytest -q
+   ├── format:check        ruff format --check (только свой код)
    ├── lint:frontend       npm ci && npm run build
    ├── test:unit           pytest tests/ -q            (90 тестов, без API-ключа)
    ├── security:sast       ruff + bandit (только HIGH)
@@ -87,10 +88,31 @@ python scripts/verify_migration.py /path/to/cybra.sqlite3
    └── deploy:test         pull :<sha>, запуск, ожидание /api/v1/health
 ```
 
+По git-тегу добавляется стадия release: `release:artifacts` — подпись cosign
+в режиме keyless над digest образа и над SBOM, — и `release:publish`, который
+переносит `:<sha>` в `:<tag>`.
+
 Определено в [`.gitlab-ci.yml`](../../.gitlab-ci.yml). GitHub Actions выполняет
 те же стадии тем же сборщиком; отличается только registry (ghcr.io там, реестр
 GitLab здесь). Публикация из обоих мест в одно имя дала бы два разных тега
 «latest», поэтому каждая площадка публикует в свой.
+
+Из 18 этапов схемы DevSecOps реализованы 17. Не реализован один — DAST
+(этап 11): ему нужен живой стенд с подключённой моделью, а поднимать модель
+в CI — гигабайты и часы. Он остаётся ручной процедурой в
+[VALIDATION-CYBRA.md](VALIDATION-CYBRA.md).
+
+### Подпись без ключа
+
+`release:artifacts` подписывает в режиме keyless. Приватного ключа нет нигде:
+GitLab выпускает OIDC-токен (`id_tokens` с `aud: sigstore`), Sigstore меняет
+его на короткоживущий сертификат, подпись попадает в журнал прозрачности.
+Для этого проект должен жить на GitLab.com: на self-managed понадобится свой
+Sigstore.
+
+Подписывается digest, а не тег. Тег можно переставить на другой образ,
+digest — нельзя. SBOM подписывается тоже, иначе перечень компонентов можно
+подменить, не трогая подписанный образ.
 
 Детали, на которых легко потерять время:
 
