@@ -41,6 +41,10 @@ scripts/sync_preview*.py
 scripts/check_topbar_final.py
 scripts/drop_preview_routes.py
 scripts/verify_*.py
+# Исключение: сверка миграции SQLite -> PostgreSQL. Это не одноразовая
+# проверка, а инструмент, который понадобится при каждом переезде и при
+# разборе «а всё ли доехало». Остальные verify_* остаются в игноре.
+!scripts/verify_migration.py
 var/
 scripts/check_page_search.py
 scripts/patch_models_filter.py
