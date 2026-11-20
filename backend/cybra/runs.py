@@ -133,7 +133,7 @@ class RunManager:
             seed=int(spec.get('seed', 42)),
             variants=tuple(spec.get('variants') or ('direct', 'roleplay', 'authority')),
             max_requests=int(spec.get('max_requests', 1000)),
-            max_tokens=int(spec.get('max_tokens', 8192)),
+            max_tokens=int(spec.get('max_tokens', 16384)),
             temperature=spec.get('temperature', 0.0),
             timeout=int(spec.get('timeout', 120)),
             tool_timeout=int(spec.get('tool_timeout', 7200)),

@@ -180,11 +180,11 @@ def main():
     r.add_argument('--seed',type=int,default=42);r.add_argument('--variants',nargs='+',choices=['direct','roleplay','authority'],default=['direct','roleplay','authority'])
     r.add_argument('--timeout',type=positive,default=120);r.add_argument('--tool-timeout',type=positive,default=3600)
     r.add_argument('--max-requests',type=positive,default=1000,help='per model/tool/route, including native retries')
-    # 8192/16384, а не 2048/4096: у моделей с цепочкой рассуждений вся квота
+    # 16384/32768, а не 2048/4096: у моделей с цепочкой рассуждений вся квота
     # completion уходит в reasoning_tokens, и на текст не остаётся ничего.
-    # Замер на реальном промпте garak: при 2048 и 4096 в ответе text_tokens=0
-    # и finish_reason=length, при 8192 приходит нормальный ответ.
-    r.add_argument('--max-tokens',type=positive,default=8192);r.add_argument('--judge-max-tokens',type=positive,default=16384)
+    # Замер на реальном промпте garak: при 2048 и 4096 text_tokens=0 всегда;
+    # при 8192 иногда тоже (модель плавает), при 16384 — пять попыток из пяти.
+    r.add_argument('--max-tokens',type=positive,default=16384);r.add_argument('--judge-max-tokens',type=positive,default=32768)
     r.add_argument('--token-parameter',choices=['max_tokens','max_completion_tokens'],default='max_tokens')
     r.add_argument('--temperature',default='0');r.add_argument('--developer-as-system',action='store_true')
     r.add_argument('--drop-params',nargs='*',default=[])
