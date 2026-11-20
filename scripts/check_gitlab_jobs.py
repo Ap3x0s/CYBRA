@@ -37,15 +37,19 @@ def token() -> str:
     return match.group(0)
 
 
-def api(path: str, raw: bool = False):
+def api(path: str, raw: bool = False, method: str = 'GET'):
     request = urllib.request.Request(
         f'https://gitlab.com/api/v4/projects/{PROJECT}{path}',
+        method=method,
         headers={'PRIVATE-TOKEN': token()})
     try:
         with urllib.request.urlopen(request, timeout=40) as response:
             body = response.read()
     except urllib.error.HTTPError as error:
         raise SystemExit(f'GitLab API {path}: {error.code} {error.reason}') from error
+    # DELETE возвращает 204 без тела — json.loads на пустой строке упал бы.
+    if not body:
+        return {}
     return body.decode(errors='replace') if raw else json.loads(body)
 
 
