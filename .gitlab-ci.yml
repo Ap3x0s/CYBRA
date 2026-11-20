@@ -329,24 +329,33 @@ build:image:
       else
         echo "Docker Hub credentials absent: skipped."
       fi
-    # Публикуем только из default branch и по тегу: ветки не должны
-    # перезаписывать latest, из которого разворачиваются.
+    # Публикация по двум правилам, и они разные не случайно.
+    #
+    # :<commit-sha> публикуется ВСЕГДА. Тег уникален для коммита, latest он
+    # не трогает, а без него рвётся вся цепочка дальше: build:sbom,
+    # security:image и deploy:test читают образ из registry по этому тегу.
+    # Раньше образ не публиковался ни на ветках, ни на запросах на слияние —
+    # и все три job'а падали с MANIFEST_UNKNOWN. Замечено не сразу, потому
+    # что ручной прогон идёт на ref=main, где условие выполнялось.
+    #
+    # :latest — ТОЛЬКО с default branch и по тегу. Это то, из чего
+    # разворачиваются; ветка не должна его перезаписывать.
     - |
+      set -- --destination="$IMAGE_NAME:$IMAGE_TAG"
+      if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+        set -- "$@" --destination="docker.io/$DOCKERHUB_USER/cybra:$IMAGE_TAG"
+      fi
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; then
-        set -- \
-          --destination="$IMAGE_NAME:$IMAGE_TAG" \
+        set -- "$@" \
           --destination="$IMAGE_NAME:latest"
         if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
-          set -- "$@" \
-            --destination="docker.io/$DOCKERHUB_USER/cybra:$IMAGE_TAG" \
-            --destination="docker.io/$DOCKERHUB_USER/cybra:latest"
+          set -- "$@" --destination="docker.io/$DOCKERHUB_USER/cybra:latest"
         fi
         PUBLISH=1
       else
-        echo "Not the default branch: built only, not published."
-        # Без --destination kaniko не публикует, но образ всё равно собирает
-        # и отдаёт в --tar-path. Так ветка проверяет сборку, не трогая latest.
-        set -- --no-push
+        # Не default branch: latest не трогаем, но :<sha> публикуем, иначе
+        # потребителям образа нечего тянуть.
+        echo "Not the default branch: публикуется только :$IMAGE_TAG, latest не тронут."
         PUBLISH=0
       fi
       /kaniko/executor \
