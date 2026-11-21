@@ -151,7 +151,8 @@ validate:precommit:
     - pip install --disable-pip-version-check --no-cache-dir ruff pytest httpx pyyaml
     - pip install --disable-pip-version-check --no-cache-dir -e backend
     - echo "--- скрипт хука на месте и исполняем ---"
-    - test -x scripts/precommit.sh && echo "precommit.sh ok"
+    - test -f scripts/precommit.py && echo "precommit.py ok"
+    - test -f scripts/install_git_hooks.py && echo "install_git_hooks.py ok"
     - echo "--- те же проверки, что в хуке ---"
     - ruff check backend scan
     - python scripts/audit_i18n_keys.py

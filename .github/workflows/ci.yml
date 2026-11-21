@@ -84,8 +84,8 @@ jobs:
           pip install ruff pytest httpx
       - name: pre-commit хук на месте
         run: |
-          test -x scripts/precommit.sh
-          test -x scripts/install_git_hooks.sh
+          test -f scripts/precommit.py
+          test -f scripts/install_git_hooks.py
           echo "скрипты хука исполняемы"
       - name: Те же проверки, что в хуке
         run: |
