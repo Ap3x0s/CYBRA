@@ -147,7 +147,16 @@ def _setup(argv: list[str]) -> int:
     if not tools:
         tools = ["garak", "pyrit", "agentdojo", "promptfoo"]
 
-    errors = setup(tools)
+    # setup выбрасывает RuntimeError на предварительных условиях: нет uv,
+    # не та версия Python, битый CYBRA_OFFLINE_DIR. Это не ошибка установки
+    # конкретного инструмента, а неподходящее окружение — печатаем причину
+    # одной строкой, без трейсбека: он тут ничего не добавляет.
+    try:
+        errors = setup(tools)
+    except RuntimeError as error:
+        print(f"setup: {error}", file=sys.stderr)
+        return 1
+
     if errors:
         for tool, error in errors.items():
             print(f"FAILED {tool}: {error}", file=sys.stderr)

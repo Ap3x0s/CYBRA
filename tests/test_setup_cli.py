@@ -87,3 +87,22 @@ def test_help_returns_zero(capsys) -> None:
     # администратор ищет в первую очередь.
     assert '--tools' in out
     assert 'CYBRA_OFFLINE_DIR' in out
+
+def test_missing_uv_reported_without_traceback(monkeypatch, capsys) -> None:
+    """Нет uv — одна строка с причиной, а не трейсбек.
+
+    setup() выбрасывает RuntimeError на неподходящем окружении. CLI должен
+    поймать его: иначе администратор видит стек вызовов установщика вместо
+    «Install uv first».
+    """
+    import security_suite.setup_tools as module
+
+    def boom(tools):
+        raise RuntimeError('Install uv first: python -m pip install uv')
+
+    monkeypatch.setattr(module, 'setup', boom)
+    code = cli._setup(['setup', '--tools', 'garak'])
+    assert code == 1
+    captured = capsys.readouterr()
+    assert 'setup: Install uv first' in captured.err
+    assert 'Traceback' not in captured.err

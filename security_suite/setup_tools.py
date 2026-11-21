@@ -156,8 +156,41 @@ KNOWN_TOOLS = frozenset(
 )
 
 
+def _find_uv() -> str | None:
+    """Найти uv: в PATH, рядом с интерпретатором или в каталоге pipx.
+
+    `shutil.which` смотрит только PATH. Внутри venv uv лежит в Scripts/
+    того же venv и в PATH не попадает — установщик объявлял «Install uv
+    first», хотя uv уже был установлен. Проверяем соседний каталог явно.
+    """
+    found = shutil.which('uv') or shutil.which('uv.exe')
+    if found:
+        return found
+
+    candidates = [
+        Path(sys.executable).parent / ('uv.exe' if os.name == 'nt' else 'uv'),
+        Path.home() / '.local' / 'bin' / 'uv',
+        Path.home() / '.cargo' / 'bin' / 'uv',
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
 def setup(tools):
-    uv = shutil.which('uv')
+    uv = _find_uv()
+    # Версия интерпретатора проверяется до всякой работы: lock-файлы сняты
+    # под 3.12, и на 3.10 установка падает стеком зависимостей вместо
+    # внятного «нужен Python 3.12».
+    if sys.version_info < (3, 12):
+        raise RuntimeError(
+            'для установки нужен Python 3.12 или новее, '
+            f'сейчас {sys.version_info.major}.{sys.version_info.minor}. '
+            'Lock-файлы сняты под 3.12; в образе и CI используется он же. '
+            'Локально: создайте venv через py -3.12 -m venv .venv')
+
+
     lock = read_json(ROOT / 'sources.lock.json')
 
     specs = {
