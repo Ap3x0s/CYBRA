@@ -178,8 +178,45 @@ def _find_uv() -> str | None:
     return None
 
 
+def _install_uv_from_bundle(bundle: Path) -> str | None:
+    """Поставить uv из колеса, привезённого в bundle.
+
+    uv — инструмент установщика, а не зависимость приложения, поэтому в
+    образ он не входит. В офлайне его неоткуда взять, кроме bundle.
+
+    Ставим в текущее окружение через python -m pip с --no-index: сеть не
+    используется, колесо берётся только из bundle/wheels.
+    """
+    wheels = bundle / 'wheels'
+    if not wheels.is_dir():
+        return None
+
+    candidates = sorted(wheels.glob('uv-*.whl'))
+    if not candidates:
+        return None
+
+    print(f'  uv не найден — ставлю из bundle: {candidates[0].name}', flush=True)
+    result = subprocess.run(
+        [sys.executable, '-m', 'pip', 'install', '--no-index',
+         '--find-links', str(wheels), '--quiet', 'uv'],
+        capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f'  uv из bundle не установился: {result.stderr.strip()[:200]}',
+              file=sys.stderr, flush=True)
+        return None
+
+    # После установки uv лежит рядом с интерпретатором.
+    return _find_uv()
+
+
 def setup(tools):
     uv = _find_uv()
+
+    # uv может отсутствовать на чистой машине, а взять его в офлайне неоткуда.
+    # Если привезён bundle — ставим uv из него в текущее окружение.
+    offline_hint = os.environ.get('CYBRA_OFFLINE_DIR')
+    if not uv and offline_hint:
+        uv = _install_uv_from_bundle(Path(offline_hint))
     # Версия интерпретатора проверяется до всякой работы: lock-файлы сняты
     # под 3.12, и на 3.10 установка падает стеком зависимостей вместо
     # внятного «нужен Python 3.12».

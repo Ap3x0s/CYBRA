@@ -76,6 +76,17 @@ WINDOWS_ONLY = [
     'python-magic-bin',  # garak: определение типа файла
 ]
 
+# uv — установщик, которым пользуется `cybra setup`. В зависимости проекта
+# он не входит: это инструмент, а не библиотека. Но без него установка не
+# работает вовсе, поэтому он едет в bundle: на машине без интернета взять
+# его неоткуда.
+#
+# На PyPI uv публикуется как самодостаточное колесо с бинарником внутри,
+# по одному на платформу — поэтому качается теми же тегами, что и остальное.
+SETUP_TOOLS = [
+    'uv',
+]
+
 BUILD_BACKENDS = [
     'flit_core>=3.11,<4',
     'setuptools>=68',
@@ -254,6 +265,27 @@ def download_platform_extras(out_dir: Path, pyver: str, platform: str) -> None:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f'  платформенный пакет {spec}: не скачался', file=sys.stderr)
+
+
+def download_setup_tools(out_dir: Path, pyver: str, platform: str) -> None:
+    """Скачать инструменты установщика (uv) под целевую платформу.
+
+    Без uv `cybra setup` не работает: он создаёт окружения и ставит пакеты.
+    В bundle он нужен потому, что на машине без интернета взять его негде.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    config = PLATFORMS[platform]
+    for spec in SETUP_TOOLS:
+        cmd = [sys.executable, '-m', 'pip', 'download', '--only-binary=:all:',
+               '--no-deps', '--dest', str(out_dir), spec]
+        for tag in config['platforms']:
+            cmd += ['--platform', tag]
+        for abi in config['abis']:
+            cmd += ['--abi', abi]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f'  {spec}: не скачался — установка на месте потребует сети',
+                  file=sys.stderr)
 
 
 def download_build_backends(out_dir: Path, pyver: str) -> None:
@@ -484,6 +516,10 @@ def main() -> int:
     # Build-backend'ы качаем всегда: они нужны, если в наборе есть хоть один
     # инструмент из git (garak, pyrit, agentdojo). Без них установка из
     # архива падает на этапе сборки — проверено на garak.
+    # uv первым: без него установщик не работает на чистой машине.
+    print('--- инструменты установщика ---')
+    download_setup_tools(bundle / 'wheels', pyver, args.platform)
+
     print('--- build-backends ---')
     download_build_backends(bundle / 'wheels', pyver)
 

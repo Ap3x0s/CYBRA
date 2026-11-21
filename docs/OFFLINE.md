@@ -151,8 +151,11 @@ So a deployment that only runs the built-in benchmarks needs no bundle at all.
   and torch publishes no wheels for them.
 - **Python 3.12** for the host process. The bundle wheels are built for cp312.
 - **Node.js 22+** if the deployment needs promptfoo.
-- `uv` installed (`pip install uv`) — `cybra setup` uses it to create
-  per-tool environments.
+- `uv` — `cybra setup` uses it to create per-tool environments. **You do
+  not need to install it separately when using a bundle**: a version
+  built for the target platform ships inside `wheels/`, and setup
+  installs it automatically if it is missing. On a machine with network
+  access, `pip install uv` is enough.
 
 ## Verifying that it really works offline
 
