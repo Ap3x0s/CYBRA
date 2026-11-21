@@ -65,6 +65,30 @@ With `CYBRA_OFFLINE_DIR` set, no network is used:
 | garak, PyRIT, AgentDojo | git lines in `locks/*.txt` are rewritten to the local archives in `<bundle>/sources` |
 | promptfoo | `npm ci --offline --cache=<bundle>/npm` |
 
+Both spellings of the command work; the flag is the one used everywhere in
+the UI and the docs:
+
+```bash
+cybra setup --tools garak pyrit    # explicit flag
+cybra setup garak pyrit            # same, positional
+cybra setup                        # all four heavy tools
+```
+
+Setup prints the mode before it starts, so you can see at a glance whether it
+will reach the network:
+
+```
+Режим: офлайн
+  bundle : /opt/cybra/offline-bundle
+  колёс  : 184
+  архивов: 3
+  npm    : есть
+  сеть не используется
+```
+
+Without `CYBRA_OFFLINE_DIR` it prints `Режим: онлайн (PyPI + npm)` — which is
+the signal that a machine with no internet will hang on timeouts.
+
 The second row is easy to miss and worth stating plainly. `garak` is pinned in
 its lock file as a git URL:
 

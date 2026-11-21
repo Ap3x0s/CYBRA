@@ -77,7 +77,7 @@ merge request
    ├── validate:precommit  ruff check + audit_i18n + pytest -q
    ├── format:check        ruff format --check (own code only)
    ├── lint:frontend       npm ci && npm run build
-   ├── test:unit           pytest tests/ -q            (95 tests, no API key needed)
+   ├── test:unit           pytest tests/ -q            (103 tests, no API key needed)
    ├── security:sast       ruff + bandit (HIGH)
    ├── security:secrets    gitleaks
    ├── security:iac        Dockerfile, .dockerignore, both pipelines

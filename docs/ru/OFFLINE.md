@@ -63,6 +63,30 @@ cybra setup --tools garak pyrit agentdojo promptfoo
 | Python-пакеты | `--no-index --find-links=<bundle>/wheels` |
 | garak, PyRIT, AgentDojo | git-строки в `locks/*.txt` заменяются на локальные архивы из `<bundle>/sources` |
 | promptfoo | `npm ci --offline --cache=<bundle>/npm` |
+Оба написания команды работают; флаг — то, что используется во всём
+интерфейсе и документации:
+
+```bash
+cybra setup --tools garak pyrit    # с флагом
+cybra setup garak pyrit            # то же, позиционно
+cybra setup                        # все четыре тяжёлых инструмента
+```
+
+Установщик печатает режим до начала работы — сразу видно, пойдёт ли он
+в сеть:
+
+```
+Режим: офлайн
+  bundle : /opt/cybra/offline-bundle
+  колёс  : 184
+  архивов: 3
+  npm    : есть
+  сеть не используется
+```
+
+Без `CYBRA_OFFLINE_DIR` будет `Режим: онлайн (PyPI + npm)` — это и есть
+признак того, что на машине без интернета установка уйдёт в таймауты.
+
 
 Вторая строка — то, что легко упустить, поэтому скажем прямо. `garak` в
 lock-файле закреплён git-ссылкой:

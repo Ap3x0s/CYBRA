@@ -148,6 +148,14 @@ def python_for(tool):
         )
     )
 
+# Инструменты, которые умеет ставить `cybra setup`. Список нужен, чтобы
+# CLI мог отличить опечатку («garakk») от имени и вернуть понятную ошибку,
+# а не отрапортовать успех, ничего не поставив.
+KNOWN_TOOLS = frozenset(
+    {'garak', 'pyrit', 'agentdojo', 'promptfoo', 'bipia'}
+)
+
+
 def setup(tools):
     uv = shutil.which('uv')
     lock = read_json(ROOT / 'sources.lock.json')
@@ -186,6 +194,28 @@ def setup(tools):
     offline_path = Path(offline) if offline else None
     if offline_path and not offline_path.exists():
         raise RuntimeError(f'CYBRA_OFFLINE_DIR указан, но каталога нет: {offline_path}')
+
+    # Сообщаем режим до начала работы: это первое, что должен увидеть
+    # администратор. Иначе в офлайне он ждёт сетевых таймаутов и получает
+    # «connection reset» без подсказки, что нужен bundle.
+    if offline_path:
+        wheels = len(list((offline_path / 'wheels').glob('*.whl'))) \
+            if (offline_path / 'wheels').is_dir() else 0
+        archives = len(list((offline_path / 'sources').glob('*.tar.gz'))) \
+            if (offline_path / 'sources').is_dir() else 0
+        npm_cache = (offline_path / 'npm' / '_cacache').is_dir()
+        print(f'Режим: офлайн', flush=True)
+        print(f'  bundle : {offline_path}', flush=True)
+        print(f'  колёс  : {wheels}', flush=True)
+        print(f'  архивов: {archives}', flush=True)
+        print(f'  npm    : {"есть" if npm_cache else "нет"}', flush=True)
+        print('  сеть не используется', flush=True)
+    else:
+        print('Режим: онлайн (PyPI + npm)', flush=True)
+        print('Для установки без интернета задайте CYBRA_OFFLINE_DIR',
+              flush=True)
+    print(flush=True)
+
 
     # Git-ссылки в офлайне надо подменить на локальные архивы из bundle.
     #
