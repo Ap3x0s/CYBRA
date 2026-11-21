@@ -1,12 +1,15 @@
-"""Удалить из Docker Hub теги, собранные старым способом (docker build).
+"""Удалить из Docker Hub устаревшие теги, оставив актуальные.
 
-Оставляем собранные kaniko: latest и :<sha> от прогонов после перехода на
-kaniko. Остальные — артефакты прежней сборки: они не воспроизводятся
-текущим конвейером и только путают, какой образ актуален.
+Раньше скрипт сверялся с захардкоженным списком коммитов — и после каждой
+новой публикации хотел удалить именно свежий тег, потому что список
+оставался прежним. Признак плохого критерия: правильный ответ меняется
+вместе с данными.
 
-Токен НЕ хранится в файле: он берётся из DOCKERHUB_TOKEN. Токен, попавший
-в репозиторий, остаётся в истории даже после удаления файла — и GitHub
-справедливо блокирует такой push секрет-сканером.
+Теперь критерий — время, а не имена: оставляем latest и N последних тегов.
+Всё, что старше, удаляется.
+
+Токен берётся из DOCKERHUB_TOKEN и в файле не хранится: секрет, попавший в
+репозиторий, остаётся в истории даже после удаления файла.
 
 Печатает план; удаляет только с --apply.
 """
@@ -21,15 +24,8 @@ import urllib.request
 USER = os.environ.get('DOCKERHUB_USER', 'ap3x0')
 REPO = os.environ.get('DOCKERHUB_REPO', 'cybra')
 
-# Коммиты, собранные kaniko (прогоны после перехода).
-KANIKO_COMMITS = {
-    'e57529d6039fd217f696b399b1471a23c0fe8459',
-    'df2befa5b09ebff238a8d0c856be30a576806725',
-    'f16d26e2e799102a986d7ea767b6c4e174c04d4a',
-    '03dcf2c3ff560cc2949c9f6690963784d9faeeb1',
-    'de0ccf236764c0b888849c9e7b5e27e861a6e343',
-}
-KEEP = KANIKO_COMMITS | {'latest'}
+# Сколько последних тегов (кроме latest) считать актуальными.
+KEEP_RECENT = 2
 
 
 def token() -> str:
@@ -61,7 +57,8 @@ def api(jwt: str, path: str, method: str = 'GET'):
             body = response.read().decode()
             return json.loads(body) if body else {}
     except urllib.error.HTTPError as error:
-        return {'error': error.code, 'detail': error.read(300).decode(errors='replace')}
+        return {'error': error.code,
+                'detail': error.read(300).decode(errors='replace')}
 
 
 def main() -> int:
@@ -70,19 +67,26 @@ def main() -> int:
     print('вход в Docker Hub: ок')
     print()
 
+    # API отдаёт теги от новых к старым.
     tags = api(jwt, '/tags?page_size=100')['results']
-    keep = [t['name'] for t in tags if t['name'] in KEEP]
-    doomed = [t['name'] for t in tags if t['name'] not in KEEP]
+
+    keep = {'latest'}
+    recent = [tag['name'] for tag in tags if tag['name'] != 'latest'][:KEEP_RECENT]
+    keep.update(recent)
+
+    doomed = [tag['name'] for tag in tags if tag['name'] not in keep]
 
     print(f'всего тегов: {len(tags)}; оставить: {len(keep)}, удалить: {len(doomed)}')
     print()
-    print('остаются (kaniko):')
-    for name in keep:
-        print(f'  + {name[:14]}')
+    print(f'остаются (latest + {KEEP_RECENT} последних):')
+    for tag in tags:
+        if tag['name'] in keep:
+            print(f"  + {tag['name'][:14]:15} {tag['last_updated'][:16]}")
     print()
-    print('удаляются (docker build, старый способ):')
-    for name in doomed:
-        print(f'  - {name[:14]}')
+    print('удаляются (устаревшие сборки):')
+    for tag in tags:
+        if tag['name'] in doomed:
+            print(f"  - {tag['name'][:14]:15} {tag['last_updated'][:16]}")
 
     if not apply:
         print()
@@ -94,7 +98,7 @@ def main() -> int:
     for name in doomed:
         result = api(jwt, f'/tags/{name}/', method='DELETE')
         if result.get('error'):
-            print(f'  {name[:14]}: ошибка {result["error"]} {result.get("detail", "")[:60]}')
+            print(f'  {name[:14]}: ошибка {result["error"]}')
             failed += 1
         else:
             print(f'  {name[:14]}: удалён')
