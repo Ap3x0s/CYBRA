@@ -53,6 +53,38 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYTORCH_CPU = 'https://download.pytorch.org/whl/cpu'
 
+# Build-backend'ы. В lock-файлах их нет: это не зависимости проекта, а
+# инструменты сборки, которые pip подтягивает сам при установке из sdist.
+# На машине без интернета он их не найдёт, и установка git-инструментов
+# упадёт с «Could not find a version that satisfies the requirement
+# flit_core». Проверено: именно так и произошло с garak.
+#
+# Список — типовые backend'ы популярных проектов. Лишние колёса весят
+# килобайты, их отсутствие стоит сорванной установки.
+# Пакеты, которые нужны ТОЛЬКО на Windows и поэтому отсутствуют в lock,
+# снятом на Linux. pip при установке видит маркер sys_platform == "win32"
+# в зависимостях пакета и требует их, а в bundle их нет — установка падает
+# с «Could not find a version that satisfies the requirement pyreadline3».
+#
+# Список пополняется по мере выявления: гарантировать полноту нельзя, lock
+# для Windows и lock для Linux — разные наборы.
+WINDOWS_ONLY = [
+    'pyreadline3',       # cmd2: интерактивный ввод в консоли
+    'pywin32',           # доступ к Win32 API
+    'colorama',          # ANSI-цвета в терминале
+    'tzdata',            # pandas: часовые пояса без системной базы
+    'python-magic-bin',  # garak: определение типа файла
+]
+
+BUILD_BACKENDS = [
+    'flit_core>=3.11,<4',
+    'setuptools>=68',
+    'wheel',
+    'hatchling',
+    'poetry-core',
+    'pdm-backend',
+]
+
 # Платформа -> набор pip-тегов и abi для скачивания.
 #
 # Один тег не работает. Пакеты публикуются в разных формах имён, и они
@@ -202,56 +234,153 @@ def build_missing_wheels(packages: list[str], out_dir: Path, pyver: str) -> None
     Path('.wheel-probe').rmdir()
 
 
+def download_platform_extras(out_dir: Path, pyver: str, platform: str) -> None:
+    """Скачать пакеты, которые есть только на целевой платформе.
+
+    Для Windows это pyreadline3 и подобные: lock снят на Linux, и таких
+    зависимостей в нём нет вовсе. Без них установка garak на Windows
+    падает на этапе разрешения зависимостей.
+    """
+    if platform != 'windows':
+        return
+    out_dir.mkdir(parents=True, exist_ok=True)
+    config = PLATFORMS['windows']
+    for spec in WINDOWS_ONLY:
+        cmd = [sys.executable, '-m', 'pip', 'download', '--only-binary=:all:',
+               '--python-version', pyver, '--implementation', 'cp',
+               '--dest', str(out_dir), '--no-deps', spec]
+        for tag in config['platforms']:
+            cmd += ['--platform', tag]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f'  платформенный пакет {spec}: не скачался', file=sys.stderr)
+
+
+def download_build_backends(out_dir: Path, pyver: str) -> None:
+    """Скачать build-backend'ы, без которых не собрать git-инструменты.
+
+    Каждый качается отдельно: один недоступный пакет не должен срывать
+    остальные — та же ловушка, что была с основными зависимостями.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for spec in BUILD_BACKENDS:
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'download', '--only-binary=:all:',
+             '--python-version', pyver, '--implementation', 'cp',
+             '--dest', str(out_dir), '--no-deps', spec],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f'  build-backend {spec}: не скачался', file=sys.stderr)
+
+
 def clone_git_sources(entries: list[str], out_dir: Path) -> list[dict]:
     """Скачать исходники инструментов, которые ставятся с git.
 
     Строка вида: garak @ git+https://github.com/NVIDIA/garak.git@<sha>
-    Клонируем по ревизии и упаковываем в tar.
-    pip умеет ставить из архива без обращения к сети.
+
+    Клонируем по ревизии и упаковываем в tar: pip умеет ставить из архива
+    без обращения к сети, если указать путь к файлу.
+
+    Разбор: отрезаем префикс «git+», затем делим по последнему @ — ревизия
+    всегда в конце. rsplit на всей строке не работает, если в URL есть @
+    (токен или user@host): тогда ревизией окажется кусок токена.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = []
     for entry in entries:
-        # Р Р°Р·Р±РёСЂР°РµРј В«РёРјСЏ @ git+URL@СЂРµРІРёР·РёСЏВ»
         if ' @ git+' not in entry:
             continue
         name, rest = entry.split(' @ git+', 1)
         name = name.strip()
+
         if '@' not in rest:
-            print(f'  {name}: нет ревизии, пропускаю')
-            continue
-        url, revision = rest.rsplit('@', 1)
-        target = out_dir / f'{name}-{revision[:12]}.tar.gz'
+            # URL без ревизии: клонируем ветку по умолчанию и фиксируем
+            # фактический коммит, чтобы bundle был воспроизводим.
+            url, revision = rest, ''
+        else:
+            url, revision = rest.rsplit('@', 1)
 
         work = out_dir.parent / f'.clone-{name}'
         try:
             run(['git', 'clone', '--quiet', url, str(work)])
-            run(['git', '-C', str(work), 'checkout', '--quiet', revision])
+            if revision:
+                run(['git', '-C', str(work), 'checkout', '--quiet', revision])
+            else:
+                revision = subprocess.check_output(
+                    ['git', '-C', str(work), 'rev-parse', 'HEAD'],
+                    text=True).strip()
+
+            target = out_dir / f'{name}-{revision[:12]}.tar.gz'
             run(['git', '-C', str(work), 'archive', '--format=tar.gz',
                  f'--output={target}', revision])
             saved.append({'name': name, 'revision': revision,
                           'file': target.name, 'url': url})
-            print(f'  {name}: нет ревизии, пропускаю')
-        except subprocess.CalledProcessError:
-            print(f'  {name}: нет ревизии, пропускаю')
+            print(f'  {name}: {target.name}')
+        except subprocess.CalledProcessError as error:
+            print(f'  {name}: не удалось получить исходники ({error})',
+                  file=sys.stderr)
         finally:
             shutil.rmtree(work, ignore_errors=True)
     return saved
 
 
 def pack_npm(out_dir: Path) -> dict | None:
-    """Упаковать promptfoo для офлайн-установки npm."""
+    """Собрать npm-кеш для офлайн-установки promptfoo.
+
+    Почему не `npm pack`: в корне репозитория он упаковывает ВСЁ содержимое,
+    включая сам offline-bundle. На практике это дало 552 файла на 682 МБ и
+    рекурсию — bundle внутри bundle. При этом установщику нужен не архив
+    репозитория, а кеш пакетов.
+
+    Поэтому: ставим зависимости во временный каталог с --cache, направленным
+    в bundle. npm складывает туда все скачанные tarball'ы и метаданные.
+    На месте `npm ci --offline --cache=<bundle>/npm` берёт их оттуда.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     package = ROOT / 'package.json'
     if not package.exists():
         return None
-    try:
-        run(['npm', 'pack', '--pack-destination', str(out_dir)], cwd=ROOT)
-    except (subprocess.CalledProcessError, FileNotFoundError) as error:
-        print(f'  npm pack не удался: {error}', file=sys.stderr)
+
+    work = out_dir.parent / '.npm-build'
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    shutil.copyfile(package, work / 'package.json')
+    lock = ROOT / 'package-lock.json'
+    if lock.exists():
+        shutil.copyfile(lock, work / 'package-lock.json')
+
+    # На Windows npm — это npm.cmd, а не npm.exe. Прямой вызов из
+    # subprocess его не находит: [WinError 2] «не удаётся найти файл».
+    # which() возвращает полный путь к .cmd, и вызов работает.
+    npm = shutil.which('npm')
+    if not npm:
+        print('  npm не найден в PATH — promptfoo не попадёт в bundle',
+              file=sys.stderr)
         return None
-    tarballs = sorted(out_dir.glob('*.tgz'))
-    return {'file': tarballs[-1].name} if tarballs else None
+
+    try:
+        run([npm, 'install', '--no-audit', '--no-fund',
+             '--cache', str(out_dir)], cwd=work)
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        print(f'  npm install не удался: {error}', file=sys.stderr)
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+    # Проверяем, что кеш наполнился. npm кладёт его в _cacache внутри
+    # указанного каталога; искать *.tgz в корне бессмысленно — их там нет.
+    cacache = out_dir / '_cacache'
+    if not cacache.exists():
+        print('  npm-кеш не создан — офлайн-установка promptfoo не сработает',
+              file=sys.stderr)
+        return None
+
+    size = sum(p.stat().st_size for p in out_dir.rglob('*') if p.is_file())
+    if size < 1_048_576:
+        print(f'  npm-кеш подозрительно мал: {size} байт', file=sys.stderr)
+        return None
+    print(f'  npm-кеш: {size / 1_048_576:.1f} МБ')
+    return {'cache_size': size}
 
 
 def sha256(path: Path) -> str:
@@ -285,7 +414,7 @@ def write_manifest(bundle: Path, platform: str, tools: list[str],
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
 
     print()
-    print(f'С„Р°Р№Р»РѕРІ РІ bundle: {len(files)}')
+    print(f'файлов в bundle: {len(files)}')
     print(f'общий вес: {manifest["total_size"] / 1_048_576:.1f} МБ')
 
 
@@ -345,12 +474,22 @@ def main() -> int:
     bundle.mkdir(parents=True, exist_ok=True)
 
     print(f'платформа: {args.platform}, python cp{pyver}')
-    print(f'РєР°С‚Р°Р»РѕРі:   {bundle}')
+    print(f'каталог:   {bundle}')
     print(f'инструменты: {", ".join(args.tools)}')
     print()
 
     all_sources: list[dict] = []
     npm_info = None
+
+    # Build-backend'ы качаем всегда: они нужны, если в наборе есть хоть один
+    # инструмент из git (garak, pyrit, agentdojo). Без них установка из
+    # архива падает на этапе сборки — проверено на garak.
+    print('--- build-backends ---')
+    download_build_backends(bundle / 'wheels', pyver)
+
+    # Windows-only пакеты: lock снят на Linux, и их там нет.
+    download_platform_extras(bundle / 'wheels', pyver, args.platform)
+
     for tool in args.tools:
         if tool == 'promptfoo':
             print('--- promptfoo (npm) ---')
@@ -370,7 +509,7 @@ def main() -> int:
     write_manifest(bundle, args.platform, args.tools, all_sources, npm_info)
     write_readme(bundle, args.platform)
     print()
-    print(f'РіРѕС‚РѕРІРѕ: {bundle}')
+    print(f'готово: {bundle}')
     return 0
 
 
