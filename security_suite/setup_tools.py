@@ -60,6 +60,14 @@ def setup(tools):
             'Install uv first: python -m pip install uv'
         )
     errors={}
+    # Офлайн-режим: на серверах заказчика нет интернета. Если задан
+    # CYBRA_OFFLINE_DIR, пакеты берутся из привезённого каталога, а не из
+    # сети. Без этой ветки `uv pip install` бесконечно ждёт PyPI и падает
+    # по таймауту — сообщение при этом невнятное («connection reset»).
+    offline = os.environ.get('CYBRA_OFFLINE_DIR')
+    offline_path = Path(offline) if offline else None
+    if offline_path and not offline_path.exists():
+        raise RuntimeError(f'CYBRA_OFFLINE_DIR указан, но каталога нет: {offline_path}')
     for tool in tools:
         try:
             if tool=='promptfoo':
@@ -68,13 +76,25 @@ def setup(tools):
                 dest=ROOT/'.tools/promptfoo';dest.mkdir(parents=True,exist_ok=True)
                 shutil.copyfile(ROOT/'package.json',dest/'package.json')
                 if (ROOT/'package-lock.json').exists():shutil.copyfile(ROOT/'package-lock.json',dest/'package-lock.json')
-                subprocess.run([npm,'ci' if (dest/'package-lock.json').exists() else 'install','--no-audit','--no-fund'],cwd=dest,check=True)
+                npm_args=[npm,'ci' if (dest/'package-lock.json').exists() else 'install','--no-audit','--no-fund']
+                if offline_path:
+                    # --offline запрещает обращения к registry: если пакета
+                    # нет в кеше, установка падает честно, а не висит.
+                    npm_args += ['--offline', f'--cache={offline_path / "npm"}']
+                subprocess.run(npm_args,cwd=dest,check=True)
             elif tool in specs:
                 dest=ROOT/'.tools'/tool
                 if not Path(python_for(tool)).exists():subprocess.run([uv,'venv','--python','3.12',str(dest)],check=True)
                 frozen=ROOT/'locks'/f'{tool}.txt'
                 args=['-r',str(frozen)] if frozen.exists() else specs[tool]
-                subprocess.run([uv,'pip','install','--python',python_for(tool),'--torch-backend','cpu',*args],check=True)
+                install_args=[uv,'pip','install','--python',python_for(tool)]
+                if offline_path:
+                    # --no-index: не смотреть в PyPI вообще. --find-links:
+                    # брать только из привезённых колёс.
+                    install_args += ['--no-index', f'--find-links={offline_path / "wheels"}']
+                else:
+                    install_args += ['--torch-backend','cpu']
+                subprocess.run([*install_args,*args],check=True)
                 out=subprocess.check_output([uv,'pip','freeze','--python',python_for(tool)],text=True)
                 (dest/'installed.txt').write_text(out)
             print('READY:',tool,flush=True)
