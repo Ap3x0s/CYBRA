@@ -47,7 +47,8 @@ offline-bundle/
 ```
 
 Expected size: **~515 MB for Linux**, ~720 MB if you also ship the Windows
-PyRIT variant. Almost all of it is `torch`, about 514 MB uncompressed.
+PyRIT variant. Almost all of it is `torch`, about 514 MB uncompressed. With
+every tool and the npm cache the figure reaches ~1.9 GB.
 
 ## Installing at the customer
 
@@ -56,9 +57,31 @@ export CYBRA_OFFLINE_DIR=/opt/cybra/offline-bundle
 cybra setup --tools garak pyrit agentdojo promptfoo
 ```
 
-With `CYBRA_OFFLINE_DIR` set, installation uses `--no-index` and reads only
-from the bundle. If a package is missing there, the install fails immediately
-and says so, instead of hanging on a network timeout.
+With `CYBRA_OFFLINE_DIR` set, no network is used:
+
+| What | How it is installed offline |
+|------|------------------------------|
+| Python packages | `--no-index --find-links=<bundle>/wheels` |
+| garak, PyRIT, AgentDojo | git lines in `locks/*.txt` are rewritten to the local archives in `<bundle>/sources` |
+| promptfoo | `npm ci --offline --cache=<bundle>/npm` |
+
+The second row is easy to miss and worth stating plainly. `garak` is pinned in
+its lock file as a git URL:
+
+```
+garak @ git+https://github.com/NVIDIA/garak.git@93aa9cdec309...
+```
+
+`--no-index` does **not** cover this: it restricts package lookup on an index,
+while a git URL is handled by a separate mechanism that clones the repository.
+Without rewriting, installation on an air-gapped host fails at that line even
+though `sources/garak-*.tar.gz` sits right next to it.
+
+`cybra setup` therefore rewrites those lines into a temporary
+`<tool>.offline.txt` and installs from the local archives. If an archive is
+missing from the bundle, the line is left untouched and the install fails
+loudly — a partially installed tool that silently skips its target would be
+worse than a clear failure.
 
 Before installing, verify integrity:
 
@@ -66,6 +89,36 @@ Before installing, verify integrity:
 cd /opt/cybra/offline-bundle
 sha256sum -c SHA256SUMS
 ```
+
+## Re-running setup after a failed attempt
+
+On Windows a half-finished `.tools/<tool>` directory cannot always be deleted:
+antivirus, the search indexer or a just-finished pip process holds the `.pyd`
+and `.dll` files, and deletion fails with "Access denied". `uv venv` then
+refuses to work with the existing directory, so a retry is impossible.
+
+`cybra setup` handles this: it retries deletion, and if the files are still
+locked it renames the stale directory aside and creates a fresh environment.
+The leftover `<tool>.stale-<timestamp>` folder can be deleted later, once the
+antivirus has finished with it.
+
+If a run fails for another reason, simply run the same command again. Setup is
+per-tool, so a failure in one tool does not affect the others.
+
+## Which benchmarks are affected
+
+Eight benchmarks ship with the console. Only four need anything from a bundle:
+
+| Benchmark | How it is installed | Bundle needed |
+|-----------|--------------------|---------------|
+| HarmBench, JailbreakBench, Security Regression | pure Python, ships in the image | no |
+| BIPIA | vendored in `vendor/bipia` | no |
+| garak | git + 174 wheels | **yes** |
+| PyRIT | git + 108 wheels | **yes** |
+| AgentDojo | git + 70 wheels | **yes** |
+| promptfoo | npm package | **yes** |
+
+So a deployment that only runs the built-in benchmarks needs no bundle at all.
 
 ## Requirements on the target machine
 

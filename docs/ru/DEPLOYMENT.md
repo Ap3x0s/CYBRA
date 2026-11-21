@@ -77,7 +77,7 @@ python scripts/verify_migration.py /path/to/cybra.sqlite3
    ├── validate:precommit  ruff check + audit_i18n + pytest -q
    ├── format:check        ruff format --check (только свой код)
    ├── lint:frontend       npm ci && npm run build
-   ├── test:unit           pytest tests/ -q            (90 тестов, без API-ключа)
+   ├── test:unit           pytest tests/ -q            (95 тестов, без API-ключа)
    ├── security:sast       ruff + bandit (только HIGH)
    ├── security:secrets    gitleaks
    ├── security:iac        Dockerfile, .dockerignore, оба пайплайна
