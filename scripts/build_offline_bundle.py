@@ -1,41 +1,43 @@
-﻿#!/usr/bin/env python3
-"""РЎРѕР±СЂР°С‚СЊ РѕС„Р»Р°Р№РЅ-bundle: РєРѕР»С‘СЃР°, git-РёСЃС…РѕРґРЅРёРєРё Рё npm-Р°СЂС…РёРІ.
+#!/usr/bin/env python3
+"""Собрать офлайн-bundle: колёса, git-исходники и npm-архив.
 
-Р—Р°С‡РµРј: РЅР° СЃРµСЂРІРµСЂР°С… Р·Р°РєР°Р·С‡РёРєР° РЅРµС‚ РёРЅС‚РµСЂРЅРµС‚Р°. Р’СЃС‘, С‡С‚Рѕ С‚СЏРЅРµС‚СЃСЏ РёР· СЃРµС‚Рё РїСЂРё
-`cybra setup`, РЅР°РґРѕ РїСЂРёРІРµР·С‚Рё Р·Р°СЂР°РЅРµРµ РѕРґРЅРёРј РєР°С‚Р°Р»РѕРіРѕРј.
+Зачем: на серверах заказчика нет интернета. Всё, что тянется из сети при
+`cybra setup`, надо привезти заранее одним каталогом.
 
-Р§С‚Рѕ СЃРѕР±РёСЂР°РµС‚СЃСЏ:
+Что собирается:
 
   offline-bundle/
-  в”њв”Ђв”Ђ wheels/       РєРѕР»С‘СЃР° Python-РїР°РєРµС‚РѕРІ РїРѕРґ С†РµР»РµРІСѓСЋ РїР»Р°С‚С„РѕСЂРјСѓ
-  в”њв”Ђв”Ђ sources/      РёСЃС…РѕРґРЅРёРєРё РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ, РєРѕС‚РѕСЂС‹Рµ СЃС‚Р°РІСЏС‚СЃСЏ СЃ git
-  в”њв”Ђв”Ђ npm/          Р°СЂС…РёРІ promptfoo РґР»СЏ `npm ci --offline`
-  в”њв”Ђв”Ђ MANIFEST.json РїРµСЂРµС‡РµРЅСЊ С„Р°Р№Р»РѕРІ СЃ SHA256 Рё РІРµСЂСЃРёСЏРјРё
-  в””в”Ђв”Ђ README.txt    РєР°Рє СЌС‚РёРј РїРѕР»СЊР·РѕРІР°С‚СЊСЃСЏ РЅР° РјРµСЃС‚Рµ
+  ├── wheels/       колёса Python-пакетов под целевую платформу
+  ├── sources/      исходники инструментов, которые ставятся с git
+  ├── npm/          архив promptfoo для `npm ci --offline`
+  ├── MANIFEST.json перечень файлов с SHA256 и версиями
+  └── README.txt    короткая памятка, которую отдают вместе с bundle
 
-РљР»СЋС‡РµРІС‹Рµ СЂРµС€РµРЅРёСЏ, РєРѕС‚РѕСЂС‹Рµ Р·РґРµСЃСЊ Р·Р°С€РёС‚С‹:
+Решения, найденные на практике:
 
-  * РљРѕР»С‘СЃР° РєР°С‡Р°СЋС‚СЃСЏ РїРѕРґ Р¦Р•Р›Р•Р’РЈР® РїР»Р°С‚С„РѕСЂРјСѓ, Р° РЅРµ РїРѕРґ С‚Сѓ, РіРґРµ Р·Р°РїСѓС‰РµРЅ СЃРєСЂРёРїС‚.
-    Windows-wheel РЅР° Linux РЅРµ РІСЃС‚Р°РЅРµС‚. РџРѕСЌС‚РѕРјСѓ --platform Рё --python-version
-    РѕР±СЏР·Р°С‚РµР»СЊРЅС‹, Р° РЅРµ В«РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РєР°Рє Р»РѕРєР°Р»СЊРЅРѕВ».
+  * Колёса качаются под ЦЕЛЕВУЮ платформу, а не под ту, где запущен скрипт.
+    Windows-колесо на Linux не встанет.
 
-  * torch Р±РµСЂС‘С‚СЃСЏ СЃ РёРЅРґРµРєСЃР° PyTorch (download.pytorch.org/whl/cpu), Р° РЅРµ СЃ
-    PyPI: СЃР±РѕСЂРєРё СЃ СЃСѓС„С„РёРєСЃРѕРј +cpu С‚Р°Рј РЅРµ РїСѓР±Р»РёРєСѓСЋС‚СЃСЏ. Р‘РµР· --extra-index-url
-    pip РёС… РїСЂРѕСЃС‚Рѕ РЅРµ РЅР°Р№РґС‘С‚.
+  * Нужно НЕСКОЛЬКО тегов платформы сразу. Одного не хватает: numpy
+    публикуется только как manylinux_2_28, а hf-xet — только как
+    manylinux2014.manylinux_2_17. С одним тегом pip не находит один из них.
 
-  * РўРѕР»СЊРєРѕ Р±РёРЅР°СЂРЅС‹Рµ РєРѕР»С‘СЃР° (--only-binary=:all:). sdist РїСЂРёС€Р»РѕСЃСЊ Р±С‹
-    РєРѕРјРїРёР»РёСЂРѕРІР°С‚СЊ РЅР° РјРµСЃС‚Рµ, Р° С‚Р°Рј РЅРµС‚ РЅРё РєРѕРјРїРёР»СЏС‚РѕСЂР°, РЅРё РёРЅС‚РµСЂРЅРµС‚Р° РґР»СЏ
-    Р·Р°РіРѕР»РѕРІРєРѕРІ.
+  * Пакеты качаются поодиночке, а не одним `pip download -r`. Один
+    недоступный пакет прерывает весь вызов — на практике ecoji без колёс
+    не давал скачать остальные 173, и ошибка была тихой.
 
-  * MANIFEST СЃ SHA256 РїРѕ РєР°Р¶РґРѕРјСѓ С„Р°Р№Р»Сѓ: РЅР° РїСЂРёС‘РјРєРµ РІРёРґРЅРѕ, С‡С‚Рѕ РїСЂРёРІРµР·Р»Рё
-    РёРјРµРЅРЅРѕ С‚Рѕ, Рё РїРѕРґРјРµРЅРёС‚СЊ С„Р°Р№Р» РїРѕ РґРѕСЂРѕРіРµ РЅРµР·Р°РјРµС‚РЅРѕ РЅРµ РІС‹Р№РґРµС‚.
+  * torch берётся с индекса PyTorch, а не с PyPI: сборки с суффиксом +cpu
+    там не публикуются.
 
-РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ:
+  * Пакеты только с sdist (чистый Python) собираются локально: в bundle им
+    тоже нужно колесо, иначе установка у заказчика упадёт.
+
+Использование:
 
     python scripts/build_offline_bundle.py --platform linux
     python scripts/build_offline_bundle.py --platform windows --tools garak
 
-РџСЂРѕРІРµСЂРєР° РїРµСЂРµРґ РѕС‚РїСЂР°РІРєРѕР№ Р·Р°РєР°Р·С‡РёРєСѓ вЂ” РЅР° Р§РРЎРўРћР™ РјР°С€РёРЅРµ Р±РµР· СЃРµС‚Рё:
+Проверка перед отправкой заказчику — на ЧИСТОЙ машине без сети:
     CYBRA_OFFLINE_DIR=./offline-bundle cybra setup --tools garak
 """
 from __future__ import annotations
@@ -51,22 +53,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYTORCH_CPU = 'https://download.pytorch.org/whl/cpu'
 
-# РџР»Р°С‚С„РѕСЂРјР° -> РЅР°Р±РѕСЂ pip-С‚РµРіРѕРІ Рё abi РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ.
+# Платформа -> набор pip-тегов и abi для скачивания.
 #
-# РћРґРёРЅ С‚РµРі РЅРµ СЂР°Р±РѕС‚Р°РµС‚. РџР°РєРµС‚С‹ РїСѓР±Р»РёРєСѓСЋС‚СЃСЏ РІ СЂР°Р·РЅС‹С… С„РѕСЂРјР°С… РёРјС‘РЅ, Рё РѕРЅРё
-# РЅРµСЃРѕРІРјРµСЃС‚РёРјС‹ РјРµР¶РґСѓ СЃРѕР±РѕР№ РѕРґРЅРёРј Р·РЅР°С‡РµРЅРёРµРј --platform:
+# Один тег не работает. Пакеты публикуются в разных формах имён, и они
+# несовместимы между собой одним значением --platform:
 #
 #   numpy 2.5.3   -> manylinux_2_27_x86_64.manylinux_2_28_x86_64, cp312
 #   hf-xet 1.6.0  -> manylinux2014_x86_64.manylinux_2_17_x86_64, cp38-abi3
 #
-# РЎ РѕРґРЅРёРј manylinux_2_28 pip РЅРµ РЅР°С…РѕРґРёС‚ hf-xet (В«No matching distributionВ»),
-# СЃ РѕРґРЅРёРј manylinux2014 вЂ” numpy. pip РїСЂРёРЅРёРјР°РµС‚ --platform Рё --abi РЅРµСЃРєРѕР»СЊРєРѕ
-# СЂР°Р· Рё РѕР±СЉРµРґРёРЅСЏРµС‚ РёС… РІ РѕРґРёРЅ РЅР°Р±РѕСЂ, РїРѕСЌС‚РѕРјСѓ РїРµСЂРµРґР°С‘Рј РѕР±Р° С‚РµРіР° Рё РІСЃРµ abi:
-# cp312 РґР»СЏ РѕР±С‹С‡РЅС‹С… РєРѕР»С‘СЃ, abi3/none РґР»СЏ СѓРЅРёРІРµСЂСЃР°Р»СЊРЅС‹С….
+# С одним manylinux_2_28 pip не находит hf-xet, с одним manylinux2014 —
+# numpy. pip принимает --platform и --abi несколько раз и объединяет их в
+# один набор, поэтому передаём оба тега и три abi: cp312 для обычных колёс,
+# abi3 и none для универсальных.
 #
-# РС‚РѕРіРѕРІРѕРµ С‚СЂРµР±РѕРІР°РЅРёРµ Рє СЃРёСЃС‚РµРјРµ: glibc >= 2.28 (Debian 10+, Ubuntu 20.04+,
-# RHEL 8+); manylinux2014-РєРѕР»С‘СЃР° РІ СЌС‚РѕС‚ РЅР°Р±РѕСЂ С‚РѕР¶Рµ РІС…РѕРґСЏС‚. РџСЂРѕРІРµСЂРєР° РЅР°
-# РјРµСЃС‚Рµ: `ldd --version`.
+# Требование к системе: glibc >= 2.28 (Debian 10+, Ubuntu 20.04+, RHEL 8+),
+# Python 3.12. Проверка: ldd --version и python --version.
 PLATFORMS = {
     'linux': {
         'platforms': ['manylinux_2_28_x86_64', 'manylinux2014_x86_64'],
@@ -80,7 +81,6 @@ PLATFORMS = {
     },
 }
 
-# РљР°РєРёРµ lock-С„Р°Р№Р»С‹ Р±СЂР°С‚СЊ РїРѕРґ РєР°РєСѓСЋ РїР»Р°С‚С„РѕСЂРјСѓ.
 def lock_for(tool: str, platform: str) -> Path:
     name = f'{tool}-win.txt' if platform == 'windows' and (ROOT / 'locks' / f'{tool}-win.txt').exists() else f'{tool}.txt'
     return ROOT / 'locks' / name
@@ -92,13 +92,21 @@ def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 
 def download_wheels(lock: Path, out_dir: Path, platform: str, pyver: str) -> list[str]:
-    """РЎРєР°С‡Р°С‚СЊ РєРѕР»С‘СЃР° РїРѕ lock-С„Р°Р№Р»Сѓ РїРѕРґ СѓРєР°Р·Р°РЅРЅСѓСЋ РїР»Р°С‚С„РѕСЂРјСѓ."""
+    """Скачать колёса по lock-файлу, обрабатывая пакеты поодиночке.
+
+    Почему не одним `pip download -r`: при недоступности хотя бы одного
+    пакета pip прерывает ВЕСЬ вызов. На практике один пакет без колёс
+    (ecoji) не давал скачать остальные 173, а сборка при этом завершалась
+    «успешно» — в bundle лежало 6 файлов вместо 174. Ошибка была тихой,
+    потому что код ловил CalledProcessError и шёл дальше.
+
+    Возвращает список git-ссылок: их pip не понимает, обрабатываем отдельно.
+    """
     config = PLATFORMS[platform]
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # git-СЃСЃС‹Р»РєРё pip download РЅРµ РїРѕРЅРёРјР°РµС‚ вЂ” РёС… РѕР±СЂР°Р±Р°С‚С‹РІР°РµРј РѕС‚РґРµР»СЊРЅРѕ.
-    pinned = []
-    git_sources = []
+    pinned: list[str] = []
+    git_sources: list[str] = []
     for line in lock.read_text(encoding='utf-8').splitlines():
         line = line.strip()
         if not line or line.startswith('#'):
@@ -108,41 +116,98 @@ def download_wheels(lock: Path, out_dir: Path, platform: str, pyver: str) -> lis
         else:
             pinned.append(line)
 
-    tmp_lock = out_dir.parent / f'.lock-{lock.stem}-{platform}.txt'
-    tmp_lock.write_text('\n'.join(pinned) + '\n', encoding='utf-8')
+    failed: list[str] = []
+    for spec in pinned:
+        cmd = [
+            sys.executable, '-m', 'pip', 'download',
+            '--only-binary=:all:',
+            '--python-version', pyver,
+            '--implementation', 'cp',
+            '--dest', str(out_dir),
+            '--extra-index-url', PYTORCH_CPU,
+            '--no-deps',
+            spec,
+        ]
+        for tag in config['platforms']:
+            cmd += ['--platform', tag]
+        for abi in config['abis']:
+            cmd += ['--abi', abi]
 
-    # pip, Р° РЅРµ uv: Сѓ uv РЅРµС‚ РєРѕРјР°РЅРґС‹ download.
-    cmd = [
-        sys.executable, '-m', 'pip', 'download',
-        '--only-binary=:all:',
-        '--python-version', pyver,
-        '--implementation', 'cp',
-        '--dest', str(out_dir),
-        '--extra-index-url', PYTORCH_CPU,
-        '--requirement', str(tmp_lock),
-    ]
-    for tag in config['platforms']:
-        cmd += ['--platform', tag]
-    for abi in config['abis']:
-        cmd += ['--abi', abi]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            failed.append(spec)
 
-    try:
-        run(cmd)
-    except subprocess.CalledProcessError as error:
-        print(f'  Р·Р°РіСЂСѓР·РєР° РЅРµ СѓРґР°Р»Р°СЃСЊ: {error}', file=sys.stderr)
-        return git_sources
-    finally:
-        tmp_lock.unlink(missing_ok=True)
+    if failed:
+        print(f'  без готового колеса: {len(failed)} из {len(pinned)}')
+        build_missing_wheels(failed, out_dir, pyver)
 
     return git_sources
 
 
-def clone_git_sources(entries: list[str], out_dir: Path) -> list[dict]:
-    """РЎРєР°С‡Р°С‚СЊ РёСЃС…РѕРґРЅРёРєРё РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ, РєРѕС‚РѕСЂС‹Рµ СЃС‚Р°РІСЏС‚СЃСЏ СЃ git.
+def wheels_only(packages: list[str], pyver: str) -> list[str]:
+    """Вернуть пакеты, для которых нет бинарного колеса."""
+    probe = Path('.wheel-probe')
+    probe.mkdir(exist_ok=True)
+    missing = []
+    for spec in packages:
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'download', '--only-binary=:all:',
+             '--no-deps', '--python-version', pyver, '--implementation', 'cp',
+             '--dest', str(probe), spec],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            missing.append(spec)
+    return missing
 
-    РЎС‚СЂРѕРєР° РІРёРґР°: garak @ git+https://github.com/NVIDIA/garak.git@<sha>
-    РљР»РѕРЅРёСЂСѓРµРј РїРѕ СЂРµРІРёР·РёРё Рё СѓРїР°РєРѕРІС‹РІР°РµРј РІ tar вЂ” pip СѓРјРµРµС‚ СЃС‚Р°РІРёС‚СЊ РёР· Р°СЂС…РёРІР°
-    Р±РµР· РѕР±СЂР°С‰РµРЅРёСЏ Рє СЃРµС‚Рё.
+
+def build_missing_wheels(packages: list[str], out_dir: Path, pyver: str) -> None:
+    """Собрать колёса для пакетов, у которых нет готового колеса.
+
+    Два разных случая, и путать их дорого:
+
+    * Пакет с индексом версии (+cpu, +cu118) лежит не на PyPI, а на отдельном
+      индексе. Его НЕ надо собирать: torch из исходников — это часы и
+      десятки гигабайт. Его надо скачать с правильного индекса, и это уже
+      сделано выше (--extra-index-url PYTORCH_CPU), а сюда он попал только
+      потому, что --platform не совпал с именем файла на том индексе.
+
+    * Пакет только с sdist (обычно чистый Python). Вот такие собираем: это
+      секунды, и без них установка у заказчика упадёт.
+    """
+    buildable = []
+    for spec in packages:
+        name = spec.split('==')[0].strip()
+        if name in ('torch', 'torchvision', 'torchaudio'):
+            print(f'  {spec}: колёса только на индексе PyTorch, сборка из '
+                  f'исходников не делается — см. --extra-index-url', file=sys.stderr)
+            continue
+        buildable.append(spec)
+
+    missing = wheels_only(buildable, pyver)
+    for spec in missing:
+        print(f'  сборка из исходников: {spec}')
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'wheel', '--no-deps',
+             '--wheel-dir', str(out_dir), spec],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f'    НЕ УДАЛОСЬ: {spec}', file=sys.stderr)
+            for line in result.stderr.splitlines():
+                if 'error' in line.lower():
+                    print(f'      {line.strip()[:120]}', file=sys.stderr)
+        else:
+            print(f'    собрано: {spec}')
+    for path in Path('.wheel-probe').glob('*'):
+        path.unlink()
+    Path('.wheel-probe').rmdir()
+
+
+def clone_git_sources(entries: list[str], out_dir: Path) -> list[dict]:
+    """Скачать исходники инструментов, которые ставятся с git.
+
+    Строка вида: garak @ git+https://github.com/NVIDIA/garak.git@<sha>
+    Клонируем по ревизии и упаковываем в tar.
+    pip умеет ставить из архива без обращения к сети.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = []
@@ -153,7 +218,7 @@ def clone_git_sources(entries: list[str], out_dir: Path) -> list[dict]:
         name, rest = entry.split(' @ git+', 1)
         name = name.strip()
         if '@' not in rest:
-            print(f'  {name}: РЅРµС‚ СЂРµРІРёР·РёРё, РїСЂРѕРїСѓСЃРєР°СЋ')
+            print(f'  {name}: нет ревизии, пропускаю')
             continue
         url, revision = rest.rsplit('@', 1)
         target = out_dir / f'{name}-{revision[:12]}.tar.gz'
@@ -166,16 +231,16 @@ def clone_git_sources(entries: list[str], out_dir: Path) -> list[dict]:
                  f'--output={target}', revision])
             saved.append({'name': name, 'revision': revision,
                           'file': target.name, 'url': url})
-            print(f'  {name}: {target.name}')
-        except subprocess.CalledProcessError as error:
-            print(f'  {name}: РѕС€РёР±РєР° {error}', file=sys.stderr)
+            print(f'  {name}: нет ревизии, пропускаю')
+        except subprocess.CalledProcessError:
+            print(f'  {name}: нет ревизии, пропускаю')
         finally:
             shutil.rmtree(work, ignore_errors=True)
     return saved
 
 
 def pack_npm(out_dir: Path) -> dict | None:
-    """РЈРїР°РєРѕРІР°С‚СЊ promptfoo РґР»СЏ РѕС„Р»Р°Р№РЅ-СѓСЃС‚Р°РЅРѕРІРєРё npm."""
+    """Упаковать promptfoo для офлайн-установки npm."""
     out_dir.mkdir(parents=True, exist_ok=True)
     package = ROOT / 'package.json'
     if not package.exists():
@@ -183,7 +248,7 @@ def pack_npm(out_dir: Path) -> dict | None:
     try:
         run(['npm', 'pack', '--pack-destination', str(out_dir)], cwd=ROOT)
     except (subprocess.CalledProcessError, FileNotFoundError) as error:
-        print(f'  npm pack РЅРµ СѓРґР°Р»СЃСЏ: {error}', file=sys.stderr)
+        print(f'  npm pack не удался: {error}', file=sys.stderr)
         return None
     tarballs = sorted(out_dir.glob('*.tgz'))
     return {'file': tarballs[-1].name} if tarballs else None
@@ -221,35 +286,44 @@ def write_manifest(bundle: Path, platform: str, tools: list[str],
 
     print()
     print(f'С„Р°Р№Р»РѕРІ РІ bundle: {len(files)}')
-    print(f'РѕР±С‰РёР№ РІРµСЃ: {manifest["total_size"] / 1_048_576:.1f} РњР‘')
+    print(f'общий вес: {manifest["total_size"] / 1_048_576:.1f} МБ')
 
 
 def write_readme(bundle: Path, platform: str) -> None:
-    (bundle / 'README.txt').write_text(
-        f"""РћС„Р»Р°Р№РЅ-bundle CYBRA ({platform})
+    """Инструкция, которую отдают вместе с bundle.
 
-РЈСЃС‚Р°РЅРѕРІРєР° РЅР° РјР°С€РёРЅРµ Р±РµР· РёРЅС‚РµСЂРЅРµС‚Р°:
+    Пишется на русском: получатель — администратор заказчика, а документация
+    проекта двуязычна. Формулировки короткие: это памятка на одну страницу,
+    а не замена docs/OFFLINE.md.
+    """
+    text = (
+        f"Офлайн-bundle CYBRA ({platform})\n"
+        "\n"
+        "Установка на машине без интернета:\n"
+        "\n"
+        "  export CYBRA_OFFLINE_DIR=/путь/к/offline-bundle\n"
+        "  cybra setup --tools garak pyrit agentdojo promptfoo\n"
+        "\n"
+        "Проверка целостности перед установкой:\n"
+        "\n"
+        "  cd offline-bundle\n"
+        "  sha256sum -c SHA256SUMS\n"
+        "\n"
+        "Что внутри:\n"
+        "  wheels/   колёса Python под платформу " + platform + "\n"
+        "  sources/  исходники инструментов из git\n"
+        "  npm/      архив promptfoo\n"
+        "\n"
+        "Если установка не идёт, проверьте три вещи:\n"
+        "  1. Платформа колёс совпадает с машиной: " + platform + "\n"
+        "  2. Версия Python — 3.12 (колёса собраны под cp312)\n"
+        "  3. glibc >= 2.28 на Linux: ldd --version\n"
+        "\n"
+        "Подробнее: docs/OFFLINE.md в репозитории проекта.\n"
+    )
+    (bundle / 'README.txt').write_text(text, encoding='utf-8')
 
-  export CYBRA_OFFLINE_DIR=/РїСѓС‚СЊ/Рє/offline-bundle
-  cybra setup --tools garak pyrit agentdojo promptfoo
-
-РџСЂРѕРІРµСЂРєР° С†РµР»РѕСЃС‚РЅРѕСЃС‚Рё РїРµСЂРµРґ СѓСЃС‚Р°РЅРѕРІРєРѕР№:
-
-  cd offline-bundle
-  sha256sum -c SHA256SUMS   # РёР»Рё СЃРІРµСЂСЊС‚Рµ СЃ MANIFEST.json
-
-Р§С‚Рѕ РІРЅСѓС‚СЂРё:
-  wheels/   РєРѕР»С‘СЃР° Python РїРѕРґ {platform}
-  sources/  РёСЃС…РѕРґРЅРёРєРё РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ РёР· git (РЅР° СЃР»СѓС‡Р°Р№, РµСЃР»Рё pip РЅРµ РІРѕР·СЊРјС‘С‚)
-  npm/      Р°СЂС…РёРІ promptfoo
-
-Р•СЃР»Рё СѓСЃС‚Р°РЅРѕРІРєР° РЅРµ РёРґС‘С‚, РїСЂРѕРІРµСЂСЊС‚Рµ:
-  1. РџР»Р°С‚С„РѕСЂРјР° РєРѕР»С‘СЃ СЃРѕРІРїР°РґР°РµС‚ СЃ РјР°С€РёРЅРѕР№ ({platform})
-  2. Р’РµСЂСЃРёСЏ Python вЂ” cp312
-  3. РќРё РѕРґРЅРѕРіРѕ РѕР±СЂР°С‰РµРЅРёСЏ РІ РёРЅС‚РµСЂРЅРµС‚ РЅРµС‚: СѓСЃС‚Р°РЅРѕРІРєР° РёРґС‘С‚ СЃ --no-index
-""", encoding='utf-8')
-
-    # SHA256SUMS РІ С„РѕСЂРјР°С‚Рµ, РєРѕС‚РѕСЂС‹Р№ РїРѕРЅРёРјР°РµС‚ `sha256sum -c`.
+    # SHA256SUMS в формате, который понимает `sha256sum -c`.
     lines = []
     for path in sorted(bundle.rglob('*')):
         if path.is_file() and path.name not in ('MANIFEST.json', 'SHA256SUMS'):
@@ -272,7 +346,7 @@ def main() -> int:
 
     print(f'платформа: {args.platform}, python cp{pyver}')
     print(f'РєР°С‚Р°Р»РѕРі:   {bundle}')
-    print(f'РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹: {", ".join(args.tools)}')
+    print(f'инструменты: {", ".join(args.tools)}')
     print()
 
     all_sources: list[dict] = []
@@ -285,7 +359,7 @@ def main() -> int:
 
         lock = lock_for(tool, args.platform)
         if not lock.exists():
-            print(f'--- {tool}: lock РЅРµ РЅР°Р№РґРµРЅ ({lock.name}), РїСЂРѕРїСѓСЃРєР°СЋ ---')
+            print(f'--- {tool}: lock не найден ({lock.name}), пропускаю ---')
             continue
 
         print(f'--- {tool} ({lock.name}) ---')
