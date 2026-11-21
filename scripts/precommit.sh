@@ -15,6 +15,23 @@ set -e
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 
+# Инструменты лежат в .venv и в PATH не попадают, когда git запускает хук из
+# своего окружения. Без этого хук падал с «ruff: command not found» — то есть
+# не проверял НИЧЕГО и молча пропускал коммит, что хуже отсутствия хука.
+if [ -d "$ROOT/.venv/Scripts" ]; then
+  PATH="$ROOT/.venv/Scripts:$PATH"
+elif [ -d "$ROOT/.venv/bin" ]; then
+  PATH="$ROOT/.venv/bin:$PATH"
+fi
+export PATH
+
+# Если ruff всё равно нет — честно говорим и выходим с ошибкой. Пропустить
+# проверку молча значит сделать вид, что она прошла.
+if ! command -v ruff > /dev/null 2>&1; then
+  echo "FAIL: ruff не найден. Установите: .venv/Scripts/pip install ruff" >&2
+  exit 1
+fi
+
 echo "== ruff =="
 ruff check backend scan
 

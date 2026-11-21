@@ -116,7 +116,8 @@ def _setup(argv: list[str]) -> int:
                 "  export CYBRA_OFFLINE_DIR=/opt/cybra/offline-bundle\n"
                 "  cybra setup --tools garak\n"
                 "Колёса и архивы берутся из bundle, сеть не используется.",
-                flush=True)
+                flush=True,
+            )
             return 0
         if item in ("--tools", "-t"):
             # Флаг принимает все следующие позиции до другого флага.
