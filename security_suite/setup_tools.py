@@ -325,6 +325,12 @@ def setup(tools):
                                 and candidate.stem.endswith('.offline')):
                             candidate.unlink(missing_ok=True)
                 out=subprocess.check_output([uv,'pip','freeze','--python',python_for(tool)],text=True)
+                # Каталог может отсутствовать: он создаётся только там,
+                # где заводится отдельное venv. BIPIA ставится в основной
+                # venv проекта, своего каталога у неё нет — а freeze пишется
+                # именно сюда. Без mkdir установка падала на записи отчёта,
+                # хотя пакеты уже встали.
+                dest.mkdir(parents=True, exist_ok=True)
                 (dest/'installed.txt').write_text(out)
             print('READY:',tool,flush=True)
         except Exception as e:
