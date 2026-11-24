@@ -182,9 +182,10 @@ Eight benchmarks ship with the console. Only three need nothing from a bundle:
 BIPIA is the easy one to get wrong. `vendor/bipia` is the upstream data
 builders, vendored unchanged and shipped in the image — but importing
 `bipia.data` also pulls `pandas`, `jsonlines`, `nltk` and `transformers`,
-which are *not* in the image. The console reports BIPIA as available, because
-`scan/capabilities.py` treats it as vendored, so the gap only shows up when
-the run fails at the import. Name it explicitly in `cybra setup --tools`.
+which are *not* in the image. The console reports the gap honestly: those
+four imports are probed before a run starts, and BIPIA shows as not
+installed with `cybra setup --tools bipia` as the hint. Name it explicitly —
+a bare `cybra setup` does not include it.
 
 So a deployment that runs only HarmBench, JailbreakBench and Security
 Regression needs no bundle at all.
