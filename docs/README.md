@@ -15,6 +15,7 @@ maintained in parallel.
 | [VALIDATION-CYBRA.md](VALIDATION-CYBRA.md) | What is verified and what is not |
 | [VALIDATION.md](VALIDATION.md) | Validation against real models |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Delivery and deployment: CI/CD, image, environment, state |
+| [OFFLINE.md](OFFLINE.md) | Installing the heavy benchmarks on a machine with no internet: bundle, transfer, verification |
 
 Project README: [README.md](../README.md) · Russian: [README.ru.md](../README.ru.md).
 
