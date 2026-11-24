@@ -25,7 +25,27 @@ DOCS = [
     'docs/metrics.md', 'docs/ru/metrics.md',
     'docs/VALIDATION-CYBRA.md', 'docs/ru/VALIDATION-CYBRA.md',
     'docs/SUITE.md', 'docs/ru/SUITE.md',
+    'docs/OFFLINE.md', 'docs/ru/OFFLINE.md',
 ]
+
+# Пары «английский → русский». Русская копия поддерживается параллельно, но
+# проверить её было нечем: OFFLINE.md разошёлся с EN на целый раздел, и это
+# заметили только руками. Считаем заголовки: набор `##`-строк должен
+# совпадать по количеству. Дословный перевод не сравниваем — он и не нужен,
+# ловится именно структурное отставание.
+DOC_PAIRS = [
+    ('docs/DEPLOYMENT.md', 'docs/ru/DEPLOYMENT.md'),
+    ('docs/METHODOLOGY.md', 'docs/ru/METHODOLOGY.md'),
+    ('docs/metrics.md', 'docs/ru/metrics.md'),
+    ('docs/VALIDATION-CYBRA.md', 'docs/ru/VALIDATION-CYBRA.md'),
+    ('docs/SUITE.md', 'docs/ru/SUITE.md'),
+    ('docs/OFFLINE.md', 'docs/ru/OFFLINE.md'),
+]
+
+# Документы, на которые обязана ссылаться карта документации. Список
+# документации в docs/README.md — единственный вход для читателя; файл,
+# которого там нет, не находят вообще.
+INDEXED_IN = ['docs/README.md', 'docs/ru/README.md']
 
 
 def facts_from_code() -> dict:
@@ -86,6 +106,39 @@ def claims_in_docs() -> dict:
     return claims
 
 
+def heading_counts() -> dict[str, int]:
+    """Сколько `##`-заголовков в документе. Отсутствующий файл — -1."""
+    counts = {}
+    for en, ru in DOC_PAIRS:
+        for name in (en, ru):
+            path = ROOT / name
+            if not path.exists():
+                counts[name] = -1
+                continue
+            text = path.read_text(encoding='utf-8')
+            counts[name] = sum(
+                1 for line in text.splitlines() if line.startswith('## '))
+    return counts
+
+
+def indexed_docs() -> list[tuple[str, str]]:
+    """Документы из docs/, на которые не ссылается карта документации."""
+    docs_dir = ROOT / 'docs'
+    if not docs_dir.is_dir():
+        return []
+    existing = {path.name for path in docs_dir.glob('*.md')} - {'README.md'}
+    missing = []
+    for index in INDEXED_IN:
+        path = ROOT / index
+        if not path.exists():
+            continue
+        text = path.read_text(encoding='utf-8')
+        for name in sorted(existing):
+            if name not in text:
+                missing.append((index, name))
+    return missing
+
+
 def main() -> int:
     facts = facts_from_code()
     claims = claims_in_docs()
@@ -130,6 +183,25 @@ def main() -> int:
     print('=== упоминания SQLite ===')
     for name, number, _, line in claims['sqlite']:
         print(f'  {name}:{number}  {line[:96]}')
+    print()
+
+    print('=== пары EN/RU: число разделов ===')
+    counts = heading_counts()
+    for en, ru in DOC_PAIRS:
+        left, right = counts.get(en, -1), counts.get(ru, -1)
+        ok = left == right and left >= 0
+        if not ok:
+            problems += 1
+        print(f"  {'OK ' if ok else 'РАСХОЖДЕНИЕ'} {en} ({left}) ↔ {ru} ({right})")
+    print()
+
+    print('=== карта документации ===')
+    unindexed = indexed_docs()
+    if not unindexed:
+        print('  OK  все документы из docs/ присутствуют в указателях')
+    for index, name in unindexed:
+        problems += 1
+        print(f'  РАСХОЖДЕНИЕ {index} не ссылается на docs/{name}')
     print()
 
     print(f'расхождений: {problems}')

@@ -69,6 +69,10 @@ detects what is present and shows an honest status instead of crashing mid-run;
 install them inside a running container with `cybra setup --tools …` if the
 deployment needs real benchmarks.
 
+That command downloads from PyPI, npm and GitHub. On a stand with no internet it
+cannot work: the packages have to be carried in. See
+[OFFLINE.md](OFFLINE.md) for building and installing from a bundle.
+
 ## How the artefact is produced
 
 ```
@@ -77,7 +81,7 @@ merge request
    ├── validate:precommit  ruff check + audit_i18n + pytest -q
    ├── format:check        ruff format --check (own code only)
    ├── lint:frontend       npm ci && npm run build
-   ├── test:unit           pytest tests/ -q            (104 tests, no API key needed)
+   ├── test:unit           pytest tests/ -q            (106 tests, no API key needed)
    ├── security:sast       ruff + bandit (HIGH)
    ├── security:secrets    gitleaks
    ├── security:iac        Dockerfile, .dockerignore, both pipelines
