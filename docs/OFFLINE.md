@@ -2,10 +2,24 @@
 
 Servers inside a customer's network have no internet access. This page
 describes how to install the heavy benchmarks — garak, PyRIT, AgentDojo,
-promptfoo — on such a machine.
+BIPIA, promptfoo — on such a machine.
 
 The application itself, its datasets and the dashboard image need no internet.
-Only these four tools do.
+Only these five tools do.
+
+The *image* needs no internet, but getting it onto the box does. `docker pull`
+cannot reach Docker Hub from an isolated network, so the image travels as a tar:
+
+```bash
+# on a machine with internet
+docker pull ap3x0/cybra:latest
+docker save ap3x0/cybra:latest -o cybra-image.tar
+
+# on the air-gapped host
+docker load -i cybra-image.tar
+```
+
+Both go on the same medium as the bundle.
 
 ## How it works
 
@@ -54,8 +68,23 @@ every tool and the npm cache the figure reaches ~1.9 GB.
 
 ```bash
 export CYBRA_OFFLINE_DIR=/opt/cybra/offline-bundle
-cybra setup --tools garak pyrit agentdojo promptfoo
+cybra setup --tools garak pyrit agentdojo bipia promptfoo
 ```
+
+On Windows the variable is set differently — `export` is a POSIX shell builtin
+and does not exist in `cmd.exe` or PowerShell:
+
+```powershell
+$env:CYBRA_OFFLINE_DIR = 'D:\cybra\offline-bundle'   # PowerShell
+```
+
+```cmd
+set CYBRA_OFFLINE_DIR=D:\cybra\offline-bundle        :: cmd.exe
+```
+
+Either way it applies to the current session only. `setx` would persist it, but
+it also leaks into every later process, which is rarely what you want for a
+one-off install.
 
 With `CYBRA_OFFLINE_DIR` set, no network is used:
 
@@ -63,6 +92,7 @@ With `CYBRA_OFFLINE_DIR` set, no network is used:
 |------|------------------------------|
 | Python packages | `--no-index --find-links=<bundle>/wheels` |
 | garak, PyRIT, AgentDojo | git lines in `locks/*.txt` are rewritten to the local archives in `<bundle>/sources` |
+| BIPIA | 28 wheels from `locks/bipia.txt`, installed into the main environment |
 | promptfoo | `npm ci --offline --cache=<bundle>/npm` |
 
 Both spellings of the command work; the flag is the one used everywhere in
@@ -71,7 +101,14 @@ the UI and the docs:
 ```bash
 cybra setup --tools garak pyrit    # explicit flag
 cybra setup garak pyrit            # same, positional
-cybra setup                        # all four heavy tools
+cybra setup                        # garak, PyRIT, AgentDojo, promptfoo
+```
+
+Note the last line: a bare `cybra setup` installs four tools, **not** BIPIA.
+BIPIA is the one tool that must be named explicitly:
+
+```bash
+cybra setup --tools bipia
 ```
 
 Setup prints the mode before it starts, so you can see at a glance whether it
@@ -131,18 +168,26 @@ per-tool, so a failure in one tool does not affect the others.
 
 ## Which benchmarks are affected
 
-Eight benchmarks ship with the console. Only four need anything from a bundle:
+Eight benchmarks ship with the console. Only three need nothing from a bundle:
 
 | Benchmark | How it is installed | Bundle needed |
 |-----------|--------------------|---------------|
 | HarmBench, JailbreakBench, Security Regression | pure Python, ships in the image | no |
-| BIPIA | vendored in `vendor/bipia` | no |
+| BIPIA | vendored code in `vendor/bipia` + 28 wheels from `locks/bipia.txt` | **yes** |
 | garak | git + 174 wheels | **yes** |
 | PyRIT | git + 108 wheels | **yes** |
 | AgentDojo | git + 70 wheels | **yes** |
 | promptfoo | npm package | **yes** |
 
-So a deployment that only runs the built-in benchmarks needs no bundle at all.
+BIPIA is the easy one to get wrong. `vendor/bipia` is the upstream data
+builders, vendored unchanged and shipped in the image — but importing
+`bipia.data` also pulls `pandas`, `jsonlines`, `nltk` and `transformers`,
+which are *not* in the image. The console reports BIPIA as available, because
+`scan/capabilities.py` treats it as vendored, so the gap only shows up when
+the run fails at the import. Name it explicitly in `cybra setup --tools`.
+
+So a deployment that runs only HarmBench, JailbreakBench and Security
+Regression needs no bundle at all.
 
 ## Requirements on the target machine
 
