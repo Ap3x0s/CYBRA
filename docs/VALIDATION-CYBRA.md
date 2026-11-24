@@ -12,8 +12,8 @@ remained unverified. It exists so that the report to the lead does not present w
 | Backend API | `pytest tests/test_api.py` | authorization, CSRF, dataset versioning, a full run |
 | Reporting core | `pytest tests/test_core.py` | consolidation, escaping, paired metrics |
 | Scan layer | `pytest tests/test_scan.py` | artifact contract, cancellation, capabilities |
-| Metrics | `pytest tests/test_metrics_new.py` | 104 tests for `resilience_gap`, `utility_under_attack`, `agent_false_block_rate` |
-| The whole suite | `pytest tests/ -q` | **104 tests, all pass** |
+| Metrics | `pytest tests/test_metrics_new.py` | 106 tests for `resilience_gap`, `utility_under_attack`, `agent_false_block_rate` |
+| The whole suite | `pytest tests/ -q` | **106 tests, all pass** |
 | Lint | `ruff check backend scan` | no findings |
 | SPA build | `npm run build` | Vite, no errors |
 | Application launch | uvicorn + curl | health 200, SPA is served, API 401 without a session |

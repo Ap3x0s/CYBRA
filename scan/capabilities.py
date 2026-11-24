@@ -7,6 +7,7 @@ renders an honest "not installed" card with the exact command to install it.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -21,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLS = {
     "harmbench": ("pure", "HarmBench", "Входит в поставку"),
     "jailbreakbench": ("pure", "JailbreakBench", "Входит в поставку"),
-    "bipia": ("vendored", "BIPIA", "Входит в поставку"),
+    "bipia": ("vendored", "BIPIA", "cybra setup --tools bipia"),
     "security-regression": ("pure", "Security Regression", "Входит в поставку"),
     "promptfoo": ("node", "Promptfoo", "npm install, затем node .tools/promptfoo"),
     "garak": ("python", "garak", "cybra setup --tools garak"),
@@ -46,8 +47,29 @@ def _promptfoo_ready() -> bool:
     return node_modules.exists() and shutil.which("npm") is not None
 
 
+# BIPIA — единственный «vendored» инструмент, которому мало самого кода.
+# `vendor/bipia` перенесён без изменений и лежит в образе, но импорт
+# `bipia.data` тянет четыре пакета, которых в образе нет (см. locks/bipia.txt).
+# Пока проверка возвращала True безусловно, консоль показывала «Входит в
+# поставку», а прогон падал на импорте — ровно то, чего этот модуль обещает
+# не допускать. find_spec не импортирует модуль, только ищет его.
+_BIPIA_MODULES = ("pandas", "jsonlines", "nltk", "transformers")
+
+
+def _bipia_ready() -> bool:
+    for name in _BIPIA_MODULES:
+        try:
+            if importlib.util.find_spec(name) is None:
+                return False
+        except (ImportError, ValueError):
+            return False
+    return True
+
+
 def _installed(tool: str) -> bool:
     kind = TOOLS[tool][0]
+    if tool == "bipia":
+        return _bipia_ready()
     if kind in ("pure", "vendored"):
         return True
     if tool == "promptfoo":

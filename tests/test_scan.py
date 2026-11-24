@@ -149,6 +149,34 @@ def test_capabilities_cover_every_tool():
             assert row['install_hint']
 
 
+def test_bipia_unavailable_when_its_imports_are_missing(monkeypatch):
+    """BIPIA нельзя считать доступной по одному `vendor/bipia`.
+
+    Проверка возвращала True безусловно, потому что инструмент числится
+    vendored. Но импорт `bipia.data` тянет pandas, jsonlines, nltk и
+    transformers, которых в образе нет: консоль показывала «Входит в
+    поставку», а прогон падал на импорте. Здесь модули подменяются на
+    отсутствующие, и статус обязан стать недоступным вместе с подсказкой.
+    """
+    from scan import capabilities as module
+
+    monkeypatch.setattr(
+        module.importlib.util, 'find_spec',
+        lambda name: None if name in module._BIPIA_MODULES else object())
+    assert module._bipia_ready() is False
+
+    rows = {row['tool']: row for row in module.capabilities(refresh=True)}
+    assert rows['bipia']['available'] is False
+    assert rows['bipia']['install_hint'] == 'cybra setup --tools bipia'
+
+
+def test_bipia_available_when_imports_are_present(monkeypatch):
+    from scan import capabilities as module
+
+    monkeypatch.setattr(module.importlib.util, 'find_spec', lambda name: object())
+    assert module._bipia_ready() is True
+
+
 def test_subprocess_engine_command_is_assembled_without_secrets(tmp_path):
     """API keys must travel through the environment, never argv."""
     from scan.engine import SubprocessEngine
