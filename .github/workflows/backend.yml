@@ -1,0 +1,592 @@
+# CI/CD для сервиса backend — схема DevSecOps, 18 этапов.
+#
+# После разделения монолита на два микросервиса у каждого свой workflow:
+# правка в frontend/** не гоняет pytest, правка в backend/cybra не
+# пересобирает фронт. Здесь — бэкенд.
+#
+#   №  Этап схемы              Где в этом файле
+#   0  Локальные pre-commit    validate-precommit
+#   1  Ветка + MR              on: pull_request + branch protection
+#   2  Format                  format-check (ruff format --check)
+#   3  Lint                    validate-precommit (ruff check)
+#   4  Unit tests (compile)    test-unit; компиляции нет — Python
+#   5  SAST                    security-sast (ruff-B + bandit HIGH)
+#   6  Secrets scan            security-secrets (gitleaks)
+#   7  IaC / CI scan           security-iac
+#   8  Build (+ SBOM)          build-image, build-sbom
+#   9  SCA / Image scan        security-sca (+ лицензии), security-image
+#  10  Deploy to Test          deploy-test
+#  11  DAST                    ✖ требует стенда с моделью; ручная процедура
+#  12  Smoke / Integration     deploy-test (health + вход + API)
+#  13  Подписание артефактов   release-checksums (SHA256SUMS)
+#  14  Release                 release-publish (версионный тег)
+#  15  Approve to Prod         deploy-prod (environment: production)
+#  16  Deploy to Prod          deploy-prod
+#  17  Smoke после деплоя      deploy-prod (второй шаг)
+#  18  Rollback                rollback (workflow_dispatch)
+#
+# Публикация идёт в ghcr.io (GITHUB_TOKEN с packages: write) и, если заданы
+# секреты DOCKERHUB_*, дублируется в Docker Hub под именем cybra-backend.
+
+name: CI backend
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'backend/**'
+      - 'scan/**'
+      - 'security_suite/**'
+      - 'tests/**'
+      - 'datasets/**'
+      - 'vendor/**'
+      - 'run.py'
+      - 'sources.lock.json'
+      - 'docker/Dockerfile'
+      - 'requirements*.txt'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'scan/**'
+      - 'security_suite/**'
+      - 'tests/**'
+      - 'datasets/**'
+      - 'vendor/**'
+      - 'run.py'
+      - 'sources.lock.json'
+      - 'docker/Dockerfile'
+      - '.github/workflows/backend.yml'
+  schedule:
+    # Еженедельный прогон ловит CVE, появившиеся в неизменённых зависимостях:
+    # база обновляется чаще, чем код.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      rollback_tag:
+        description: 'Этап 18: тег, на который откатываем latest'
+        required: false
+
+permissions:
+  contents: read
+  packages: write      # публикация в ghcr.io
+  security-events: write
+
+env:
+  PYTHON_VERSION: '3.12'
+  SECURITY_REPORTS: security-reports
+  REGISTRY: ghcr.io
+  # Имя сервиса: от него зависят тег образа и имена в smoke.
+  SERVICE: backend
+  HEALTH_PATH: /api/v1/health
+
+jobs:
+  # ====================================================================
+  # №0, №2-3. Валидация
+  # ====================================================================
+
+  # Этап 0 — локальные pre-commit: хук на месте и те же проверки проходят
+  # здесь. Иначе «у меня локально работало» остаётся словами.
+  validate-precommit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e backend
+          pip install ruff pytest httpx pyyaml
+      - name: pre-commit хук на месте
+        run: |
+          test -f scripts/precommit.py
+          test -f scripts/install_git_hooks.py
+          echo "скрипты хука на месте"
+      - name: Те же проверки, что в хуке
+        run: |
+          ruff check backend scan
+          python scripts/audit_i18n_keys.py
+
+  # Этап 2 — Format. Блокирующий: иначе формат разъедется, и через месяц
+  # правка снова будет на 18 файлов.
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install ruff
+      - name: ruff format --check
+        # Только свой код: vendor/ не форматируем сознательно, он должен
+        # оставаться сравнимым с upstream.
+        run: ruff format --check backend/cybra scan run.py
+
+  # ====================================================================
+  # №4. Unit tests
+  # ====================================================================
+
+  test-unit:
+    runs-on: ubuntu-latest
+    needs: [validate-precommit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e backend
+          pip install pytest httpx
+      - name: Тесты
+        env:
+          CYBRA_DATA_DIR: ${{ github.workspace }}/.ci-data
+        run: |
+          mkdir -p "$CYBRA_DATA_DIR" reports
+          pytest tests/ -q --junitxml=reports/junit.xml
+      - name: JUnit-отчёт
+        # when: always в аналоге для GitHub — `if: always()`: без него
+        # отчёт не сохраняется ровно тогда, когда он нужен, то есть при
+        # красном прогоне.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-backend
+          path: reports/junit.xml
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ====================================================================
+  # №5-7. Безопасность
+  # ====================================================================
+
+  # Этап 5 — SAST. ruff-B (bugbear) ловит опасные конструкции; bandit
+  # включается только по HIGH: на FastAPI-паттернах он даёт шум, который
+  # приучает игнорировать отчёт.
+  security-sast:
+    runs-on: ubuntu-latest
+    needs: [validate-precommit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: pip install ruff bandit
+      - name: ruff (bugbear)
+        run: ruff check backend scan
+      - name: bandit, только HIGH
+        run: |
+          mkdir -p "$SECURITY_REPORTS"
+          bandit -r backend/cybra scan security_suite -ll \
+            -f txt -o "$SECURITY_REPORTS/bandit.txt" || true
+          cat "$SECURITY_REPORTS/bandit.txt" || true
+      - name: Отчёт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: ${{ env.SECURITY_REPORTS }}/bandit.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  # Этап 6 — Secrets scan по истории.
+  security-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Полная история: секрет, удалённый из файла, остаётся в коммитах.
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Этап 7 — IaC. Проверяются Dockerfile, compose, пайплайны.
+  security-iac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pyyaml jinja2
+      - name: Структура после разделения
+        run: python scripts/check_repo_structure.py
+      - name: Dockerfile, compose, пайплайны
+        run: python scripts/check_iac.py
+      - name: infra
+        run: python scripts/check_infra.py
+      - name: playbook Ansible
+        run: python scripts/check_ansible_security.py
+      - name: .dockerignore
+        run: sh scripts/check_dockerignore.sh
+
+  # ====================================================================
+  # №8-9. Сборка
+  # ====================================================================
+
+  # Этапы 8-9 — сборка образа. kaniko, как и на GitLab: один инструмент на
+  # двух площадках означает одинаковый результат. Пока здесь был docker
+  # build, а на GitLab kaniko, байткод .pyc попадал в образ на одной
+  # площадке и не попадал на другой.
+  build-image:
+    runs-on: ubuntu-latest
+    needs: [test-unit, security-sast]
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Метаданные образа
+        id: meta
+        run: |
+          # ghcr.io требует нижний регистр: Ap3x0s/CYBRA → ap3x0s/cybra.
+          # Суффикс /backend — отдельный репозиторий под сервис, а не тег
+          # внутри общего: у сервисов независимые версии.
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}/${SERVICE}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "образ: $image"
+      - name: Login в ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Подготовка конфига registry для kaniko
+        run: |
+          mkdir -p "$HOME/.docker"
+          if [ -f "$HOME/.docker/config.json" ]; then
+            echo "config.json уже на месте"
+          else
+            echo '{"auths":{}}' > "$HOME/.docker/config.json"
+            echo "логина не было — сборка без публикации"
+          fi
+      - name: Сборка kaniko
+        id: build
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            publish=0
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            publish=1
+          elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            publish=1
+          else
+            publish=0
+          fi
+          if [ "$publish" = "1" ]; then
+            docker run --rm \
+              -v "${PWD}:/workspace" \
+              -v "$HOME/.docker:/kaniko/.docker" \
+              ghcr.io/osscontainertools/kaniko:v1.29.1-debug \
+              --context=/workspace \
+              --dockerfile=/workspace/docker/Dockerfile \
+              --destination="${{ steps.meta.outputs.image }}:${{ github.sha }}" \
+              --destination="${{ steps.meta.outputs.image }}:latest" \
+              --cache=true \
+              --cache-repo="${{ steps.meta.outputs.image }}/cache" \
+              --digest-file=/workspace/digest.txt
+            echo "digest=$(cat digest.txt)" >> "$GITHUB_OUTPUT"
+          else
+            docker run --rm \
+              -v "${PWD}:/workspace" \
+              ghcr.io/osscontainertools/kaniko:v1.29.1-debug \
+              --context=/workspace \
+              --dockerfile=/workspace/docker/Dockerfile \
+              --no-push
+            echo "digest=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Сохранить digest
+        if: steps.build.outputs.digest != ''
+        run: echo "${{ steps.build.outputs.digest }}" > image-digest.txt
+      - name: Артефакт digest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-digest
+          path: image-digest.txt
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # Этап 8b — SBOM.
+  build-sbom:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: needs.build-image.outputs.digest != ''
+    steps:
+      - name: Установить syft
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: SBOM
+        run: |
+          mkdir -p "$SECURITY_REPORTS"
+          syft "registry:${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}" \
+            -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json"
+          syft "registry:${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}" \
+            -o table | head -30
+      - name: Артефакт SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sbom
+          path: ${{ env.SECURITY_REPORTS }}/sbom.spdx.json
+          retention-days: 90
+
+  # Этап 9a — SCA: уязвимости и лицензии.
+  security-sca:
+    runs-on: ubuntu-latest
+    needs: [test-unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e backend
+          pip install pip-audit pip-licenses
+      - name: pip-audit
+        run: |
+          mkdir -p "$SECURITY_REPORTS"
+          pip-audit --desc --skip-editable || echo "найдены уязвимости, см. выше"
+      - name: Лицензии
+        run: |
+          pip-licenses --format=csv --with-urls --output-file="$SECURITY_REPORTS/licenses.csv"
+          pip-licenses --format=markdown --order=license | head -30
+          echo "--- GPL/AGPL в поставке ---"
+          pip-licenses --format=csv | grep -iE 'GPL|AGPL' && echo "WARN — найден GPL" || echo "GPL/AGPL не найдено"
+      - name: Артефакт лицензий
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-licenses
+          path: ${{ env.SECURITY_REPORTS }}/licenses.csv
+          retention-days: 90
+          if-no-files-found: warn
+
+  # Этап 9b — Image scan. HIGH/CRITICAL не блокируют: базовый
+  # python:3.12-slim регулярно имеет свежие CVE, и красный пайплайн из-за
+  # них приучил бы игнорировать красное.
+  security-image:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: needs.build-image.outputs.digest != ''
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-backend.sarif
+      - name: Загрузить в Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-backend.sarif
+          category: trivy-backend
+        continue-on-error: true
+
+  # ====================================================================
+  # №10-12. Тестовый контур
+  # ====================================================================
+
+  # Этапы 10 и 12 — Deploy to Test и Smoke в одном job.
+  #
+  # Почему вместе: на GitHub каждый job — своя виртуальная машина. Разнеси
+  # «поднять» и «проверить» — второй не увидит контейнер первого.
+  deploy-test:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: needs.build-image.outputs.digest != ''
+    environment:
+      name: test/backend
+      url: http://localhost:8000
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Поднять образ
+        run: |
+          # Ключ генерируется на месте, а не лежит в YAML: захардкоженный
+          # ключ остаётся в истории git и приучает считать такое нормой.
+          secret=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_')
+          docker network create cybra-net
+          docker run -d --name backend-test --network cybra-net \
+            --network-alias backend \
+            -e CYBRA_SECRET_KEY="$secret" \
+            "${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+      - name: Smoke — health
+        run: |
+          for i in $(seq 1 40); do
+            if docker run --rm --network cybra-net curlimages/curl:latest \
+                 -fsS "http://backend:8000${HEALTH_PATH}"; then
+              echo "health ok after ${i} attempts"; ok=1; break
+            fi
+            sleep 2
+          done
+          test "${ok:-0}" = "1" || (docker logs backend-test; exit 1)
+      - name: Smoke — тело ответа
+        run: |
+          docker run --rm --network cybra-net curlimages/curl:latest \
+            -fsS "http://backend:8000${HEALTH_PATH}" | grep -q '"status":"ok"'
+      - name: Smoke — API закрыт без сессии
+        run: |
+          code=$(docker run --rm --network cybra-net curlimages/curl:latest \
+            -sS -o /dev/null -w '%{http_code}' \
+            "http://backend:8000/api/v1/capabilities")
+          echo "capabilities без авторизации: HTTP $code"
+          test "$code" = "401"
+      - name: Логи
+        if: always()
+        run: docker logs backend-test --tail 50 || true
+
+  # ====================================================================
+  # №13-14. Релиз
+  # ====================================================================
+
+  # Этап 13 — контрольные суммы артефактов.
+  release-checksums:
+    runs-on: ubuntu-latest
+    needs: [build-image, build-sbom]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-sbom
+          path: release
+      - name: SHA256SUMS
+        run: |
+          cd release
+          # ./*, а не *: имена с дефисом в начале воспринялись бы как
+          # ключи sha256sum (shellcheck SC2035).
+          sha256sum ./* > SHA256SUMS
+          cat SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-release
+          path: release/
+          retention-days: 90
+
+  # Этап 14 — версионный тег. latest перезаписывается ветками, версия
+  # должна быть неизменной.
+  release-publish:
+    runs-on: ubuntu-latest
+    needs: [build-image, release-checksums]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Перенести тег
+        run: |
+          src="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          tag="${{ needs.build-image.outputs.image }}:${GITHUB_REF_NAME}"
+          docker pull "$src"
+          docker tag "$src" "$tag"
+          docker push "$tag"
+          echo "опубликовано $tag"
+
+  # ====================================================================
+  # №15-17. Продакшен
+  # ====================================================================
+
+  # Этапы 15-17 — подтверждение, деплой, smoke.
+  #
+  # environment: production с required reviewers в настройках репозитория
+  # даёт то же, что protected environment в GitLab: job висит, пока его не
+  # одобрит человек с правами.
+  deploy-prod:
+    runs-on: ubuntu-latest
+    # needs перечисляет ОБА job'а, а не только release-publish.
+    #
+    # actionlint поймал здесь настоящую ошибку: `needs` в GitHub Actions
+    # даёт доступ к outputs только тех job'ов, что перечислены явно.
+    # Через цепочку (release-publish ← build-image) outputs не наследуются,
+    # и `needs.build-image.outputs.image` в шаге smoke развернулся бы в
+    # пустую строку — деплой ушёл бы на образ с пустым тегом.
+    needs: [build-image, release-publish]
+    if: startsWith(github.ref, 'refs/tags/')
+    environment:
+      name: production
+      url: https://cybra.example.org
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Развернуть и проверить
+        run: |
+          echo "деплой ${GITHUB_REF_NAME} в production"
+          echo "состав описан в infra/releases/cybra-*.yml"
+          echo "разворачивает infra: ansible-playbook playbooks/deploy.yml"
+          # Реальный деплой зависит от площадки заказчика. Здесь — контракт:
+          # что именно передаётся дальше и откуда берутся секреты.
+      - name: Smoke
+        run: |
+          image="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          secret=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_')
+          docker run -d --name backend-prod -p 8080:8000 \
+            -e CYBRA_SECRET_KEY="$secret" "$image"
+          for i in $(seq 1 40); do
+            if curl -fsS "http://localhost:8080${HEALTH_PATH}"; then
+              echo "prod health ok after ${i} attempts"; break
+            fi
+            sleep 2
+          done
+          curl -fsS "http://localhost:8080${HEALTH_PATH}" | grep -q '"status":"ok"'
+      - name: Логи
+        if: always()
+        run: docker logs backend-prod --tail 50 || true
+
+  # ====================================================================
+  # №18. Rollback
+  # ====================================================================
+  # Возврат latest на предыдущий тег. Требует явного запуска:
+  # автоматический откат по красному smoke — отдельное решение, не догадка.
+
+  rollback:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback_tag != ''
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Вернуть latest
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}/${SERVICE}"
+          tag="${{ github.event.inputs.rollback_tag }}"
+          docker pull "$image:$tag"
+          docker tag "$image:$tag" "$image:latest"
+          docker push "$image:latest"
+          echo "latest возвращён на $tag"

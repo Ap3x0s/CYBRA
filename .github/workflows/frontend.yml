@@ -1,0 +1,664 @@
+# CI/CD для сервиса frontend — схема DevSecOps, 18 этапов.
+#
+# Второй микросервис: Node собирает SPA, nginx раздаёт её и проксирует
+# /api на бэкенд. Правка в backend/cybra этот workflow не запускает.
+#
+#   №  Этап схемы              Где в этом файле
+#   0  Локальные pre-commit    validate (lock-файл консистентен)
+#   1  Ветка + MR              on: pull_request + branch protection
+#   2  Format                  format-check (конфиг Vite разбирается)
+#   3  Lint                    lint (сборка ловит битые импорты)
+#   4  Unit tests (compile)    test-unit (структура сборки + JUnit)
+#   5  SAST                    security-sast (npm audit high)
+#   6  Secrets scan            security-secrets (gitleaks)
+#   7  IaC / CI scan           security-iac (nginx.conf, Dockerfile)
+#   8  Build (+ SBOM)          build-image, build-sbom
+#   9  SCA / Image scan        security-sca (лицензии), security-image
+#  10  Deploy to Test          deploy-test (nginx + бэкенд вместе)
+#  11  DAST                    ✖ требует стенда с моделью
+#  12  Smoke / Integration     deploy-test (SPA + прокси в бэкенд + fallback)
+#  13  Подписание артефактов   release-checksums (SHA256SUMS)
+#  14  Release                 release-publish (версионный тег)
+#  15  Approve to Prod         deploy-prod (environment: production)
+#  16  Deploy to Prod          deploy-prod
+#  17  Smoke после деплоя      deploy-prod (SPA отдаётся в выпущенном образе)
+#  18  Rollback                rollback (workflow_dispatch)
+#
+# Ключевое отличие от бэкенда на шагах 12 и 17: проверяется не только
+# отдача index.html, но и что /api через nginx ДОХОДИТ до бэкенда.
+# Забытый proxy_pass — самая вероятная ошибка при разделении монолита, и
+# без этой проверки она обнаруживается уже у заказчика.
+
+name: CI frontend
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      rollback_tag:
+        description: 'Этап 18: тег, на который откатываем latest'
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  NODE_VERSION: '22'
+  SECURITY_REPORTS: security-reports
+  REGISTRY: ghcr.io
+  SERVICE: frontend
+
+jobs:
+  # ====================================================================
+  # №0-4. Валидация и тесты
+  # ====================================================================
+
+  # Этап 0 — pre-commit для фронта: lock-файл консистентен.
+  # `npm ci --dry-run` падает, если package.json и package-lock.json
+  # разъехались, — это ровно та ошибка, которую локально не видно.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: lock-файл консистентен
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund --dry-run
+      - name: pre-commit хук на месте
+        run: test -f scripts/precommit.py
+
+  # Этап 2 — Format. Prettier в проекте не настроен; проверяется, что
+  # конфиг Vite разбирается и сборка не находит синтаксически битых файлов.
+  format-check:
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Конфиг Vite
+        working-directory: frontend
+        run: node --check vite.config.js
+
+  # Этап 3 — Lint. Сборка Vite разрешает импорты и падает на том, что не
+  # разрешилось: самый дешёвый способ поймать битый импорт до образа.
+  lint:
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Сборка проверяет импорты
+        working-directory: frontend
+        env:
+          CYBRA_UI_OUTDIR: /tmp/lint-dist
+        run: |
+          npm run build
+          test -f /tmp/lint-dist/index.html
+
+  # Этап 4 — тесты. Тестового фреймворка во фронте нет, поэтому проверяется
+  # структура production-сборки. Это не заменяет unit-тесты и не выдаётся
+  # за них: в отчёте прямо сказано, что именно проверено.
+  test-unit:
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Собрать
+        working-directory: frontend
+        env:
+          CYBRA_UI_OUTDIR: /tmp/build-dist
+        run: npm run build
+      - name: Структура сборки
+        run: |
+          fail=0
+          for path in /tmp/build-dist/index.html /tmp/build-dist/assets; do
+            if [ -e "$path" ]; then echo "  ok   $path"; else echo "  FAIL $path"; fail=1; fi
+          done
+          test "$fail" -eq 0
+          assets=$(find /tmp/build-dist/assets -type f | wc -l)
+          echo "собрано файлов в assets: $assets"
+          test "$assets" -gt 0
+      - name: Бандлы хешированы
+        # Без хеша в имени кеш браузера отдаст старую версию после выката.
+        #
+        # Явное ветвление, а не `grep && echo || fail`: в `A && B || C`
+        # ветка C выполнится и при успешном A, если B вернёт ненулевой код.
+        run: |
+          if grep -qE 'assets/[a-zA-Z0-9_-]+-[a-zA-Z0-9]{8}\.js' /tmp/build-dist/index.html; then
+            echo "бандлы хешированы"
+          else
+            echo "ВНИМАНИЕ: в index.html нет хешированных имён"
+            exit 1
+          fi
+      - name: JUnit-отчёт
+        run: |
+          mkdir -p reports
+          cat > reports/junit.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites name="frontend" tests="3" failures="0">
+            <testsuite name="build" tests="3" failures="0">
+              <testcase name="index.html present" classname="frontend.build"/>
+              <testcase name="assets emitted" classname="frontend.build"/>
+              <testcase name="bundles hashed" classname="frontend.build"/>
+            </testsuite>
+          </testsuites>
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-frontend
+          path: reports/junit.xml
+          retention-days: 30
+
+  # ====================================================================
+  # №5-7. Безопасность
+  # ====================================================================
+
+  # Этап 5 — SAST для JS. --audit-level=high: ниже порог даёт десятки
+  # замечаний по транзитивным зависимостям, которые невозможно закрыть
+  # без форка.
+  security-sast:
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: npm audit
+        working-directory: frontend
+        run: |
+          mkdir -p "../$SECURITY_REPORTS"
+          npm audit --audit-level=high --json > "../$SECURITY_REPORTS/npm-audit.json" 2>/dev/null || true
+          # Ветвление явное, а не `cmd || echo`: в `A && B || C` ветка C
+          # выполнится и при успешном A, если B вернёт ненулевой код, —
+          # то есть сообщение «есть уязвимости» появилось бы там, где их нет.
+          if npm audit --audit-level=high; then
+            echo "уязвимостей уровня high нет"
+          else
+            echo "WARN — есть уязвимости уровня high (см. отчёт выше)"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit
+          path: ${{ env.SECURITY_REPORTS }}/npm-audit.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  # Этап 6 — Secrets scan.
+  security-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Этап 7 — IaC. Для фронта особенно важен nginx.conf: ошибка в нём не
+  # ловится ни линтером JS, ни сборкой — она проявляется 502 на стенде.
+  security-iac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: pip install pyyaml jinja2
+      - name: Границы сервисов
+        run: python scripts/check_repo_structure.py
+      - name: nginx.conf — обязательные директивы
+        run: |
+          fail=0
+          # Двойные кавычки, а не одинарные: $backend_upstream — это имя
+          # переменной nginx, которую надо искать буквально. В одинарных
+          # кавычках shell её не раскрывает (что нам и нужно), но
+          # actionlint справедливо предупреждает, что такое сочетание
+          # легко прочитать неверно. Комментарий фиксирует намерение.
+          for needle in \
+            "proxy_pass http://\$backend_upstream" \
+            "try_files \$uri \$uri/ /index.html" \
+            "listen 8080" \
+            "resolver 127.0.0.11"; do
+            if grep -qF "$needle" frontend/nginx.conf; then
+              echo "  ok   $needle"
+            else
+              echo "  FAIL отсутствует: $needle"; fail=1
+            fi
+          done
+          test "$fail" -eq 0
+      - name: nginx.conf — баланс скобок
+        # Незакрытая директива — самая частая причина «nginx не стартует».
+        run: |
+          opens=$(grep -o '{' frontend/nginx.conf | wc -l)
+          closes=$(grep -o '}' frontend/nginx.conf | wc -l)
+          echo "скобок открыто: $opens, закрыто: $closes"
+          test "$opens" -eq "$closes"
+      - name: Dockerfile фронта
+        run: |
+          grep -q 'FROM node:22-alpine' frontend/Dockerfile
+          grep -q 'FROM nginx' frontend/Dockerfile
+          grep -q 'USER nginx' frontend/Dockerfile
+          echo "многостадийная сборка и непривилегированный пользователь на месте"
+
+  # ====================================================================
+  # №8-9. Сборка
+  # ====================================================================
+
+  # Этап 8 — сборка образа.
+  #
+  # Контекст — каталог frontend/, а не корень: в образ не должны попасть
+  # ни datasets, ни backend, ни .git. Dockerfile копирует `.`, и контекст
+  # задаёт, что именно это значит.
+  build-image:
+    runs-on: ubuntu-latest
+    needs: [test-unit, security-sast]
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Метаданные образа
+        id: meta
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}/${SERVICE}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "образ: $image"
+      - name: Login в ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Подготовка конфига registry
+        run: |
+          mkdir -p "$HOME/.docker"
+          if [ -f "$HOME/.docker/config.json" ]; then
+            echo "config.json уже на месте"
+          else
+            echo '{"auths":{}}' > "$HOME/.docker/config.json"
+          fi
+      - name: Сборка kaniko
+        id: build
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            publish=0
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            publish=1
+          elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            publish=1
+          else
+            publish=0
+          fi
+          if [ "$publish" = "1" ]; then
+            docker run --rm \
+              -v "${PWD}/frontend:/workspace" \
+              -v "$HOME/.docker:/kaniko/.docker" \
+              ghcr.io/osscontainertools/kaniko:v1.29.1-debug \
+              --context=/workspace \
+              --dockerfile=/workspace/Dockerfile \
+              --destination="${{ steps.meta.outputs.image }}:${{ github.sha }}" \
+              --destination="${{ steps.meta.outputs.image }}:latest" \
+              --cache=true \
+              --cache-repo="${{ steps.meta.outputs.image }}/cache" \
+              --digest-file=/workspace/digest.txt
+            echo "digest=$(cat frontend/digest.txt)" >> "$GITHUB_OUTPUT"
+          else
+            docker run --rm \
+              -v "${PWD}/frontend:/workspace" \
+              ghcr.io/osscontainertools/kaniko:v1.29.1-debug \
+              --context=/workspace \
+              --dockerfile=/workspace/Dockerfile \
+              --no-push
+            echo "digest=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Сохранить digest
+        if: steps.build.outputs.digest != ''
+        run: echo "${{ steps.build.outputs.digest }}" > image-digest.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-digest
+          path: image-digest.txt
+          retention-days: 30
+          if-no-files-found: ignore
+
+  build-sbom:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: needs.build-image.outputs.digest != ''
+    steps:
+      - name: Установить syft
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: SBOM
+        run: |
+          mkdir -p "$SECURITY_REPORTS"
+          syft "registry:${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}" \
+            -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json"
+          syft "registry:${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}" \
+            -o table | head -30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-sbom
+          path: ${{ env.SECURITY_REPORTS }}/sbom.spdx.json
+          retention-days: 90
+
+  # Этап 9a — SCA: лицензии. Для фронта существеннее, чем для бэкенда:
+  # React-экосистема тянет много транзитивных пакетов, и GPL в дереве —
+  # реальный риск для поставки.
+  security-sca:
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Лицензии
+        working-directory: frontend
+        run: |
+          mkdir -p "../$SECURITY_REPORTS"
+          npx --yes license-checker --production --csv > "../$SECURITY_REPORTS/npm-licenses.csv" || echo "license-checker не отработал"
+          head -30 "../$SECURITY_REPORTS/npm-licenses.csv" || true
+          echo "--- GPL/AGPL в поставке ---"
+          grep -iE '(GPL|AGPL)' "../$SECURITY_REPORTS/npm-licenses.csv" \
+            && echo "WARN — найден GPL" || echo "GPL/AGPL не найдено"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-licenses
+          path: ${{ env.SECURITY_REPORTS }}/npm-licenses.csv
+          retention-days: 90
+          if-no-files-found: warn
+
+  security-image:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: needs.build-image.outputs.digest != ''
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-frontend.sarif
+      - name: Загрузить в Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-frontend.sarif
+          category: trivy-frontend
+        continue-on-error: true
+
+  # ====================================================================
+  # №10-12. Тестовый контур
+  # ====================================================================
+
+  # Этапы 10 и 12. Здесь нужны ОБА сервиса: проверяется не только отдача
+  # SPA, но и прокси. Бэкенд берём из ghcr по тому же commit-sha; если он
+  # на этом коммите не собирался (правка только во фронте) — latest, и это
+  # видно в логе.
+  deploy-test:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: needs.build-image.outputs.digest != ''
+    environment:
+      name: test/frontend
+      url: http://localhost:8080
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Поднять бэкенд
+        run: |
+          secret=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_')
+          docker network create cybra-net
+          backend="${REGISTRY}/${GITHUB_REPOSITORY,,}/backend"
+          if docker pull "$backend:${GITHUB_SHA}" 2>/dev/null; then
+            echo "бэкенд этого коммита"
+          else
+            backend_ref="$backend:latest"
+            docker pull "$backend_ref"
+            echo "бэкенд этого коммита не собран — берём latest"
+          fi
+          docker run -d --name backend-test --network cybra-net \
+            --network-alias backend -e CYBRA_SECRET_KEY="$secret" \
+            "${backend_ref:-$backend:${GITHUB_SHA}}"
+      - name: Дождаться бэкенда
+        run: |
+          for i in $(seq 1 40); do
+            if docker run --rm --network cybra-net curlimages/curl:latest \
+                 -fsS http://backend:8000/api/v1/health > /dev/null; then
+              echo "backend ok after ${i}"; break
+            fi
+            sleep 2
+          done
+      - name: Поднять фронтенд
+        run: |
+          docker run -d --name frontend-test --network cybra-net \
+            --network-alias frontend \
+            "${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+      - name: Smoke — фронт отвечает
+        run: |
+          for i in $(seq 1 30); do
+            if docker run --rm --network cybra-net curlimages/curl:latest \
+                 -fsS http://frontend:8080/healthz > /dev/null; then
+              echo "frontend ok after ${i}"; ok=1; break
+            fi
+            sleep 2
+          done
+          test "${ok:-0}" = "1" || (docker logs frontend-test; exit 1)
+      - name: Smoke — SPA отдаётся
+        run: |
+          body=$(docker run --rm --network cybra-net curlimages/curl:latest \
+            -fsS http://frontend:8080/)
+          echo "$body" | head -c 200; echo
+          echo "$body" | grep -qi '<div id="root">'
+      - name: Smoke — nginx проксирует /api
+        # ГЛАВНАЯ проверка разделения: забытый proxy_pass ловится здесь, а
+        # не на стенде заказчика.
+        run: |
+          code=$(docker run --rm --network cybra-net curlimages/curl:latest \
+            -sS -o /dev/null -w '%{http_code}' http://frontend:8080/api/v1/health)
+          echo "/api/v1/health через nginx: HTTP $code"
+          test "$code" = "200" || (echo "прокси не работает"; exit 1)
+          docker run --rm --network cybra-net curlimages/curl:latest \
+            -fsS http://frontend:8080/api/v1/health | grep -q '"status":"ok"'
+      - name: Smoke — SPA-fallback
+        # Без try_files перезагрузка на /runs/123 отдаёт 404, хотя переход
+        # внутри приложения работал.
+        run: |
+          code=$(docker run --rm --network cybra-net curlimages/curl:latest \
+            -sS -o /dev/null -w '%{http_code}' http://frontend:8080/runs/123)
+          echo "GET /runs/123: HTTP $code"
+          test "$code" = "200"
+      - name: Логи
+        if: always()
+        run: |
+          docker logs frontend-test --tail 50 || true
+          docker logs backend-test --tail 20 || true
+
+  # ====================================================================
+  # №13-14. Релиз
+  # ====================================================================
+
+  release-checksums:
+    runs-on: ubuntu-latest
+    needs: [build-image, build-sbom]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-sbom
+          path: release
+      - name: SHA256SUMS
+        run: |
+          cd release
+          # ./*, а не *: имена с дефисом в начале воспринялись бы как
+          # ключи sha256sum (shellcheck SC2035).
+          sha256sum ./* > SHA256SUMS
+          cat SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-release
+          path: release/
+          retention-days: 90
+
+  release-publish:
+    runs-on: ubuntu-latest
+    needs: [build-image, release-checksums]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Перенести тег
+        run: |
+          src="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          tag="${{ needs.build-image.outputs.image }}:${GITHUB_REF_NAME}"
+          docker pull "$src"
+          docker tag "$src" "$tag"
+          docker push "$tag"
+          echo "опубликовано $tag"
+
+  # ====================================================================
+  # №15-17. Продакшен
+  # ====================================================================
+
+  deploy-prod:
+    runs-on: ubuntu-latest
+    # needs перечисляет ОБА job'а: outputs доступны только у явно
+    # перечисленных. Через цепочку (release-publish ← build-image) они не
+    # наследуются, и `needs.build-image.outputs.image` развернулся бы в
+    # пустую строку — деплой ушёл бы на образ с пустым тегом.
+    needs: [build-image, release-publish]
+    if: startsWith(github.ref, 'refs/tags/')
+    environment:
+      name: production
+      url: https://cybra.example.org
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Развернуть
+        run: |
+          echo "деплой ${GITHUB_REF_NAME} в production"
+          echo "состав описан в infra/releases/cybra-*.yml"
+          echo "разворачивает infra: ansible-playbook playbooks/deploy.yml"
+      - name: Smoke — SPA в выпущенном образе
+        # Пустой dist означал бы, что контейнер поднялся, но показывает
+        # ничего. Проверяем именно отдачу, а не только старт.
+        run: |
+          image="${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}"
+          docker run -d --name frontend-prod -p 8080:8080 "$image"
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/healthz > /dev/null; then
+              echo "prod health ok after ${i}"; break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/healthz | grep -q 'ok'
+          curl -fsS http://localhost:8080/ | grep -qi '<div id="root">'
+      - name: Логи
+        if: always()
+        run: docker logs frontend-prod --tail 50 || true
+
+  # ====================================================================
+  # №18. Rollback
+  # ====================================================================
+
+  rollback:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback_tag != ''
+    steps:
+      - name: Login в ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Вернуть latest
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}/${SERVICE}"
+          tag="${{ github.event.inputs.rollback_tag }}"
+          docker pull "$image:$tag"
+          docker tag "$image:$tag" "$image:latest"
+          docker push "$image:latest"
+          echo "latest возвращён на $tag"
