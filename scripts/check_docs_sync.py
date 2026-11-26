@@ -26,6 +26,7 @@ DOCS = [
     'docs/VALIDATION-CYBRA.md', 'docs/ru/VALIDATION-CYBRA.md',
     'docs/SUITE.md', 'docs/ru/SUITE.md',
     'docs/OFFLINE.md', 'docs/ru/OFFLINE.md',
+    'docs/ARCHITECTURE.md', 'docs/ru/ARCHITECTURE.md',
 ]
 
 # Пары «английский → русский». Русская копия поддерживается параллельно, но
@@ -40,6 +41,7 @@ DOC_PAIRS = [
     ('docs/VALIDATION-CYBRA.md', 'docs/ru/VALIDATION-CYBRA.md'),
     ('docs/SUITE.md', 'docs/ru/SUITE.md'),
     ('docs/OFFLINE.md', 'docs/ru/OFFLINE.md'),
+    ('docs/ARCHITECTURE.md', 'docs/ru/ARCHITECTURE.md'),
 ]
 
 # Документы, на которые обязана ссылаться карта документации. Список
@@ -96,6 +98,14 @@ def claims_in_docs() -> dict:
             if (re.search(r'\b(pytest|suite|набор)\b', line, re.I)
                     and 'test_metrics_new.py' not in line):
                 for match in re.finditer(r'(\d+)\s+(?:tests|тестов)\b', line, re.I):
+                    # «4 Tests» в таблице соответствия шагам схемы — это
+                    # НОМЕР шага, а не число тестов. Отличаем по контексту:
+                    # перед числом стоит начало ячейки таблицы (`| `), а
+                    # само число маленькое. Настоящее заявление о тестах
+                    # всегда рядом со словом pytest/suite/набор и стоит
+                    # внутри предложения.
+                    if re.search(r'\|\s*\d+\s+(?:Tests|Тестов)\b', line):
+                        continue
                     claims['tests'].append((name, number, match.group(1), line.strip()))
             # Число метрик.
             for match in re.finditer(r'(\d+)\s+(?:metrics|метрик)', line, re.I):

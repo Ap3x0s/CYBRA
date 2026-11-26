@@ -2,20 +2,26 @@
 
 > Russian version: [docs/ru/DEPLOYMENT.md](ru/DEPLOYMENT.md).
 
-CYBRA is a web console: one process serves both the SPA and the API. There is no
-desktop build and no separate frontend container. This page explains what the
-artefact is, how it is produced, and what to run on the target machine.
+CYBRA ships as **two services** — a backend API and a frontend nginx that
+serves the SPA and proxies `/api`. There is no desktop build and no
+separate reverse proxy: nginx plays that role. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for why the boundary is drawn there.
 
 ## What ships
 
-A single container image. Inside it:
+Two container images:
 
-| Layer | Contents |
-|---|---|
-| Python 3.12 | FastAPI app, run supervisor |
-| PostgreSQL | Application database, outside the image (see below) |
-| Static SPA | React build, served by the same process from `backend/static` |
-| Entrypoint | `python -m cybra --host 0.0.0.0` |
+| Image | Contents | Port |
+|---|---|---|
+| `cybra-backend` | Python 3.12, FastAPI app, run supervisor | 8000 (internal) |
+| `cybra-frontend` | nginx, the built SPA, proxy for `/api` | 8080 (published) |
+
+Only the frontend publishes a port. The backend is reachable solely
+through the frontend's proxy on the compose network — there is no second
+open port and no way around the proxy.
+
+Both images are built by CI from the same commit and referenced by digest
+in `infra/releases/*.yml`.
 
 ### Database
 
@@ -75,43 +81,59 @@ cannot work: the packages have to be carried in. See
 
 ## How the artefact is produced
 
+The parent pipeline is a dispatcher; the 18 stages live in three child
+pipelines, one per service:
+
 ```
 merge request
    │
-   ├── validate:precommit  ruff check + audit_i18n + pytest -q
-   ├── format:check        ruff format --check (own code only)
-   ├── lint:frontend       npm ci && npm run build
-   ├── test:unit           pytest tests/ -q            (106 tests, no API key needed)
-   ├── security:sast       ruff + bandit (HIGH)
-   ├── security:secrets    gitleaks
-   ├── security:iac        Dockerfile, .dockerignore, both pipelines
-   ├── build:image         kaniko → :<commit-sha> always, :latest only from main/tag
-   ├── build:sbom          syft reads the image from the registry
-   ├── security:sca        pip-audit + licenses
-   ├── security:image      trivy reads the image from the registry
-   └── deploy:test         pull :<sha>, start it, wait for /api/v1/health
+   ├── repo:precommit      hook present, i18n audit                      (step 0)
+   ├── repo:secrets        gitleaks, once per repository                 (step 6)
+   ├── repo:iac            Dockerfile + compose + all pipelines          (step 7)
+   │
+   ├── backend  → .gitlab/ci/pipelines/backend.yml
+   │     validate, format, lint, test, sast, secrets, iac, build, sbom,
+   │     sca, image-scan, deploy-test, dast, sign, release, approve,
+   │     deploy-prod, smoke-prod, rollback
+   │
+   ├── frontend → .gitlab/ci/pipelines/frontend.yml
+   │     same 18 steps, different commands: npm ci instead of pip,
+   │     nginx.conf instead of ruff, smoke checks the /api proxy
+   │
+   └── infra    → .gitlab/ci/pipelines/infra.yml
+         compose config, ansible --syntax-check, release manifest schema
 ```
 
-On a git tag the release stage adds `release:artifacts` — cosign keyless
-signature over the image digest and the SBOM — and `release:publish`, which
-copies `:<sha>` to `:<tag>`.
+`rules: changes` decides which child pipelines run: an edit under
+`frontend/**` never runs pytest.
 
-Defined in [`.gitlab-ci.yml`](../.gitlab-ci.yml). GitHub Actions runs the same
-stages with the same builder; only the registry differs (ghcr.io there, the
-GitLab registry here). Publishing from both to the same name would give two
-different "latest" tags, so each platform publishes to its own.
+On a git tag the release stage adds `backend:sign` / `frontend:sign` —
+cosign keyless signature over the image digest and the SBOM — and
+`*:release`, which copies `:<sha>` to `:<tag>`.
 
-Of the 18 stages in the reference DevSecOps scheme, 17 are implemented. The
-one that is not is DAST (stage 11): it needs a live deployment with a model
-attached, and running a model inside CI costs gigabytes and hours. It stays a
-manual procedure in [VALIDATION-CYBRA.md](VALIDATION-CYBRA.md).
+Defined in [`.gitlab-ci.yml`](../.gitlab-ci.yml) and the three files under
+[`.gitlab/ci/pipelines/`](../.gitlab/ci/pipelines/). GitHub Actions runs
+the same stages as two workflows, `backend.yml` and `frontend.yml`, with
+`paths:` filters doing what `rules: changes` does here. The registry
+differs: ghcr.io there, the GitLab registry here. Publishing from both to
+the same name would give two different "latest" tags, so each platform
+publishes to its own.
+
+Of the 18 stages in the reference DevSecOps scheme, 17 are implemented for
+each service. The one that is not is DAST (stage 11): it needs a live
+deployment with a model attached, and running a model inside CI costs
+gigabytes and hours. It stays a manual procedure in
+[VALIDATION-CYBRA.md](VALIDATION-CYBRA.md). The infra pipeline implements
+15 of 18 — it has nothing to build or sign, and the file says so rather
+than leaving the gaps unexplained.
 
 ### Signing without a key
 
-`release:artifacts` signs with cosign in keyless mode. There is no private key
-anywhere: GitLab issues an OIDC token (`id_tokens` with `aud: sigstore`),
-Sigstore exchanges it for a short-lived certificate, and the signature lands in
-the transparency log. This needs the project to live on GitLab.com — a
+`backend:sign` and `frontend:sign` sign with cosign in keyless mode. There
+is no private key anywhere: GitLab issues an OIDC token (`id_tokens` with
+`aud: sigstore`), Sigstore exchanges it for a short-lived certificate, and
+the signature lands in the transparency log. This needs the project to live
+on GitLab.com — a
 self-managed instance would need its own Sigstore deployment.
 
 The digest is signed, not the tag. A tag can be repointed at a different image;
@@ -158,37 +180,52 @@ Notes that cost time to rediscover:
 
 ## Deploying
 
+Deployment is done by Ansible from `infra/`, driven by a release manifest.
+The manifest fixes each image **by digest**, so what runs on the host is
+exactly what CI built:
+
 ```bash
 # 1. One-time secret. Losing it makes stored endpoint keys undecryptable.
 python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 
-# 2. Pull and run
-docker pull ap3x0/cybra:latest
-
-docker run -d --name cybra \
-  -p 8000:8000 \
-  -v cybra-data:/data \
-  -e CYBRA_SECRET_KEY="<the key from step 1>" \
-  -e CYBRA_COOKIE_SECURE=1 \
-  ap3x0/cybra:latest
+# 2. Deploy a release to an environment
+ansible-playbook -i infra/inventories/dev/hosts.yml \
+  infra/ansible/playbooks/deploy.yml \
+  -e release_id=cybra-0.1.0 \
+  -e target_env=dev \
+  -e backend_image=registry.gitlab.com/ap3x0/cybra/backend@sha256:<digest> \
+  -e frontend_image=registry.gitlab.com/ap3x0/cybra/frontend@sha256:<digest>
 ```
+
+The playbook validates its inputs, renders `.env` from
+`infra/configurations/`, runs `docker compose config`, pulls, brings the
+stack up and waits for health. A missing secret or a malformed digest stops
+it before anything is downloaded.
 
 `CYBRA_COOKIE_SECURE=1` is required behind HTTPS. Without it the session cookie
-is sent over plain HTTP.
+is sent over plain HTTP — `infra/configurations/environments/prod-lab.yml`
+sets it, dev and stage do not.
 
-Or with compose, which also sets a restart policy:
+Manually, without Ansible, for a quick local check:
 
 ```bash
-printf 'CYBRA_SECRET_KEY=%s\n' "<key>" > docker/.env
-docker compose -f docker/compose.prod.yaml pull
-docker compose -f docker/compose.prod.yaml up -d
+cd infra
+printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\nFRONTEND_PORT=8080\n' \
+  "<backend@sha256:...>" "<frontend@sha256:...>" > .env
+printf 'CYBRA_SECRET_KEY=%s\n' "<key>" > backend.env
+printf 'FRONTEND_PORT=8080\n' > frontend.env
+docker compose --env-file .env -f compose.yaml up -d
 ```
 
-`compose.prod.yaml` deliberately has no `build:` section. It pulls. With
+`infra/compose.yaml` deliberately has no `build:` section. It pulls. With
 `build:` compose quietly assembles the image from the local context and
 overwrites the same tag, so two machines end up running two different builds
 under one name — the exact thing a shared container deployment is meant to
 prevent. Only CI builds and publishes.
+
+`docker/compose.prod.yaml` from the monolith era is kept only as a marked
+stub: it would deploy the backend without the frontend, which is a stand
+where the API answers and there is nothing to open.
 
 Point the file at a specific registry with `CYBRA_IMAGE`:
 
@@ -197,11 +234,13 @@ CYBRA_IMAGE=ap3x0/cybra:latest \
   docker compose -f docker/compose.prod.yaml up -d
 ```
 
-`pull_policy: always` is set for the same reason: if the image is missing
-locally, compose would otherwise try to build it from the context and fail with
-an obscure error.
+`pull_policy` defaults to `always` for the same reason: if the image is
+missing locally, compose would otherwise try to build it from the context
+and fail with an obscure error. It is overridable through
+`CYBRA_PULL_POLICY` so a local stack built by `docker build` can be tested
+before its images reach a registry.
 
-Open `http://<host>:8000`. On first start the admin password is printed to the
+Open `http://<host>:8080`. On first start the admin password is printed to the
 log once; change it in **Settings**.
 
 ### Environment
@@ -241,10 +280,23 @@ mode the file does not exist at all, and the database lives in its own service.
 
 ## Updating
 
+Deploy a newer release manifest — the same playbook, a different
+`release_id`:
+
 ```bash
-docker pull ap3x0/cybra:latest
-docker compose -f docker/compose.prod.yaml up -d
+ansible-playbook -i infra/inventories/dev/hosts.yml \
+  infra/ansible/playbooks/deploy.yml \
+  -e release_id=cybra-0.2.0 -e target_env=dev \
+  -e backend_image=<...>@sha256:<digest> -e frontend_image=<...>@sha256:<digest>
 ```
+
+Only changed containers are recreated. `state: present` with compose v2
+leaves unchanged services alone, so an update of one service does not
+restart the other.
+
+Rolling back means deploying the previous manifest: the digests are
+already recorded there, so nothing is rebuilt. That is the whole point of
+pinning by digest rather than by tag.
 
 The schema is created on start. Adding a nullable column does not need a
 release step: `create_all()` handles new tables and `db.py` adds missing

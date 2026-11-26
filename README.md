@@ -266,7 +266,7 @@ pytest tests/ -q
 ruff check backend scan
 ```
 
-106 tests: API (`test_api.py`), report core (`test_core.py`), scan layer
+118 tests: API (`test_api.py`), report core (`test_core.py`), scan layer
 (`test_scan.py`), metrics (`test_metrics_new.py`). `test_api.py` needs no API
 key: it uses the mock engine and covers auth, CSRF, dataset versioning, a full
 run and metrics.

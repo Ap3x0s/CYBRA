@@ -2,19 +2,26 @@
 
 > English version: [docs/DEPLOYMENT.md](../DEPLOYMENT.md).
 
-CYBRA — веб-консоль: один процесс раздаёт и SPA, и API. Десктопной сборки нет,
-отдельного контейнера для фронтенда тоже. Здесь описано, что именно является
-артефактом, как он производится и что запускать на целевой машине.
+CYBRA поставляется **двумя сервисами** — backend с API и frontend на
+nginx, который раздаёт SPA и проксирует `/api`. Десктопной сборки нет,
+отдельного reverse proxy тоже: его роль играет nginx. Почему граница
+проведена именно там — см. [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Что поставляется
 
-Один образ контейнера. Внутри:
+Два образа контейнера:
 
-| Слой | Содержимое |
-|---|---|
-| Python 3.12 | FastAPI-приложение, супервизор прогонов |
-| Статика SPA | React-сборка, раздаётся тем же процессом из `backend/static` |
-| Точка входа | `python -m cybra --host 0.0.0.0` |
+| Образ | Содержимое | Порт |
+|---|---|---|
+| `cybra-backend` | Python 3.12, FastAPI-приложение, супервизор прогонов | 8000 (внутренний) |
+| `cybra-frontend` | nginx, собранная SPA, прокси на `/api` | 8080 (публикуется) |
+
+Порт публикует только фронтенд. Бэкенд доступен исключительно через его
+прокси в сети compose — второго открытого порта нет, и обойти прокси
+нельзя.
+
+Оба образа собираются CI из одного коммита и указываются по digest в
+`infra/releases/*.yml`.
 
 База данных в образ **не входит**: это отдельный сервис.
 
@@ -75,40 +82,54 @@ python scripts/verify_migration.py /path/to/cybra.sqlite3
 
 ## Как производится артефакт
 
+Родительский пайплайн — диспетчер; 18 этапов живут в трёх дочерних
+пайплайнах, по одному на сервис:
+
 ```
 запрос на слияние
    │
-   ├── validate:precommit  ruff check + audit_i18n + pytest -q
-   ├── format:check        ruff format --check (только свой код)
-   ├── lint:frontend       npm ci && npm run build
-   ├── test:unit           pytest tests/ -q            (106 тестов, без API-ключа)
-   ├── security:sast       ruff + bandit (только HIGH)
-   ├── security:secrets    gitleaks
-   ├── security:iac        Dockerfile, .dockerignore, оба пайплайна
-   ├── build:image         kaniko → :<commit-sha> всегда, :latest — только из main/тега
-   ├── build:sbom          syft читает образ из registry
-   ├── security:sca        pip-audit и лицензии
-   ├── security:image      trivy читает образ из registry
-   └── deploy:test         pull :<sha>, запуск, ожидание /api/v1/health
+   ├── repo:precommit      хук на месте, аудит i18n                  (шаг 0)
+   ├── repo:secrets        gitleaks, один раз на репозиторий         (шаг 6)
+   ├── repo:iac            Dockerfile + compose + все пайплайны      (шаг 7)
+   │
+   ├── backend  → .gitlab/ci/pipelines/backend.yml
+   │     validate, format, lint, test, sast, secrets, iac, build, sbom,
+   │     sca, image-scan, deploy-test, dast, sign, release, approve,
+   │     deploy-prod, smoke-prod, rollback
+   │
+   ├── frontend → .gitlab/ci/pipelines/frontend.yml
+   │     те же 18 шагов, другие команды: npm ci вместо pip,
+   │     nginx.conf вместо ruff, smoke проверяет прокси /api
+   │
+   └── infra    → .gitlab/ci/pipelines/infra.yml
+         compose config, ansible --syntax-check, схема манифеста релиза
 ```
+
+`rules: changes` решает, какие дочерние пайплайны запускать: правка в
+`frontend/**` не запускает pytest вовсе.
 
 По git-тегу добавляется стадия release: `release:artifacts` — подпись cosign
 в режиме keyless над digest образа и над SBOM, — и `release:publish`, который
 переносит `:<sha>` в `:<tag>`.
 
-Определено в [`.gitlab-ci.yml`](../../.gitlab-ci.yml). GitHub Actions выполняет
-те же стадии тем же сборщиком; отличается только registry (ghcr.io там, реестр
-GitLab здесь). Публикация из обоих мест в одно имя дала бы два разных тега
-«latest», поэтому каждая площадка публикует в свой.
+Определено в [`.gitlab-ci.yml`](../../.gitlab-ci.yml) и трёх файлах в
+[`.gitlab/ci/pipelines/`](../../.gitlab/ci/pipelines/). GitHub Actions
+выполняет те же стадии двумя workflow, `backend.yml` и `frontend.yml`, где
+ту же роль играют фильтры `paths:`. Отличается registry (ghcr.io там,
+реестр GitLab здесь). Публикация из обоих мест в одно имя дала бы два
+разных тега «latest», поэтому каждая площадка публикует в свой.
 
-Из 18 этапов схемы DevSecOps реализованы 17. Не реализован один — DAST
-(этап 11): ему нужен живой стенд с подключённой моделью, а поднимать модель
-в CI — гигабайты и часы. Он остаётся ручной процедурой в
-[VALIDATION-CYBRA.md](VALIDATION-CYBRA.md).
+Из 18 этапов схемы DevSecOps реализованы 17 для каждого сервиса. Не
+реализован один — DAST (этап 11): ему нужен живой стенд с подключённой
+моделью, а поднимать модель в CI — гигабайты и часы. Он остаётся ручной
+процедурой в [VALIDATION-CYBRA.md](VALIDATION-CYBRA.md). Пайплайн infra
+реализует 15 из 18 — ему нечего собирать и подписывать, и файл говорит об
+этом прямо, а не оставляет пробелы без объяснения.
 
 ### Подпись без ключа
 
-`release:artifacts` подписывает в режиме keyless. Приватного ключа нет нигде:
+`backend:sign` и `frontend:sign` подписывают в режиме keyless. Приватного
+ключа нет нигде:
 GitLab выпускает OIDC-токен (`id_tokens` с `aud: sigstore`), Sigstore меняет
 его на короткоживущий сертификат, подпись попадает в журнал прозрачности.
 Для этого проект должен жить на GitLab.com: на self-managed понадобится свой
@@ -159,49 +180,60 @@ digest — нельзя. SBOM подписывается тоже, иначе п
 
 ## Развёртывание
 
+Разворачивает Ansible из `infra/`, управляясь манифестом релиза. Манифест
+фиксирует каждый образ **по digest**, поэтому на хосте оказывается ровно
+то, что собрал CI:
+
 ```bash
 # 1. Одноразовый секрет. Потеря делает сохранённые ключи эндпоинтов нерасшифровываемыми.
 python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 
-# 2. Стянуть и запустить
-docker pull ap3x0/cybra:latest
-
-docker run -d --name cybra \
-  -p 8000:8000 \
-  -v cybra-data:/data \
-  -e CYBRA_SECRET_KEY="<ключ из шага 1>" \
-  -e CYBRA_COOKIE_SECURE=1 \
-  ap3x0/cybra:latest
+# 2. Развернуть релиз в окружение
+ansible-playbook -i infra/inventories/dev/hosts.yml \
+  infra/ansible/playbooks/deploy.yml \
+  -e release_id=cybra-0.1.0 \
+  -e target_env=dev \
+  -e backend_image=registry.gitlab.com/ap3x0/cybra/backend@sha256:<digest> \
+  -e frontend_image=registry.gitlab.com/ap3x0/cybra/frontend@sha256:<digest>
 ```
+
+Playbook проверяет входы, рендерит `.env` из `infra/configurations/`,
+выполняет `docker compose config`, тянет образы, поднимает состав и ждёт
+health. Отсутствующий секрет или битый digest останавливают его до того,
+как что-либо скачано.
 
 `CYBRA_COOKIE_SECURE=1` обязателен за HTTPS. Без него сессионная cookie
-уходит открытым текстом.
+уходит открытым текстом — `infra/configurations/environments/prod-lab.yml`
+его задаёт, dev и stage нет.
 
-Или через compose — там же задана политика рестарта:
+Вручную, без Ansible, для быстрой локальной проверки:
 
 ```bash
-printf 'CYBRA_SECRET_KEY=%s\n' "<ключ>" > docker/.env
-docker compose -f docker/compose.prod.yaml pull
-docker compose -f docker/compose.prod.yaml up -d
+cd infra
+printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\nFRONTEND_PORT=8080\n' \
+  "<backend@sha256:...>" "<frontend@sha256:...>" > .env
+printf 'CYBRA_SECRET_KEY=%s\n' "<ключ>" > backend.env
+printf 'FRONTEND_PORT=8080\n' > frontend.env
+docker compose --env-file .env -f compose.yaml up -d
 ```
 
-В `compose.prod.yaml` намеренно нет секции `build:`. Он тянет. С `build:`
+В `infra/compose.yaml` намеренно нет секции `build:`. Он тянет. С `build:`
 compose молча собирает образ из локального контекста и перезаписывает тот же
 тег, поэтому на двух машинах оказываются две разные сборки под одним именем —
 ровно то, чего общая контейнерная развёртка не должна допускать. Собирает и
 публикует только CI.
 
-Указать конкретный registry можно через `CYBRA_IMAGE`:
+`docker/compose.prod.yaml` из эпохи монолита оставлен только помеченной
+заглушкой: он развернул бы бэкенд без фронтенда — стенд, где API отвечает,
+а открыть нечего.
 
-```bash
-CYBRA_IMAGE=ap3x0/cybra:latest \
-  docker compose -f docker/compose.prod.yaml up -d
-```
+`pull_policy` по умолчанию `always` по той же причине: если образа нет
+локально, compose иначе попытается собрать его из контекста и упадёт с
+невнятной ошибкой. Переопределяется через `CYBRA_PULL_POLICY`, чтобы
+локальный стенд из `docker build` можно было проверить до публикации в
+registry.
 
-`pull_policy: always` задан по той же причине: если образа нет локально,
-compose иначе попытается собрать его из контекста и упадёт с невнятной ошибкой.
-
-Открыть `http://<host>:8000`. При первом старте пароль администратора
+Открыть `http://<host>:8080`. При первом старте пароль администратора
 печатается в журнал один раз; смените его в «Настройках».
 
 ### Окружение
@@ -241,10 +273,21 @@ CYBRA_DATA_DIR/
 
 ## Обновление
 
+Развернуть более новый манифест — тот же playbook, другой `release_id`:
+
 ```bash
-docker pull ap3x0/cybra:latest
-docker compose -f docker/compose.prod.yaml up -d
+ansible-playbook -i infra/inventories/dev/hosts.yml \
+  infra/ansible/playbooks/deploy.yml \
+  -e release_id=cybra-0.2.0 -e target_env=dev \
+  -e backend_image=<...>@sha256:<digest> -e frontend_image=<...>@sha256:<digest>
 ```
+
+Пересоздаются только изменившиеся контейнеры: `state: present` с compose v2
+не трогает неизменённые сервисы, поэтому обновление одного не
+перезапускает другой.
+
+Откат — это развёртывание предыдущего манифеста: digest там уже записаны,
+пересобирать нечего. В этом и смысл фиксации по digest, а не по тегу.
 
 Схема базы создаётся при старте. Добавление nullable-колонки не требует
 релиза: `create_all()` создаёт новые таблицы, а `db.py` идемпотентно
