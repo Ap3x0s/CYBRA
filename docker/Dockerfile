@@ -1,28 +1,23 @@
-# CYBRA — один образ, один порт.
+# Образ backend-сервиса CYBRA.
 #
-# Двухступенчатая сборка: SPA собирается Node, затем кладётся в backend/static
-# и раздаётся тем же процессом. Так нет CORS, нет второго контейнера и нет
-# отдельного reverse proxy.
+# Только API и супервизор прогонов. SPA больше не копируется внутрь: с
+# разделением на микросервисы её собирает и раздаёт отдельный контейнер
+# (см. frontend/Dockerfile). Здесь нет ни node, ни npm.
+#
+# Почему это важно, а не косметика: раньше правка любого .jsx пересобирала
+# весь Python-образ, включая слой с fastapi/uvicorn. Теперь у сервисов
+# независимые пайплайны и независимые кеши слоёв (--cache-repo у kaniko),
+# и пересборка фронта бэкенд не трогает вовсе.
 #
 # Heavy tools (garak, PyRIT, promptfoo) в образ НЕ входят: они тянут torch и
 # Node-бинарь на гигабайты. Их ставят поверх командой `cybra setup`, а UI
-# честно показывает, чего нет. Для полного стенда см. compose.prod.yaml.
-
-FROM node:22-alpine AS ui
-WORKDIR /ui
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-COPY frontend/ ./
-# Build into the stage's own dist; the default config target is only valid in
-# the repository layout, where backend/static exists next to frontend/.
-ENV CYBRA_UI_OUTDIR=/ui/dist
-RUN npm run build
+# честно показывает, чего нет. Подробности — docs/OFFLINE.md.
 
 FROM python:3.12-slim AS runtime
 
 # OCI-метаданные образа: кто владелец, под какой лицензией распространяется.
-LABEL org.opencontainers.image.title="CYBRA" \
-      org.opencontainers.image.description="Cybersecurity benchmarks for testing the security of LLM/AI models" \
+LABEL org.opencontainers.image.title="CYBRA backend" \
+      org.opencontainers.image.description="API and run supervisor for CYBRA, LLM security benchmarks" \
       org.opencontainers.image.authors="Ap3x0s" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.source="https://github.com/Ap3x0s/CYBRA"
@@ -35,7 +30,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Minimal system deps: TLS roots for corporate endpoints, curl for healthcheck.
+# Минимальные системные зависимости: корневые сертификаты для корпоративных
+# эндпоинтов и curl для healthcheck.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
@@ -43,7 +39,7 @@ RUN apt-get update \
 # Зависимости ставим ДО копирования исходников, и только по pyproject.toml.
 # Иначе любая правка в cybra/*.py меняет слой COPY и заставляет pip заново
 # тянуть fastapi/uvicorn из сети — на пустом кеше это минуты, а зависимостей
-# ровно семь строк, которые меняются куда реже кода.
+# ровно восемь строк, которые меняются куда реже кода.
 COPY backend/pyproject.toml /app/backend/pyproject.toml
 RUN python -c "import tomllib, pathlib; print('\n'.join(tomllib.loads(pathlib.Path('/app/backend/pyproject.toml').read_text())['project']['dependencies']))" > /tmp/requirements.txt \
  && pip install --no-cache-dir -r /tmp/requirements.txt \
@@ -70,7 +66,6 @@ COPY datasets /app/datasets
 COPY vendor /app/vendor
 COPY run.py /app/run.py
 COPY sources.lock.json /app/sources.lock.json
-COPY --from=ui /ui/dist /app/backend/static
 
 RUN useradd --create-home --uid 10001 cybra \
  && mkdir -p /data \
