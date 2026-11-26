@@ -1,0 +1,117 @@
+# Общие шаблоны пайплайнов CYBRA.
+#
+# Роадмап (шаг 4) требует библиотеку скрытых job'ов, которые сервисы
+# подключают через `extends`. Здесь она воспроизведена внутри одного
+# репозитория: полноценный `ci-templates` — отдельный проект, но принцип
+# тот же, и разделение на файлы сохранено.
+#
+# Правило, которое здесь соблюдается: шаблон описывает СПОСОБ выполнения,
+# а конкретные команды и параметры задаёт сервис. Шаблон не знает, что
+# такое pytest или vite — он знает, как запустить команду, как сохранить
+# артефакты и как не потерять отчёт при падении.
+#
+# Почему скрытые job'ы начинаются с точки: GitLab не создаёт job для
+# ключей с `.` — они существуют только для наследования.
+
+# ----------------------------------------------------------------------
+# .kaniko — сборка образа без демона Docker.
+#
+# Почему kaniko, а не docker:dind: канонический рецепт GitLab требует
+# privileged-раннера, а на shared-раннере privileged недоступен. kaniko
+# собирает в userspace: ни демона, ни привилегий.
+#
+# entrypoint: [""] обязателен. У образа kaniko ENTRYPOINT — сам executor,
+# shell отсутствует. GitLab вставляет свой скрипт, kaniko получает его как
+# аргумент и падает с `unknown command "sh"`.
+# ----------------------------------------------------------------------
+.kaniko:
+  image:
+    name: ghcr.io/osscontainertools/kaniko:v1.29.1-debug
+    entrypoint: [""]
+  variables:
+    KANIKO_CACHE_REPO: $CI_REGISTRY_IMAGE/cache
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - |
+      reg_auth=$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d "\n")
+      if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+        hub_auth=$(printf "%s:%s" "$DOCKERHUB_USER" "$DOCKERHUB_TOKEN" | base64 | tr -d "\n")
+        printf '{"auths":{"%s":{"auth":"%s"},"https://index.docker.io/v1/":{"auth":"%s"}}}\n' \
+          "$CI_REGISTRY" "$reg_auth" "$hub_auth" > /kaniko/.docker/config.json
+      else
+        printf '{"auths":{"%s":{"auth":"%s"}}}\n' \
+          "$CI_REGISTRY" "$reg_auth" > /kaniko/.docker/config.json
+      fi
+
+# ----------------------------------------------------------------------
+# .docker — job'ы, которым нужен Docker-клиент (pull, run, tag).
+# Сборка сюда не входит: она на kaniko.
+# ----------------------------------------------------------------------
+.docker:
+  image: docker:29
+  services:
+    - name: docker:29-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    DOCKER_BUILDKIT: "1"
+
+# ----------------------------------------------------------------------
+# .python — базовая среда для Python-сервиса.
+# ----------------------------------------------------------------------
+.python:
+  image: python:3.12-slim
+  variables:
+    PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  cache:
+    key:
+      files:
+        - backend/pyproject.toml
+    paths:
+      - .cache/pip
+
+# ----------------------------------------------------------------------
+# .node — базовая среда для Node-сервиса.
+# ----------------------------------------------------------------------
+.node:
+  image: node:22-alpine
+  variables:
+    NPM_CONFIG_CACHE: $CI_PROJECT_DIR/.cache/npm
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - .cache/npm
+
+# ----------------------------------------------------------------------
+# .junit — сохранить отчёт тестов даже при падении.
+#
+# `when: always` — не украшение: без него отчёт не попадает в артефакты
+# ровно тогда, когда он нужен, то есть при красном прогоне. Роадмап
+# (шаг 7) говорит об этом прямо.
+# ----------------------------------------------------------------------
+.junit:
+  artifacts:
+    when: always
+    reports:
+      junit: $JUNIT_PATH
+    paths:
+      - $JUNIT_PATH
+    expire_in: 30 days
+
+# ----------------------------------------------------------------------
+# .security-reports — общий каталог отчётов сканеров.
+# ----------------------------------------------------------------------
+.security-reports:
+  variables:
+    SECURITY_REPORTS: $CI_PROJECT_DIR/security-reports
+  artifacts:
+    when: always
+    paths:
+      - $SECURITY_REPORTS/
+    expire_in: 30 days

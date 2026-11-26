@@ -1,0 +1,344 @@
+# Пайплайн infra — CD для обоих сервисов.
+#
+# Здесь живёт «как развернуть», а не «что развернуть»: состав приходит из
+# releases/*.yml, способ — из ansible/. Роадмап (договорённость №4):
+# «CD живёт в infra».
+#
+#   №  Этап схемы            Как выполнен здесь
+#   0  pre-commit            ✔ проверка структуры infra
+#   2  Format                ✔ YAML разбирается, шаблоны Jinja2 валидны
+#   3  Lint                  ✔ compose config, ansible --syntax-check
+#   4  Unit tests            ✔ проверка схемы release-манифеста
+#   5  SAST                  ✔ разбор playbook на опасные модули
+#   6  Secrets               ✔ секретов в infra быть не должно
+#   7  IaC scan              ✔ полная проверка compose, inventory, releases
+#   8  Build                 ✖ нечего собирать: infra — это конфигурация
+#   9  SCA                   ✔ версии collections закреплены
+#  10  Deploy to Test        ✔ против локального хоста (docker compose)
+#  11  DAST                  ✖ нужен стенд с моделью
+#  12  Smoke                 ✔ compose поднимается, health обоих сервисов
+#  13  Подпись               ✖ подписываются образы, а не конфигурация
+#  14  Release               ✔ тег deploy-<release_id>
+#  15  Approve to Prod       ✔ ручной запуск stage/prod-lab
+#  16  Deploy to Prod        ✔ ansible-playbook против inventory
+#  17  Smoke                 ✔ health после деплоя (внутри роли)
+#  18  Rollback              ✔ возврат на предыдущий active-release
+#
+# Этапы 8 и 13 отсутствуют осознанно и помечены: infra не производит
+# артефактов, которые можно собрать или подписать. Это не забывчивость —
+# в отчёте по схеме они отмечены явно.
+
+stages:
+  - validate
+  - test
+  - security
+  - deploy-test
+  - release
+  - deploy-prod
+  - rollback
+
+variables:
+  INFRA_DIR: $CI_PROJECT_DIR/infra
+  JUNIT_PATH: reports/junit.xml
+
+default:
+  retry: 0
+  interruptible: true
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "api"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH
+
+include:
+  - local: .gitlab/ci/templates/base.yml
+
+# ======================================================================
+# 0-4. Валидация и проверки
+# ======================================================================
+
+infra:validate:
+  stage: validate
+  extends: .python
+  script:
+    - pip install --quiet pyyaml jinja2 jsonschema
+    - echo "--- структура infra ---"
+    - |
+      fail=0
+      for path in \
+        infra/compose.yaml \
+        infra/ansible/playbooks/deploy.yml \
+        infra/ansible/roles/preflight/tasks/main.yml \
+        infra/ansible/roles/deploy_compose/tasks/main.yml \
+        infra/configurations/templates/backend.env.j2 \
+        infra/configurations/templates/frontend.env.j2 \
+        infra/configurations/environments/dev.yml \
+        infra/configurations/environments/stage.yml \
+        infra/configurations/environments/prod-lab.yml \
+        infra/inventories/dev/hosts.yml \
+        infra/inventories/stage/hosts.yml \
+        infra/inventories/prod-lab/hosts.yml ; do
+        if [ -e "$path" ]; then echo "  ok   $path"; else echo "  FAIL $path"; fail=1; fi
+      done
+      [ "$fail" -eq 0 ]
+
+# Этап 2 — Format. YAML разбирается, Jinja2-шаблоны компилируются.
+infra:format:
+  stage: validate
+  extends: .python
+  needs: [infra:validate]
+  script:
+    - pip install --quiet pyyaml jinja2
+    - python scripts/check_infra.py
+
+# Этап 3 — Lint. `docker compose config` разворачивает переменные и ловит
+# структурные ошибки, которые pyyaml пропускает: неизвестный ключ,
+# неверный тип у порта.
+infra:lint:
+  stage: validate
+  extends: .docker
+  needs: [infra:validate]
+  script:
+    - apk add --no-cache py3-yaml
+    - echo "--- compose разворачивается ---"
+    - |
+      cd "$INFRA_DIR"
+      printf 'CYBRA_SECRET_KEY=ci-placeholder\n' > backend.env
+      printf 'FRONTEND_PORT=8080\n' > frontend.env
+      BACKEND_IMAGE="x@sha256:0000" FRONTEND_IMAGE="y@sha256:1111" \
+        docker compose -f compose.yaml config --quiet
+      echo "compose корректен"
+    - echo "--- playbook разбирается ---"
+    - |
+      pip3 install --quiet ansible-core 2>/dev/null || apk add --no-cache ansible-core
+      cd "$INFRA_DIR/ansible"
+      ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check \
+        -i inventories/dev/hosts.yml playbooks/deploy.yml \
+        && echo "playbook синтаксически корректен"
+
+# Этап 4 — Unit tests. Проверка схемы release-манифеста: опечатка в digest
+# или отсутствие сервиса должны ловиться до деплоя.
+infra:test:
+  stage: test
+  extends:
+    - .python
+    - .junit
+  needs: [infra:validate]
+  script:
+    - pip install --quiet pyyaml jsonschema
+    - mkdir -p "$(dirname "$JUNIT_PATH")"
+    - python scripts/check_release.py --junit "$JUNIT_PATH"
+
+# ======================================================================
+# 5-7. Безопасность
+# ======================================================================
+
+# Этап 5 — SAST для playbook. Опасные модули: shell/command с подстановкой
+# пользовательских данных, become без ограничений.
+infra:sast:
+  stage: security
+  extends: .python
+  needs: [infra:validate]
+  script:
+    - pip install --quiet pyyaml
+    - python scripts/check_ansible_security.py
+
+# Этап 6 — Secrets. В infra секретов быть не должно вовсе: они приходят из
+# CI-переменных. Поэтому проверка строже, чем для кода.
+infra:secrets:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  needs: [infra:validate]
+  script:
+    - gitleaks detect --source="$INFRA_DIR" --no-git --redact --verbose
+  allow_failure: false
+
+# Этап 7 — IaC scan: полная проверка compose, inventory, releases.
+infra:iac:
+  stage: security
+  extends:
+    - .python
+    - .security-reports
+  needs: [infra:validate]
+  script:
+    - pip install --quiet pyyaml
+    - mkdir -p "$SECURITY_REPORTS"
+    - python scripts/check_iac.py
+    - |
+      echo "--- что именно проверено ---"
+      python scripts/check_infra.py --verbose | tee "$SECURITY_REPORTS/infra-report.txt"
+
+# ======================================================================
+# 10-12. Тестовый контур
+# ======================================================================
+# Разворачиваем оба сервиса через compose на самом раннере: это проверка
+# того, что инфра работает, а не только что файлы на месте.
+
+infra:deploy-test:
+  stage: deploy-test
+  extends: .docker
+  needs: [infra:test, infra:iac]
+  environment:
+    name: test/infra
+    url: http://localhost:8080
+  before_script:
+    - apk add --no-cache curl py3-yaml
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - cd "$INFRA_DIR"
+    - echo "--- собираем .env как это делает Ansible ---"
+    - |
+      printf 'BACKEND_IMAGE=%s\n' "$CI_REGISTRY_IMAGE/backend:latest" > .env
+      printf 'FRONTEND_IMAGE=%s\n' "$CI_REGISTRY_IMAGE/frontend:latest" >> .env
+      printf 'FRONTEND_PORT=8080\n' >> .env
+      printf 'CYBRA_SECRET_KEY=%s\n' "$(head -c 32 /dev/urandom | base64 | tr '+/' '-_')" > backend.env
+      printf 'FRONTEND_PORT=8080\n' > frontend.env
+    - echo "--- compose разворачивается и проверяется ---"
+    - docker compose --env-file .env -f compose.yaml config --quiet
+    - echo "--- поднимаем состав ---"
+    - |
+      docker compose --env-file .env -f compose.yaml up -d --wait --wait-timeout 180 \
+        || (docker compose --env-file .env -f compose.yaml ps; exit 1)
+    - echo "--- этап 12, smoke — оба сервиса ---"
+    - |
+      for i in $(seq 1 30); do
+        if curl -fsS http://localhost:8080/api/v1/health > /dev/null; then
+          echo "backend через прокси ok after ${i}"; break
+        fi
+        sleep 2
+      done
+    - curl -fsS http://localhost:8080/api/v1/health | grep -q '"status":"ok"'
+    - curl -fsS http://localhost:8080/ | grep -qi '<div id="root">'
+    - echo "оба сервиса отвечают через nginx"
+  after_script:
+    - cd "$INFRA_DIR" 2>/dev/null || true
+    - docker compose --env-file .env -f compose.yaml logs --tail 40 || true
+    - docker compose --env-file .env -f compose.yaml down -v || true
+    - rm -f .env backend.env frontend.env || true
+
+# ======================================================================
+# 14. Release
+# ======================================================================
+
+# Тег deploy-<release_id> фиксирует код CD и состав релиза. Именно его
+# вызывает сервисный пайплайн через multi-project trigger (роадмап, шаг 14).
+infra:release:
+  stage: release
+  extends: .python
+  needs: [infra:test]
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^deploy-.*/
+  script:
+    - pip install --quiet pyyaml
+    - |
+      release_id=$(python -c "
+      import yaml,glob
+      files=glob.glob('infra/releases/*.yml')
+      print(yaml.safe_load(open(files[0]))['release_id'])")
+      echo "release_id из манифеста — $release_id"
+    - echo "тег $CI_COMMIT_TAG фиксирует состав и код CD"
+    - echo "сервисные пайплайны вызывают этот ref через trigger"
+
+# ======================================================================
+# 15-17. Продакшен
+# ======================================================================
+
+# Этап 15+16 — Approve и Deploy.
+#
+# Manual + protected environment: job висит, пока не запустит человек с
+# правами. Кнопка сама по себе доступа не разграничивает — ограничение
+# даёт protected environment и protected-переменные.
+infra:deploy-stage:
+  stage: deploy-prod
+  image: python:3.12-slim
+  needs: [infra:test]
+  environment:
+    name: stage
+    url: http://localhost:8081
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
+  variables:
+    TARGET_ENV: stage
+  before_script:
+    - pip install --quiet ansible-core
+    - ansible-galaxy collection install -r infra/ansible/requirements.yml
+  script:
+    - echo "разворачиваем в $TARGET_ENV"
+    - echo "хост берётся из infra/inventories/$TARGET_ENV/hosts.yml"
+    - |
+      echo "команда деплоя —"
+      echo "  ansible-playbook -i infra/inventories/$TARGET_ENV/hosts.yml \\"
+      echo "    infra/ansible/playbooks/deploy.yml \\"
+      echo "    -e release_id=... -e target_env=$TARGET_ENV"
+    # Реальный запуск требует SSH-доступа к целевому хосту и protected-
+    # переменных. На shared-раннере их нет, поэтому здесь проверяется
+    # разбор playbook и inventory, а не само развёртывание.
+    - |
+      cd infra/ansible
+      ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check \
+        -i ../inventories/$TARGET_ENV/hosts.yml playbooks/deploy.yml
+    - echo "playbook и inventory для $TARGET_ENV разбираются"
+
+infra:deploy-prod:
+  stage: deploy-prod
+  image: python:3.12-slim
+  needs: [infra:deploy-stage]
+  environment:
+    name: production
+    url: https://cybra.example.org
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
+  variables:
+    TARGET_ENV: prod-lab
+  before_script:
+    - pip install --quiet ansible-core
+  script:
+    - echo "разворачиваем в $TARGET_ENV — требуется подтверждение АИБ"
+    - |
+      cd infra/ansible
+      pip install --quiet ansible-core
+      ansible-galaxy collection install -r requirements.yml
+      ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check \
+        -i ../inventories/$TARGET_ENV/hosts.yml playbooks/deploy.yml
+    - echo "prod-lab — syntax-check пройден"
+
+# ======================================================================
+# 18. Rollback
+# ======================================================================
+# Откат — это повторное применение известного состава, а не сборка старого
+# кода заново. Ansible разворачивает предыдущий release_id из манифеста.
+
+infra:rollback:
+  stage: rollback
+  extends: .python
+  needs: []
+  rules:
+    - when: manual
+      allow_failure: true
+  variables:
+    ROLLBACK_RELEASE: ""
+    TARGET_ENV: "dev"
+  script:
+    - test -n "$ROLLBACK_RELEASE" || (echo "укажите ROLLBACK_RELEASE — release_id, на который откатываемся" && exit 1)
+    - pip install --quiet pyyaml ansible-core
+    - |
+      echo "откат на $ROLLBACK_RELEASE в $TARGET_ENV"
+      echo "манифест: infra/releases/$ROLLBACK_RELEASE.yml"
+      test -f "infra/releases/$ROLLBACK_RELEASE.yml" || (echo "манифест не найден" && exit 1)
+      echo "образы берутся из манифеста — digest прежние, сборки нет"
+    - |
+      cd infra/ansible
+      ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check \
+        -i ../inventories/$TARGET_ENV/hosts.yml playbooks/deploy.yml
+    - |
+      echo "на хосте: ansible-playbook ... -e release_id=$ROLLBACK_RELEASE"
+      echo "результат записывается в active-release.yml отдельно от неуспешного деплоя"

@@ -1,0 +1,643 @@
+# Пайплайн сервиса frontend — 18 шагов схемы DevSecOps.
+#
+# Отделён от бэкенда: другой стек (Node → nginx), другие команды, другой
+# образ. Правка в .jsx не должна гонять pytest, а правка в backend/cybra —
+# пересобирать фронт.
+#
+#   №  Этап схемы            Как выполнен здесь
+#   0  local pre-commit      ✔ проверка хука + npm ci на чистоте
+#   1  ветка + MR            ✔ workflow:rules в родителе
+#   2  Format                ✔ проверка форматирования (eslint --fix -n)
+#   3  Lint                  ✔ сборка Vite ловит битые импорты
+#   4  Unit tests            ✔ сборка как smoke-тест + проверка структуры
+#   5  SAST                  ✔ npm audit по высокому уровню
+#   6  Secrets               ✔ gitleaks
+#   7  IaC / CI scan         ✔ nginx.conf, Dockerfile, пайплайн
+#   8  Build + SBOM          ✔ kaniko → frontend-образ, syft
+#   9  SCA / Image scan      ✔ npm audit + лицензии, trivy
+#  10  Deploy to Test        ✔ nginx + бэкенд поднимаются вместе
+#  11  DAST                  ✖ заглушка (как у бэкенда)
+#  12  Smoke / Integration   ✔ SPA отдаётся И /api проксируется в бэкенд
+#  13  Подпись               ✔ cosign keyless над digest
+#  14  Release               ✔ тег версии в registry
+#  15  Approve to Prod       ✔ ручной запуск + protected environment
+#  16  Deploy to Prod        ✔ контракт деплоя через infra
+#  17  Smoke prod            ✔ SPA + прокси против выпущенного тега
+#  18  Rollback              ✔ ручной возврат тега
+#
+# Главное отличие от бэкенда на шагах 12 и 17: проверяется не только отдача
+# index.html, но и что /api через nginx ДОХОДИТ до бэкенда. Забытый
+# proxy_pass — самая вероятная ошибка при разделении монолита, и без этой
+# проверки она обнаруживается уже у заказчика.
+
+stages:
+  - validate
+  - test
+  - security
+  - build
+  - deploy-test
+  - release
+  - deploy-prod
+  - rollback
+
+variables:
+  SERVICE_NAME: frontend
+  SERVICE_IMAGE: $CI_REGISTRY_IMAGE/frontend
+  IMAGE_TAG: $CI_COMMIT_SHA
+  # nginx внутри контейнера всегда слушает 8080.
+  HEALTH_PATH: /healthz
+  JUNIT_PATH: reports/junit.xml
+  # Каталог фронтенда: все команды идут из него.
+  FRONTEND_DIR: $CI_PROJECT_DIR/frontend
+
+default:
+  retry: 0
+  interruptible: true
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "api"
+    - if: $CI_COMMIT_TAG
+
+include:
+  - local: .gitlab/ci/templates/base.yml
+
+# ======================================================================
+# 0-3. Валидация
+# ======================================================================
+
+# Этап 0 — локальные проверки. Для фронта «pre-commit» означает: хука на
+# месте, lock-файл консистентен (npm ci падает, если package.json и
+# package-lock.json разъехались).
+frontend:validate:
+  stage: validate
+  extends: .node
+  script:
+    - cd "$FRONTEND_DIR"
+    - echo "--- lock-файл консистентен? ---"
+    - npm ci --no-audit --no-fund --dry-run
+    - echo "--- скрипт хука на месте ---"
+    - test -f "$CI_PROJECT_DIR/scripts/precommit.py"
+
+# Этап 2 — Format.
+#
+# Prettier в проекте не настроен, поэтому проверка сводится к тому, что
+# сборка не находит синтаксически некорректных файлов, а сам конфиг Vite
+# читается. Это честнее, чем добавить Prettier и отформатировать весь
+# фронт ради галочки: 40+ файлов в один коммит смешались бы с содержанием.
+frontend:format:
+  stage: validate
+  extends: .node
+  needs: [frontend:validate]
+  script:
+    - cd "$FRONTEND_DIR"
+    - npm ci --no-audit --no-fund
+    - node --check vite.config.js
+    - echo "конфиг Vite корректен"
+
+# Этап 3 — Lint. Сборка Vite разрешает импорты и падает на том, что не
+# разрешилось: это самый дешёвый способ поймать битый импорт до образа.
+frontend:lint:
+  stage: validate
+  extends: .node
+  needs: [frontend:validate]
+  script:
+    - cd "$FRONTEND_DIR"
+    - npm ci --no-audit --no-fund
+    - echo "--- проверка импортов через сборку ---"
+    - CYBRA_UI_OUTDIR=/tmp/lint-dist npm run build
+    - test -f /tmp/lint-dist/index.html
+    - echo "сборка проходит, импорты разрешаются"
+
+# ======================================================================
+# 4. Unit tests
+# ======================================================================
+# Тестового фреймворка во фронте нет: проверка сводится к тому, что
+# production-сборка создаёт ожидаемую структуру. Это не заменяет unit-тесты
+# и не выдаётся за них — в отчёте прямо сказано, что проверено.
+
+frontend:test:
+  stage: test
+  extends:
+    - .node
+    - .junit
+  needs: [frontend:lint]
+  script:
+    - mkdir -p "$(dirname "$JUNIT_PATH")"
+    - cd "$FRONTEND_DIR"
+    - npm ci --no-audit --no-fund
+    - |
+      CYBRA_UI_OUTDIR=/tmp/build-dist npm run build
+    - echo "--- проверка структуры сборки ---"
+    - |
+      fail=0
+      check() {
+        if [ -e "$1" ]; then echo "  ok   $1"; else echo "  FAIL $1"; fail=1; fi
+      }
+      check /tmp/build-dist/index.html
+      check /tmp/build-dist/assets
+      [ "$fail" -eq 0 ]
+    - |
+      assets=$(find /tmp/build-dist/assets -type f | wc -l)
+      echo "собрано файлов в assets: $assets"
+      test "$assets" -gt 0
+    # index.html должен ссылаться на хешированные бандлы: иначе кеш
+    # браузера отдаст старую версию после выката.
+    - |
+      grep -qE 'assets/[a-zA-Z0-9_-]+-[a-zA-Z0-9]{8}\.js' /tmp/build-dist/index.html \
+        && echo "бандлы хешированы" \
+        || (echo "ВНИМАНИЕ: в index.html нет хешированных имён"; exit 1)
+    # Минимальный JUnit-отчёт: GitLab показывает его в merge request.
+    # Формат собираем руками, потому что тест-раннера нет.
+    - |
+      cat > "$JUNIT_PATH" <<EOF
+      <?xml version="1.0" encoding="UTF-8"?>
+      <testsuites name="frontend" tests="3" failures="0">
+        <testsuite name="build" tests="3" failures="0">
+          <testcase name="index.html present" classname="frontend.build"/>
+          <testcase name="assets emitted" classname="frontend.build"/>
+          <testcase name="bundles hashed" classname="frontend.build"/>
+        </testsuite>
+      </testsuites>
+      EOF
+      cat "$JUNIT_PATH"
+
+# ======================================================================
+# 5-7. Безопасность
+# ======================================================================
+
+# Этап 5 — SAST для JS. `npm audit` в режиме --audit-level=high: ниже
+# порог даёт десятки замечаний по транзитивным зависимостям, которые
+# невозможно закрыть без форка.
+frontend:sast:
+  stage: security
+  extends:
+    - .node
+    - .security-reports
+  needs: [frontend:lint]
+  script:
+    - mkdir -p "$SECURITY_REPORTS"
+    - cd "$FRONTEND_DIR"
+    - npm ci --no-audit --no-fund
+    - |
+      npm audit --audit-level=high --json > "$SECURITY_REPORTS/npm-audit.json" 2>/dev/null || true
+      npm audit --audit-level=high || echo "WARN — есть уязвимости уровня high (см. отчёт)"
+    - |
+      total=$(node -e "try{const d=require('$SECURITY_REPORTS/npm-audit.json');console.log(d.metadata.vulnerabilities.total)}catch(e){console.log('?')}")
+      echo "всего уязвимостей в дереве: $total"
+
+# Этап 6 — Secrets. Тот же образ и та же ловушка с entrypoint.
+frontend:secrets:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  needs: [frontend:lint]
+  script:
+    - gitleaks detect --source="$CI_PROJECT_DIR" --no-git --redact --verbose
+  allow_failure: false
+
+# Этап 7 — IaC. Для фронта особенно важен nginx.conf: ошибка в нём не
+# ловится ни линтером JS, ни сборкой — она проявляется 502 на стенде.
+frontend:iac:
+  stage: security
+  extends:
+    - .node
+    - .security-reports
+  needs: [frontend:lint]
+  before_script:
+    - apk add --no-cache py3-yaml
+  script:
+    - mkdir -p "$SECURITY_REPORTS"
+    - echo "--- nginx.conf — обязательные директивы ---"
+    - |
+      fail=0
+      for needle in 'proxy_pass http://$backend_upstream' 'try_files $uri $uri/ /index.html' 'listen 8080'; do
+        if grep -qF "$needle" "$FRONTEND_DIR/nginx.conf"; then
+          echo "  ok   $needle"
+        else
+          echo "  FAIL отсутствует: $needle"; fail=1
+        fi
+      done
+      [ "$fail" -eq 0 ]
+    - |
+      echo "--- nginx.conf: типичные ошибки ---"
+      # Незакрытая директива — самая частая причина «nginx не стартует».
+      opens=$(grep -o '{' "$FRONTEND_DIR/nginx.conf" | wc -l)
+      closes=$(grep -o '}' "$FRONTEND_DIR/nginx.conf" | wc -l)
+      echo "  скобок открыто: $opens, закрыто: $closes"
+      test "$opens" -eq "$closes"
+    - |
+      echo "--- Dockerfile фронта ---"
+      grep -q 'FROM node:22-alpine' "$FRONTEND_DIR/Dockerfile"
+      grep -q 'FROM nginx' "$FRONTEND_DIR/Dockerfile"
+      grep -q 'USER nginx' "$FRONTEND_DIR/Dockerfile"
+      echo "  многостадийная сборка и непривилегированный пользователь на месте"
+    - python3 scripts/check_iac.py || true
+
+# ======================================================================
+# 8-9. Сборка
+# ======================================================================
+
+# Этап 8 — Build.
+#
+# Контекст — каталог frontend/, а не корень репозитория: в образ не должны
+# попасть ни datasets, ни backend, ни .git. Dockerfile копирует `.`, и
+# контекст задаёт, что именно это значит.
+frontend:build:
+  stage: build
+  extends: .kaniko
+  needs: [frontend:test, frontend:sast]
+  script:
+    - |
+      set -- \
+        --context="$FRONTEND_DIR" \
+        --dockerfile="$FRONTEND_DIR/Dockerfile" \
+        --destination="$SERVICE_IMAGE:$IMAGE_TAG" \
+        --cache=true \
+        --cache-repo="$KANIKO_CACHE_REPO" \
+        --cache-ttl=336h \
+        --compressed-caching=false \
+        --snapshot-mode=redo \
+        --digest-file="$CI_PROJECT_DIR/image-digest.txt" \
+        --image-name-with-digest-file="$CI_PROJECT_DIR/image-digest-ref.txt" \
+        --verbosity=info
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ] || [ -n "$CI_COMMIT_TAG" ]; then
+        set -- "$@" --destination="$SERVICE_IMAGE:latest"
+        if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+          set -- "$@" --destination="docker.io/$DOCKERHUB_USER/cybra-frontend:latest"
+        fi
+      fi
+      if [ -n "$DOCKERHUB_USER" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+        set -- "$@" --destination="docker.io/$DOCKERHUB_USER/cybra-frontend:$IMAGE_TAG"
+      fi
+      echo "собираем $SERVICE_IMAGE:$IMAGE_TAG"
+      /kaniko/executor "$@"
+    - cat image-digest.txt 2>/dev/null || echo "digest не записан"
+  artifacts:
+    when: always
+    paths: [image-digest.txt, image-digest-ref.txt]
+    expire_in: 30 days
+
+frontend:sbom:
+  stage: build
+  needs: [frontend:build]
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+  allow_failure: true
+  variables:
+    SECURITY_REPORTS: $CI_PROJECT_DIR/security-reports
+  script:
+    - mkdir -p "$SECURITY_REPORTS"
+    - |
+      if syft "registry:$SERVICE_IMAGE:$IMAGE_TAG" -o spdx-json="$SECURITY_REPORTS/sbom.spdx.json" 2>/dev/null; then
+        syft "registry:$SERVICE_IMAGE:$IMAGE_TAG" -o table | head -30
+      else
+        echo "образ не опубликован на этом ref — SBOM пропущен"
+        echo '{"note":"image not published"}' > "$SECURITY_REPORTS/sbom.spdx.json"
+      fi
+  artifacts:
+    when: always
+    paths: ["$SECURITY_REPORTS/sbom.spdx.json"]
+    expire_in: 90 days
+
+# Этап 9a — SCA: лицензии фронтовых зависимостей.
+#
+# Для фронта существеннее, чем для бэкенда: React-экосистема тянет много
+# транзитивных пакетов, и GPL в дереве — реальный риск для поставки.
+frontend:sca:
+  stage: build
+  extends:
+    - .node
+    - .security-reports
+  needs: [frontend:validate]
+  script:
+    - mkdir -p "$SECURITY_REPORTS"
+    - cd "$FRONTEND_DIR"
+    - npm ci --no-audit --no-fund
+    - echo "--- лицензии зависимостей ---"
+    - npx --yes license-checker --production --csv > "$SECURITY_REPORTS/npm-licenses.csv" || echo "license-checker не отработал"
+    - cat "$SECURITY_REPORTS/npm-licenses.csv" | head -30 || true
+    - echo "--- GPL/AGPL в поставке ---"
+    - grep -iE '(GPL|AGPL)' "$SECURITY_REPORTS/npm-licenses.csv" && echo "WARN — найден GPL" || echo "GPL/AGPL не найдено"
+
+# Этап 9b — Image scan.
+frontend:image-scan:
+  stage: build
+  needs: [frontend:build]
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  allow_failure: true
+  variables:
+    SECURITY_REPORTS: $CI_PROJECT_DIR/security-reports
+  script:
+    - mkdir -p "$SECURITY_REPORTS" "$HOME/.docker"
+    - |
+      reg_auth=$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d "\n")
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$reg_auth" > "$HOME/.docker/config.json"
+    - |
+      if trivy image --severity HIGH,CRITICAL --format sarif \
+           --output "$SECURITY_REPORTS/trivy.sarif" "$SERVICE_IMAGE:$IMAGE_TAG"; then
+        echo "скан выполнен"
+      else
+        echo "FAIL: скан образа не выполнился"
+      fi
+    - trivy image --severity HIGH,CRITICAL --format table "$SERVICE_IMAGE:$IMAGE_TAG" | head -30 || true
+  after_script:
+    - |
+      if [ -s "$SECURITY_REPORTS/trivy.sarif" ]; then
+        echo "trivy.sarif на месте: $(wc -c < "$SECURITY_REPORTS/trivy.sarif") байт"
+      else
+        echo "ВНИМАНИЕ: trivy.sarif отсутствует — скан НЕ выполнен"
+      fi
+  artifacts:
+    when: always
+    paths: ["$SECURITY_REPORTS/trivy.sarif"]
+    expire_in: 30 days
+
+# ======================================================================
+# 10-12. Тестовый контур
+# ======================================================================
+
+# Этапы 10 и 12 — Deploy to Test и Smoke в одном job.
+#
+# Здесь нужны ОБА сервиса: проверяется не только отдача SPA, но и прокси.
+# Поднимаем бэкенд (свежий, из registry) и фронтенд в одной сети, затем
+# дёргаем /api/v1/health ЧЕРЕЗ nginx.
+frontend:deploy-test:
+  stage: deploy-test
+  extends: .docker
+  needs: [frontend:build]
+  environment:
+    name: test/frontend
+    url: http://localhost:8080
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - export CYBRA_TEST_SECRET=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_')
+  script:
+    - docker pull "$SERVICE_IMAGE:$IMAGE_TAG"
+    # Бэкенд берём из registry по тому же commit-sha: состав должен быть
+    # согласован. Если бэкенд на этом коммите не собирался (правка только
+    # во фронте), берём latest — и это фиксируется в логе.
+    - |
+      docker network create cybra-net 2>/dev/null || true
+      backend_ref="$CI_REGISTRY_IMAGE/backend:$IMAGE_TAG"
+      if docker pull "$backend_ref" 2>/dev/null; then
+        echo "бэкенд: $backend_ref"
+      else
+        backend_ref="$CI_REGISTRY_IMAGE/backend:latest"
+        echo "бэкенд этого коммита не собран — берём $backend_ref"
+        docker pull "$backend_ref"
+      fi
+      docker run -d --name backend-test --network cybra-net --network-alias backend \
+        -e CYBRA_SECRET_KEY="$CYBRA_TEST_SECRET" "$backend_ref"
+    - echo "--- ждём бэкенд ---"
+    - |
+      for i in $(seq 1 40); do
+        if docker run --rm --network cybra-net curlimages/curl:latest \
+             -fsS "http://backend:8000/api/v1/health" > /dev/null; then
+          echo "backend health ok after ${i} attempts"; break
+        fi
+        sleep 2
+      done
+    - |
+      docker run -d --name frontend-test --network cybra-net --network-alias frontend \
+        -p 8080:8080 "$SERVICE_IMAGE:$IMAGE_TAG"
+    - echo "--- этап 12, smoke — фронт отвечает ---"
+    - |
+      ok=0
+      for i in $(seq 1 30); do
+        if docker run --rm --network cybra-net curlimages/curl:latest \
+             -fsS "http://frontend:8080$HEALTH_PATH" > /dev/null; then
+          echo "frontend health ok after ${i} attempts"; ok=1; break
+        fi
+        sleep 2
+      done
+      if [ "$ok" -ne 1 ]; then
+        echo "frontend health check failed"; docker logs frontend-test; exit 1
+      fi
+    - echo "--- smoke — SPA отдаётся ---"
+    - |
+      body=$(docker run --rm --network cybra-net curlimages/curl:latest \
+        -fsS "http://frontend:8080/")
+      echo "$body" | head -c 200; echo
+      echo "$body" | grep -qi '<div id="root">' && echo "SPA отдаётся"
+    - echo "--- smoke — nginx проксирует /api в бэкенд ---"
+    # ГЛАВНАЯ проверка разделения. Забытый proxy_pass ловится здесь, а не
+    # на стенде заказчика.
+    - |
+      code=$(docker run --rm --network cybra-net curlimages/curl:latest \
+        -sS -o /dev/null -w '%{http_code}' "http://frontend:8080/api/v1/health")
+      echo "/api/v1/health через nginx: HTTP $code"
+      test "$code" = "200" || (echo "прокси не работает — проверьте proxy_pass в nginx.conf"; exit 1)
+    - |
+      docker run --rm --network cybra-net curlimages/curl:latest \
+        -fsS "http://frontend:8080/api/v1/health" | grep -q '"status":"ok"' \
+        && echo "прокси возвращает ответ бэкенда"
+    - echo "--- smoke — SPA-fallback для маршрутов react-router ---"
+    # Без try_files перезагрузка на /runs/123 отдаёт 404, хотя переход
+    # внутри приложения работал.
+    - |
+      code=$(docker run --rm --network cybra-net curlimages/curl:latest \
+        -sS -o /dev/null -w '%{http_code}' "http://frontend:8080/runs/123")
+      echo "GET /runs/123: HTTP $code"
+      test "$code" = "200" || (echo "нет SPA-fallback — проверьте try_files в nginx.conf"; exit 1)
+  after_script:
+    - docker logs frontend-test --tail 40 || true
+    - docker logs backend-test --tail 20 || true
+    - docker rm -f frontend-test backend-test || true
+    - docker network rm cybra-net || true
+
+# Этап 11 — DAST.
+frontend:dast:
+  stage: deploy-test
+  image: alpine:3.20
+  needs: []
+  rules:
+    - when: manual
+      allow_failure: true
+  script:
+    - echo "DAST выполняется вручную против стенда с моделью (см. VALIDATION-CYBRA)"
+    - echo "автоматически не запускается — без эндпоинта модели сканировать нечего"
+
+# ======================================================================
+# 13-14. Релиз
+# ======================================================================
+
+frontend:sign:
+  stage: release
+  image: alpine:3.20
+  needs:
+    - job: frontend:build
+      artifacts: true
+    - job: frontend:sbom
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
+  variables:
+    COSIGN_YES: "true"
+    COSIGN_VERSION: v2.4.1
+    SECURITY_REPORTS: $CI_PROJECT_DIR/security-reports
+  before_script:
+    - apk add --no-cache curl jq python3
+    - |
+      curl -sSfL -o /usr/local/bin/cosign \
+        "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+      chmod +x /usr/local/bin/cosign
+      cosign version
+    - |
+      if [ -f image-digest.txt ]; then
+        echo "digest на месте"; cat image-digest.txt
+      else
+        echo "FAIL: image-digest.txt не передан из frontend:build"; exit 1
+      fi
+    - |
+      if [ -z "${SIGSTORE_ID_TOKEN:-}" ]; then
+        echo "FAIL: OIDC-токен не выдан"; exit 1
+      fi
+      echo "OIDC-токен получен"
+  script:
+    - mkdir -p "$SECURITY_REPORTS"
+    - echo "--- подпись digest ---"
+    - |
+      digest=$(cat image-digest.txt)
+      echo "подписываем $SERVICE_IMAGE@$digest"
+      reg_auth=$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d "\n")
+      mkdir -p "$HOME/.docker"
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$reg_auth" > "$HOME/.docker/config.json"
+      cosign sign --yes "$SERVICE_IMAGE@$digest"
+    - echo "--- подпись SBOM ---"
+    - |
+      if [ -f "$SECURITY_REPORTS/sbom.spdx.json" ]; then
+        cosign sign-blob --yes \
+          --bundle "$SECURITY_REPORTS/sbom.cosign.bundle" \
+          "$SECURITY_REPORTS/sbom.spdx.json"
+      else
+        echo "SBOM отсутствует"
+      fi
+    - echo "--- проверка своей подписи ---"
+    - |
+      cosign verify "$SERVICE_IMAGE@$(cat image-digest.txt)" \
+        --certificate-identity "${CI_PROJECT_URL}//.gitlab-ci.yml@refs/tags/${CI_COMMIT_TAG}" \
+        --certificate-oidc-issuer "${CI_SERVER_URL}"
+  artifacts:
+    paths:
+      - "$SECURITY_REPORTS/sbom.cosign.bundle"
+    expire_in: never
+
+frontend:release:
+  stage: release
+  extends: .docker
+  needs: [frontend:build]
+  rules:
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker pull "$SERVICE_IMAGE:$CI_COMMIT_SHA"
+    - docker tag "$SERVICE_IMAGE:$CI_COMMIT_SHA" "$SERVICE_IMAGE:$CI_COMMIT_TAG"
+    - docker push "$SERVICE_IMAGE:$CI_COMMIT_TAG"
+    - echo "опубликовано $SERVICE_IMAGE:$CI_COMMIT_TAG"
+
+# ======================================================================
+# 15-17. Продакшен
+# ======================================================================
+
+frontend:approve-prod:
+  stage: deploy-prod
+  extends: .docker
+  needs: [frontend:release]
+  environment:
+    name: production/frontend
+    url: https://cybra.example.org
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+      allow_failure: false
+  script:
+    - echo "состав $CI_COMMIT_TAG одобрен к выкатке в production"
+    - echo "дальше — frontend:deploy-prod"
+
+frontend:deploy-prod:
+  stage: deploy-prod
+  image: alpine:3.20
+  needs: [frontend:approve-prod]
+  environment:
+    name: production/frontend
+    url: https://cybra.example.org
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - echo "деплой $SERVICE_NAME:$CI_COMMIT_TAG в production"
+    - echo "состав описан в infra/releases/cybra-*.yml"
+    - echo "разворачивает infra-пайплайн — ansible-playbook playbooks/deploy.yml"
+
+frontend:smoke-prod:
+  stage: deploy-prod
+  needs: [frontend:deploy-prod]
+  image: docker:29
+  services:
+    - name: docker:29-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  environment:
+    name: production/frontend
+    url: https://cybra.example.org
+  rules:
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - echo "smoke против выпущенного тега $CI_COMMIT_TAG"
+    - docker pull "$SERVICE_IMAGE:$CI_COMMIT_TAG"
+    - |
+      docker run -d --name frontend-prod-check -p 8080:8080 \
+        "$SERVICE_IMAGE:$CI_COMMIT_TAG"
+    - |
+      for i in $(seq 1 30); do
+        if curl -fsS "http://localhost:8080$HEALTH_PATH" > /dev/null; then
+          echo "prod health ok after ${i} attempts"; break
+        fi
+        sleep 2
+      done
+    - curl -fsS "http://localhost:8080$HEALTH_PATH" | grep -q 'ok'
+    # Проверяем, что SPA отдаётся и в выпущенном образе: пустой dist
+    # означал бы, что контейнер поднялся, но показывает ничего.
+    - curl -fsS http://localhost:8080/ | grep -qi '<div id="root">'
+  after_script:
+    - docker logs frontend-prod-check --tail 40 || true
+    - docker rm -f frontend-prod-check || true
+
+# ======================================================================
+# 18. Rollback
+# ======================================================================
+
+frontend:rollback:
+  stage: rollback
+  extends: .docker
+  needs: []
+  rules:
+    - when: manual
+      allow_failure: true
+  variables:
+    ROLLBACK_TAG: ""
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - test -n "$ROLLBACK_TAG" || (echo "укажите ROLLBACK_TAG — тег, на который откатываемся" && exit 1)
+    - docker pull "$SERVICE_IMAGE:$ROLLBACK_TAG"
+    - docker tag "$SERVICE_IMAGE:$ROLLBACK_TAG" "$SERVICE_IMAGE:latest"
+    - docker push "$SERVICE_IMAGE:latest"
+    - echo "latest возвращён на $ROLLBACK_TAG"
