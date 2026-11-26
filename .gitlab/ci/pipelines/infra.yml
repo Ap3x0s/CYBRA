@@ -206,24 +206,53 @@ infra:deploy-test:
     - echo "--- compose разворачивается и проверяется ---"
     - docker compose --env-file .env -f compose.yaml config --quiet
     - echo "--- поднимаем состав ---"
-    - |
-      docker compose --env-file .env -f compose.yaml up -d --wait --wait-timeout 180 \
-        || (docker compose --env-file .env -f compose.yaml ps; exit 1)
     - echo "--- этап 12, smoke — оба сервиса ---"
+    # Проверка идёт ИЗ СЕТИ DOCKER, а не по localhost:8080.
+    #
+    # Это та же ловушка, что была в монолитном пайплайне, и я повторил её.
+    # `ports: 8080:8080` публикует порт на хосте dind, а job-контейнер живёт
+    # в другой сети: `curl localhost:8080` из шага не достучится никогда,
+    # хотя контейнеры поднялись и health-check compose прошёл.
+    #
+    # Поэтому compose запускается с именем проекта, а проверка идёт
+    # одноразовым curl в той же сети — по имени сервиса.
     - |
+      project="cybra-ci-${CI_PIPELINE_ID}"
+      docker compose --project-name "$project" --env-file .env -f compose.yaml up -d --wait --wait-timeout 180 \
+        || (docker compose --project-name "$project" --env-file .env -f compose.yaml ps; exit 1)
+    - echo "--- backend через прокси nginx ---"
+    - |
+      ok=0
       for i in $(seq 1 30); do
-        if curl -fsS http://localhost:8080/api/v1/health > /dev/null; then
-          echo "backend через прокси ok after ${i}"; break
+        if docker run --rm --network "${project}_cybra" curlimages/curl:latest \
+             -fsS http://frontend:8080/api/v1/health; then
+          echo "backend через прокси ok after ${i}"; ok=1; break
         fi
         sleep 2
       done
-    - curl -fsS http://localhost:8080/api/v1/health | grep -q '"status":"ok"'
-    - curl -fsS http://localhost:8080/ | grep -qi '<div id="root">'
+      test "$ok" = "1" || (echo "health через прокси не прошёл"; exit 1)
+    - |
+      docker run --rm --network "${project}_cybra" curlimages/curl:latest \
+        -fsS http://frontend:8080/api/v1/health | grep -q '"status":"ok"'
+    - echo "--- SPA отдаётся ---"
+    - |
+      docker run --rm --network "${project}_cybra" curlimages/curl:latest \
+        -fsS http://frontend:8080/ | grep -qi '<div id="root">'
+    - echo "--- SPA-fallback и healthz ---"
+    - |
+      docker run --rm --network "${project}_cybra" curlimages/curl:latest \
+        -fsS -o /dev/null -w 'healthz: HTTP %{http_code}\n' http://frontend:8080/healthz
+      code=$(docker run --rm --network "${project}_cybra" curlimages/curl:latest \
+        -sS -o /dev/null -w '%{http_code}' http://frontend:8080/runs/123)
+      echo "GET /runs/123: HTTP $code"
+      test "$code" = "200"
     - echo "оба сервиса отвечают через nginx"
   after_script:
     - cd "$INFRA_DIR" 2>/dev/null || true
-    - docker compose --env-file .env -f compose.yaml logs --tail 40 || true
-    - docker compose --env-file .env -f compose.yaml down -v || true
+    - |
+      project="cybra-ci-${CI_PIPELINE_ID}"
+      docker compose --project-name "$project" --env-file .env -f compose.yaml logs --tail 40 || true
+      docker compose --project-name "$project" --env-file .env -f compose.yaml down -v || true
     - rm -f .env backend.env frontend.env || true
 
 # ======================================================================
