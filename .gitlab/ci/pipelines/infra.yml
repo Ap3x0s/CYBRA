@@ -115,6 +115,11 @@ infra:lint:
     - |
       pip3 install --quiet ansible-core 2>/dev/null || apk add --no-cache ansible-core
       cd "$INFRA_DIR/ansible"
+      # Collections обязательны ДО syntax-check: без них Ansible не
+      # разрешает `community.docker.docker_compose_v2` и падает с
+      # «couldn't resolve module/action», то есть проверка синтаксиса
+      # сообщает о ненайденном модуле, а не о разборе YAML.
+      ansible-galaxy collection install -r requirements.yml > /dev/null
       ANSIBLE_CONFIG=ansible.cfg ansible-playbook --syntax-check \
         -i inventories/dev/hosts.yml playbooks/deploy.yml \
         && echo "playbook синтаксически корректен"

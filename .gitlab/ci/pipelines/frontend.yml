@@ -145,10 +145,19 @@ frontend:test:
       test "$assets" -gt 0
     # index.html должен ссылаться на хешированные бандлы: иначе кеш
     # браузера отдаст старую версию после выката.
+    #
+    # Хеш Vite — base64url, а НЕ hex: `index-Cq-wT_ir.js` содержит дефис и
+    # подчёркивание, и длина плавает. Первая версия проверки ждала ровно
+    # восемь hex-символов и падала на исправной сборке — на CI это
+    # выглядело как «нет хешированных имён», хотя имена были.
     - |
-      grep -qE 'assets/[a-zA-Z0-9_-]+-[a-zA-Z0-9]{8}\.js' /tmp/build-dist/index.html \
-        && echo "бандлы хешированы" \
-        || (echo "ВНИМАНИЕ: в index.html нет хешированных имён"; exit 1)
+      if grep -qE 'assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]{6,}\.(js|css)' /tmp/build-dist/index.html; then
+        echo "бандлы хешированы"
+      else
+        echo "ВНИМАНИЕ: в index.html нет хешированных имён"
+        grep -o 'assets/[^"]*' /tmp/build-dist/index.html || true
+        exit 1
+      fi
     # Минимальный JUnit-отчёт: GitLab показывает его в merge request.
     # Формат собираем руками, потому что тест-раннера нет.
     - |

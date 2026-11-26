@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -162,6 +163,7 @@ def main() -> int:
         return 1
 
     print(f'=== release-манифесты ({len(manifests)}) ===')
+    unfilled = []
     for path in manifests:
         try:
             data = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
@@ -170,8 +172,27 @@ def main() -> int:
             continue
         before = len(problems)
         check_manifest(path, data)
+        # Манифест с заглушкой — это шаблон до первого релиза, а не ошибка
+        # автора. Разделяем два случая: «ещё не заполнен» (нормально на
+        # любом коммите, кроме тега) и «заполнен неверно» (находка).
+        has_placeholder = 'PLACEHOLDER' in path.read_text(encoding='utf-8').upper()
+        if has_placeholder:
+            unfilled.append(path.name)
+            # Убираем претензии про PLACEHOLDER, оставляя остальные.
+            problems[:] = [p for p in problems
+                           if not ('PLACEHOLDER' in p or 'неверную форму' in p)
+                           or path.name not in p]
         status = 'OK' if len(problems) == before else 'см. ниже'
         print(f'  {path.name}: {status}')
+
+    if unfilled:
+        print()
+        print('НЕ ЗАПОЛНЕНЫ (ждём первого релиза): ' + ', '.join(unfilled))
+        # На теге заглушка недопустима: тег означает выпуск, а выпускать
+        # незаполненный манифест значит развернуть что-то не то.
+        if os.environ.get('CI_COMMIT_TAG'):
+            problems.append('на теге манифест обязан быть заполнен: '
+                            + ', '.join(unfilled))
 
     print()
     if problems:
