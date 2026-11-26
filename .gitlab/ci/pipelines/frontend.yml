@@ -125,7 +125,14 @@ frontend:test:
     - .junit
   needs: [frontend:lint]
   script:
-    - mkdir -p "$(dirname "$JUNIT_PATH")"
+    # Каталог для отчёта создаётся ПОСЛЕ возврата в корень проекта.
+    #
+    # Первая версия делала `mkdir -p $(dirname $JUNIT_PATH)` до `cd
+    # frontend`, то есть создавала каталог в корне. Дальше сборка
+    # выполнялась уже из frontend/, и запись относительного
+    # `reports/junit.xml` падала с «nonexistent directory» — при том что
+    # все проверки до этого прошли. Ошибка выглядела как проблема тестов,
+    # а была порядком команд.
     - cd "$FRONTEND_DIR"
     - npm ci --no-audit --no-fund
     - |
@@ -158,6 +165,8 @@ frontend:test:
         grep -o 'assets/[^"]*' /tmp/build-dist/index.html || true
         exit 1
       fi
+    - cd "$CI_PROJECT_DIR"
+    - mkdir -p "$(dirname "$JUNIT_PATH")"
     # Минимальный JUnit-отчёт: GitLab показывает его в merge request.
     # Формат собираем руками, потому что тест-раннера нет.
     - |
