@@ -27,6 +27,7 @@ DOCS = [
     'docs/SUITE.md', 'docs/ru/SUITE.md',
     'docs/OFFLINE.md', 'docs/ru/OFFLINE.md',
     'docs/ARCHITECTURE.md', 'docs/ru/ARCHITECTURE.md',
+    'docs/SSO.md', 'docs/ru/SSO.md',
 ]
 
 # Пары «английский → русский». Русская копия поддерживается параллельно, но
@@ -42,6 +43,7 @@ DOC_PAIRS = [
     ('docs/SUITE.md', 'docs/ru/SUITE.md'),
     ('docs/OFFLINE.md', 'docs/ru/OFFLINE.md'),
     ('docs/ARCHITECTURE.md', 'docs/ru/ARCHITECTURE.md'),
+    ('docs/SSO.md', 'docs/ru/SSO.md'),
 ]
 
 # Документы, на которые обязана ссылаться карта документации. Список

@@ -16,6 +16,7 @@
 | [VALIDATION.md](VALIDATION.md) | Валидация на реальных моделях |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Доставка и развёртывание: CI/CD, образ, окружение, состояние |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Два микросервиса: граница, прокси nginx, два пайплайна, инфра |
+| [SSO.md](SSO.md) | Корпоративный вход через OpenID Connect: Keycloak, LDAP, что проверяется |
 | [OFFLINE.md](OFFLINE.md) | Установка тяжёлых бенчмарков на машине без интернета: bundle, перенос, проверка |
 
 Русский README проекта: [README.ru.md](../../README.ru.md).

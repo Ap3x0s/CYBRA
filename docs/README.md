@@ -16,6 +16,7 @@ maintained in parallel.
 | [VALIDATION.md](VALIDATION.md) | Validation against real models |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Delivery and deployment: CI/CD, image, environment, state |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Two microservices: boundary, nginx proxy, two pipelines, infra |
+| [SSO.md](SSO.md) | Corporate sign-in via OpenID Connect: Keycloak, LDAP, what is verified |
 | [OFFLINE.md](OFFLINE.md) | Installing the heavy benchmarks on a machine with no internet: bundle, transfer, verification |
 
 Project README: [README.md](../README.md) · Russian: [README.ru.md](../README.ru.md).
