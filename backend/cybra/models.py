@@ -46,9 +46,24 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(120), default="")
-    password_hash: Mapped[str] = mapped_column(String(255))
+    # Пустой хеш у пользователя, который входит только через OIDC: локального
+    # пароля у него нет вовсе. Проверка пароля такой хеш не примет (argon2
+    # ответит VerificationError), то есть случайно пустить по пустому паролю
+    # нельзя — но и хранить заведомо бесполезный хеш незачем.
+    password_hash: Mapped[str] = mapped_column(String(255), default="")
     role: Mapped[str] = mapped_column(String(20), default="viewer")  # admin|operator|viewer
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # --- вход через OpenID Connect -----------------------------------
+    #
+    # subject из id_token — стабильный идентификатор человека в Keycloak.
+    # Привязка идёт по нему, а НЕ по email: email сотрудник может сменить
+    # (или его переиспользуют после увольнения), и тогда привязка по email
+    # отдала бы чужой аккаунт вместе с ролями.
+    oidc_sub: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    # Откуда пришла учётная запись: local (пароль у нас) или oidc
+    # (пароль у провайдера). Нужен, чтобы локальный вход можно было
+    # ограничить только аварийными админскими учётками.
+    auth_source: Mapped[str] = mapped_column(String(16), default="local")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 

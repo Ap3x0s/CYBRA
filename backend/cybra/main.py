@@ -141,6 +141,13 @@ async def lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="CYBRA", version="0.1.0", lifespan=lifespan)
     app.include_router(router)
+    # Вход через OpenID Connect отдельным роутером: он не про ресурсы
+    # приложения, а про то, как в него попадают. Подключается всегда —
+    # если провайдер не настроен, эндпоинты честно отвечают 404, а кнопка
+    # в интерфейсе не рисуется.
+    from .auth_oidc import router as oidc_router
+
+    app.include_router(oidc_router)
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):  # noqa: ANN001

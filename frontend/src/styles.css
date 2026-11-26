@@ -1007,6 +1007,62 @@ hr.sep { border: none; border-top: 1px solid var(--edge-soft); margin: 18px 0; }
   justify-content: center;
 }
 
+/* ------------------------------------------------------- вход через SSO */
+/* Кнопка ведёт на другой домен (Keycloak), поэтому это ссылка, а не
+   <button>: у ссылки браузер сам делает переход, и оформление должно
+   совпадать с обычной кнопкой, иначе она читается как «что-то другое». */
+.login-sso {
+  margin-bottom: 18px;
+}
+
+.sso-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  /* Рамка вместо заливки: главное действие на экране — форма пароля для
+     админа, а SSO для сотрудников. Две равные по весу кнопки заставили бы
+     выбирать, хотя выбор уже сделан политикой компании. */
+  background: transparent;
+  border: 1px solid var(--line-strong, #3a3a42);
+  color: var(--text, #e8e8ee);
+  box-sizing: border-box;
+}
+
+.sso-btn:hover {
+  border-color: var(--accent, #f0a020);
+  color: var(--accent, #f0a020);
+}
+
+.login-sso-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--dim, #9a9aa4);
+  text-align: center;
+}
+
+/* Разделитель «или локальная учётная запись». Линия идёт по обе стороны
+   текста: без неё непонятно, что ниже — другой способ входа, а не
+   продолжение того же. */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 4px;
+  font-size: 12px;
+  color: var(--dim, #9a9aa4);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line, #2c2c34);
+}
+
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 .fade-in { animation: rise 380ms var(--ease) both; }

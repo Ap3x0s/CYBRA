@@ -1,0 +1,70 @@
+# Начальное содержимое каталога: люди и группы.
+#
+# osixia/openldap читает файлы из /container/service/slapd/assets/config/bootstrap/ldif/custom
+# при старте с --copy-service. Здесь создаём подразделения и двух человек.
+#
+# Зачем это нужно: Keycloak не хранит сотрудников сам, он читает их отсюда.
+# Без этих записей LDAP-федерация подключается к пустому каталогу, и вход
+# через SSO не с кем проверить.
+
+# --- Структурные подразделения ---------------------------------------
+dn: ou=people,dc=example,dc=org
+objectClass: organizationalUnit
+objectClass: top
+ou: people
+description: Сотрудники
+
+dn: ou=groups,dc=example,dc=org
+objectClass: organizationalUnit
+objectClass: top
+ou: groups
+description: Группы
+
+# --- Сотрудники -------------------------------------------------------
+#
+# userPassword хранится в открытом виде в файле, но OpenLDAP хеширует его
+# при загрузке. Для стенда допустимо; в проде пароли в LDIF не пишут —
+# их либо синхронизируют из AD, либо задают через админку.
+#
+# Пароль у обоих — "password": так проще проверять, и это очевидно
+# тестовое значение.
+
+dn: uid=ivanov,ou=people,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: ivanov
+cn: Иван Иванов
+sn: Иванов
+givenName: Иван
+mail: ivanov@example.org
+userPassword: password
+title: Инженер по безопасности
+
+dn: uid=petrova,ou=people,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: petrova
+cn: Анна Петрова
+sn: Петрова
+givenName: Анна
+mail: petrova@example.org
+userPassword: password
+title: Аналитик
+
+# --- Группа -----------------------------------------------------------
+#
+# Группа нужна, чтобы показать: роли в Keycloak можно выдавать по членству
+# в группе каталога, а не заводить каждому вручную. Наше приложение роли из
+# токена всё равно не принимает — оно маппит их у себя.
+
+dn: cn=cybra-users,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+objectClass: top
+cn: cybra-users
+description: Пользователи консоли CYBRA
+member: uid=ivanov,ou=people,dc=example,dc=org
+member: uid=petrova,ou=people,dc=example,dc=org

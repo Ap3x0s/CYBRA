@@ -1,0 +1,158 @@
+# Тестовый стенд Keycloak + LDAP для CYBRA.
+#
+# Отдельный файл и отдельный каталог — как и требовалось: основной
+# infra/compose.yaml описывает НАШЕ приложение, а этот стенд поднимает
+# внешнего провайдера идентичности. Смешивать их значило бы утверждать, что
+# Keycloak — часть поставки CYBRA, а это не так: у заказчика он уже есть.
+#
+# Запуск:
+#   cd infra/keycloak
+#   docker compose up -d
+#   ... подождать ~60 с, пока Keycloak импортирует realm ...
+#   open http://localhost:8080/admin        (админка Keycloak)
+#   open http://localhost:8081              (phpLDAPadmin, дерево людей)
+#
+# Почему LDAP в стенде: это ровно та связка, что у заказчика. Keycloak не
+# хранит сотрудников сам — он читает их из каталога. Если тестировать без
+# LDAP, проверяется только половина пути: вход по паролю из внутренней базы
+# Keycloak, а не федерация с Active Directory.
+#
+# Наружу открыты только порты стенда. В основной compose CYBRA этот файл не
+# подключается: приложение о Keycloak знает только по URL и client_id.
+
+services:
+  # ------------------------------------------------------------------
+  # LDAP — единственное место, где реально лежат сотрудники.
+  #
+  # osixia/openldap — готовый OpenLDAP с демо-данными. База домена
+  # example.org, администратор cn=admin,dc=example,dc=org.
+  # ------------------------------------------------------------------
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: cybra-ldap
+    command: --copy-service
+    environment:
+      LDAP_ORGANISATION: "CYBRA"
+      LDAP_DOMAIN: "example.org"
+      # Пароль администратора каталога. Для стенда допустим простой: этот
+      # контейнер не публикуется в интернет и удаляется после проверки.
+      # В проде это была бы защищённая переменная.
+      LDAP_ADMIN_PASSWORD: "admin"
+      # Отключаем TLS внутри стенда: Keycloak ходит в LDAP по ldap://,
+      # а не ldaps://. Настройка настоящего сертификата — отдельная работа,
+      # которая не влияет на то, что мы здесь проверяем.
+      LDAP_TLS: "false"
+    ports:
+      # 389 — стандартный LDAP. Наружу нужен только чтобы phpLDAPadmin и
+      # диагностика могли посмотреть дерево; сам Keycloak ходит по имени
+      # сервиса внутри сети compose.
+      - "389:389"
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+      # Сотрудники. Монтируется в каталог, который образ с --copy-service
+      # читает при старте: без этого LDAP поднимется пустым, и LDAP-федерация
+      # в Keycloak подключится к каталогу без людей.
+      - ./ldap/staff.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/50-staff.ldif:ro
+    networks:
+      - sso
+
+  # ------------------------------------------------------------------
+  # phpLDAPadmin — веб-интерфейс к каталогу.
+  #
+  # Не обязателен для работы SSO, но без него «сотрудники лежат в LDAP»
+  # остаётся словами: непонятно, кто там есть и что у них за атрибуты.
+  # С ним видно дерево, dn, uid, mail — и то же самое видит Keycloak.
+  # ------------------------------------------------------------------
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: cybra-phpldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: ldap
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "8081:80"
+    depends_on:
+      - ldap
+    networks:
+      - sso
+
+  # ------------------------------------------------------------------
+  # PostgreSQL для Keycloak.
+  #
+  # Отдельная база, НЕ наша. Keycloak хранит у себя конфигурацию realm,
+  # клиентов, сессии SSO и кеш пользователей из LDAP. Свою базу CYBRA
+  # (users, runs) это не трогает никак.
+  # ------------------------------------------------------------------
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: cybra-keycloak-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - keycloak-db:/var/lib/postgresql/data
+    networks:
+      - sso
+    healthcheck:
+      # Keycloak стартует мгновенно и падает, если база ещё не готова.
+      # Без этого условия он уходит в рестарт-цикл.
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ------------------------------------------------------------------
+  # Keycloak — провайдер идентичности.
+  #
+  # start-dev: без TLS и кластерной настройки. Для стенда это верный
+  # выбор; в проде нужен обычный режим с HTTPS.
+  #
+  # --import-realm: при первом старте читает realm-cybra.json из
+  # /opt/keycloak/data/import. Файл описывает realm, клиента, LDAP-
+  # федерацию и тестового сотрудника — так стенд воспроизводим: не надо
+  # кликать в админке то же самое второй раз.
+  # ------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: cybra-keycloak
+    command:
+      - start-dev
+      - --import-realm
+      - --http-port=8080
+      # За прокси Keycloak должен знать, что снаружи https: иначе он
+      # строит redirect_uri с http и браузер уходит не туда. В стенде
+      # прокси нет, поэтому edge; в проде — reencrypt или passthrough.
+      - --hostname-strict=false
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      # Разрешаем http для локального стенда: без этого Keycloak требует
+      # https на все запросы, и redirect из браузера не работает.
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./realm-cybra.json:/opt/keycloak/data/import/realm-cybra.json:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+      ldap:
+        condition: service_started
+    networks:
+      - sso
+
+networks:
+  sso:
+    driver: bridge
+
+volumes:
+  ldap-data:
+  ldap-config:
+  keycloak-db:

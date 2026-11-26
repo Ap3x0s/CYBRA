@@ -81,6 +81,20 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str, str], ...] = (
     # таблица, колонка, тип для SQLite, тип для PostgreSQL
     ("run_steps", "planned", "INTEGER", "INTEGER"),
     ("runs", "verdicts", "JSON", "JSONB"),
+    # Вход через OpenID Connect. Добавлены после первого релиза, поэтому у
+    # работающей установки их нет в БД — без этих строк любой SELECT по
+    # users падал бы с «no such column: users.oidc_sub».
+    #
+    # auth_source получает значение по умолчанию 'local': все существующие
+    # учётки заведены паролем, и это верно для них. Пришедшие через OIDC
+    # запишут 'oidc' явно при первом входе.
+    ("users", "oidc_sub", "VARCHAR(255)", "VARCHAR(255)"),
+    (
+        "users",
+        "auth_source",
+        "VARCHAR(16) NOT NULL DEFAULT 'local'",
+        "VARCHAR(16) NOT NULL DEFAULT 'local'",
+    ),
 )
 
 

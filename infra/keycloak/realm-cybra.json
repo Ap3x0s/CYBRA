@@ -1,0 +1,170 @@
+{
+  "realm": "cybra",
+  "enabled": true,
+  "displayName": "CYBRA Test Realm",
+  "displayNameHtml": "<strong>CYBRA</strong> test realm",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+
+  "clients": [
+    {
+      "clientId": "cybra",
+      "name": "CYBRA console",
+      "description": "LLM security console: runs benchmarks and renders reports",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "cybra-local-dev-secret-not-for-production",
+      "redirectUris": [
+        "http://localhost:8011/api/v1/auth/oidc/callback",
+        "http://127.0.0.1:8011/api/v1/auth/oidc/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8011",
+        "http://127.0.0.1:8011"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8011/*",
+        "access.token.lifespan": "300"
+      },
+      "fullScopeAllowed": true
+    }
+  ],
+
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Демо",
+      "lastName": "Пользователь",
+      "email": "demo@example.org",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["default-roles-cybra"]
+    }
+  ],
+
+  "components": {
+    "org.keycloak.storage.UserStorageProvider": [
+      {
+        "name": "ldap-staff",
+        "providerId": "ldap",
+        "subComponents": {
+          "org.keycloak.storage.ldap.mappers.LDAPStorageMapper": [
+            {
+              "name": "username",
+              "providerId": "user-attribute-ldap-mapper",
+              "subComponents": {},
+              "config": {
+                "ldap.attribute": ["uid"],
+                "user.model.attribute": ["username"],
+                "read.only": ["true"],
+                "always.read.value.from.ldap": ["true"],
+                "is.mandatory.in.ldap": ["true"]
+              }
+            },
+            {
+              "name": "email",
+              "providerId": "user-attribute-ldap-mapper",
+              "subComponents": {},
+              "config": {
+                "ldap.attribute": ["mail"],
+                "user.model.attribute": ["email"],
+                "read.only": ["true"],
+                "always.read.value.from.ldap": ["false"],
+                "is.mandatory.in.ldap": ["false"]
+              }
+            },
+            {
+              "name": "first name",
+              "providerId": "user-attribute-ldap-mapper",
+              "subComponents": {},
+              "config": {
+                "ldap.attribute": ["givenName"],
+                "user.model.attribute": ["firstName"],
+                "read.only": ["true"],
+                "always.read.value.from.ldap": ["false"],
+                "is.mandatory.in.ldap": ["false"]
+              }
+            },
+            {
+              "name": "last name",
+              "providerId": "user-attribute-ldap-mapper",
+              "subComponents": {},
+              "config": {
+                "ldap.attribute": ["sn"],
+                "user.model.attribute": ["lastName"],
+                "read.only": ["true"],
+                "always.read.value.from.ldap": ["false"],
+                "is.mandatory.in.ldap": ["false"]
+              }
+            }
+          ]
+        },
+        "config": {
+          "enabled": ["true"],
+          "vendor": ["other"],
+          "connectionUrl": ["ldap://ldap:389"],
+          "usersDn": ["ou=people,dc=example,dc=org"],
+          "authType": ["simple"],
+          "bindDn": ["cn=admin,dc=example,dc=org"],
+          "bindCredential": ["admin"],
+          "editMode": ["READ_ONLY"],
+          "usernameLDAPAttribute": ["uid"],
+          "rdnLDAPAttribute": ["uid"],
+          "uuidLDAPAttribute": ["entryUUID"],
+          "userObjectClasses": ["inetOrgPerson, organizationalPerson"],
+          "searchScope": ["2"],
+          "importEnabled": ["true"],
+          "syncRegistrations": ["false"],
+          "pagination": ["true"],
+          "batchSizeForSync": ["1000"],
+          "validatePasswordPolicy": ["false"],
+          "trustEmail": ["true"]
+        }
+      }
+    ]
+  },
+
+  "roles": {
+    "realm": [
+      {
+        "name": "default-roles-cybra",
+        "description": "Автоматически выдаётся всем вошедшим",
+        "composite": false,
+        "clientRole": false
+      }
+    ]
+  },
+
+  "defaultDefaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "basic"],
+  "defaultOptionalClientScopes": ["address", "phone", "offline_access"],
+
+  "smtpServer": {},
+
+  "eventsEnabled": true,
+  "eventsExpiration": 3600,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true
+}

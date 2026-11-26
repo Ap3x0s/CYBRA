@@ -99,6 +99,25 @@ def _public_user(user: User) -> dict:
 @router.post("/auth/login")
 def login(payload: LoginIn, request: Request, response: Response, db: OrmSession = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email.lower().strip()))
+
+    # При включённом SSO локальный пароль остаётся только аварийным входом.
+    #
+    # Зачем вообще: если Keycloak лежит или его настройки сломаны, нужен
+    # способ зайти и починить — иначе сломанный SSO блокирует починку самого
+    # SSO. Но разрешать пароль ВСЕМ при работающем SSO нельзя: сотрудник
+    # обойдёт корпоративную политику, просто не нажав кнопку.
+    #
+    # Поэтому по умолчанию (CYBRA_OIDC_ALLOW_LOCAL=1) локальный вход
+    # работает, и это осознанный выбор для стенда. В корпоративном
+    # развёртывании ставится 0 — тогда учётка, пришедшая через провайдера,
+    # по паролю не войдёт вовсе: пароля у неё и нет.
+    if settings.oidc_enabled and not settings.oidc_allow_local:
+        if user is not None and user.auth_source == "oidc":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Вход по паролю отключён: используйте корпоративный аккаунт",
+            )
+
     if (
         user is None
         or not user.is_active
