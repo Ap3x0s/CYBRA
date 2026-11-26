@@ -1,86 +1,48 @@
-# Production-профиль: развёртывание артефакта из registry, без сборки.
+# Устаревший файл. Состав приложения переехал в infra/compose.yaml.
 #
-# Зачем вообще compose, если хватает docker run: нужен предсказуемый рестарт,
-# явный volume и возможность позже вынести scan в отдельный контейнер, не
-# переписывая образ.
+# Здесь был production-профиль для ЕДИНОГО образа: приложение, которое само
+# раздаёт SPA и ходит в базу. После разделения на два микросервиса этот файл
+# развернул бы только бэкенд — то есть стенд без пользовательского входа,
+# где API отвечает, а открыть нечего.
 #
-# Почему здесь НЕТ `build:` — это не забывчивость, а суть профиля. С `build:`
-# compose собирает образ из локального контекста и молча подменяет тег
-# `cybra/cybra:latest`, так что на двух машинах оказываются две разные сборки
-# под одним именем. Именно этого и не должно быть: одна и та же развёртка
-# у всех. Собирает и публикует только CI (см. .gitlab-ci.yml), сюда приходит
-# уже проверенный образ.
+# Файл оставлен, а не удалён, по одной причине: на него ссылаются старые
+# копии документации и, возможно, чьи-то локальные скрипты. Молча удалить
+# значит превратить понятную ошибку «не тот compose» в невнятную «файла
+# нет».
 #
-#   docker login registry.example.com
-#   printf 'CYBRA_SECRET_KEY=%s\n' "<key>" > docker/.env
-#   docker compose -f docker/compose.prod.yaml pull
-#   docker compose -f docker/compose.prod.yaml up -d
+# Актуальный состав:
 #
-# Локальная сборка для разработки — docker build напрямую (см. README).
+#   infra/compose.yaml          два сервиса + проксирование через nginx
+#   infra/releases/*.yml        какой digest каждого сервиса разворачивается
+#   infra/ansible/playbooks/    деплой через Ansible
+#
+# Развёртывание:
+#
+#   ansible-playbook -i infra/inventories/dev/hosts.yml \
+#     infra/ansible/playbooks/deploy.yml \
+#     -e release_id=cybra-0.1.0 -e target_env=dev \
+#     -e backend_image=<...>@sha256:<...> -e frontend_image=<...>@sha256:<...>
+#
+# Вручную, без Ansible:
+#
+#   cd infra
+#   printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' "<backend@sha256:...>" "<frontend@sha256:...>" > .env
+#   printf 'CYBRA_SECRET_KEY=%s\n' "<key>" > backend.env
+#   docker compose --env-file .env -f compose.yaml up -d
+#
+# Документация: docs/DEPLOYMENT.md, docs/ARCHITECTURE.md.
 
 services:
   cybra:
-    # Переопределяется через CYBRA_IMAGE, чтобы тот же файл работал и с
-    # локальным стендом, и с корпоративным registry.
-    image: ${CYBRA_IMAGE:-cybra/cybra:latest}
-    # Всегда тянуть из registry: если образа нет локально, compose без этого
-    # попытается собрать его из контекста и упадёт с невнятной ошибкой.
-    pull_policy: always
-    container_name: cybra
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      # Сгенерируйте один раз: python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
-      CYBRA_SECRET_KEY: ${CYBRA_SECRET_KEY:?set CYBRA_SECRET_KEY in .env}
-      CYBRA_COOKIE_SECURE: "0"          # включите 1 за HTTPS-прокси
-      CYBRA_ENGINE: subprocess
-      CYBRA_SESSION_TTL_HOURS: "12"
-      # Если задана — приложение работает на PostgreSQL, иначе на SQLite в
-      # томе cybra-data. По умолчанию пусто: `docker compose up` должен
-      # подниматься без второго сервиса, иначе первый запуск требует ещё и
-      # пароля к базе.
-      CYBRA_DATABASE_URL: ${CYBRA_DATABASE_URL:-}
-    volumes:
-      - cybra-data:/data
-    depends_on:
-      # Не ждём healthcheck: при пустом CYBRA_DATABASE_URL база не нужна,
-      # а условие service_started не блокирует запуск без неё.
-      db:
-        condition: service_started
-        required: false
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v1/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-
-  # PostgreSQL — отдельный сервис, а не встроенная база: состояние переживает
-  # замену контейнера приложения и бэкапится своим расписанием.
-  # Профиль `db` означает, что этот сервис не поднимается по умолчанию:
-  #   docker compose -f docker/compose.prod.yaml --profile db up -d
-  # и тогда в .env нужно задать CYBRA_DATABASE_URL (см. docs/DEPLOYMENT.md).
-  db:
-    image: postgres:16-alpine
-    profiles: ["db"]
-    container_name: cybra-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-cybra}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-cybra}
-    volumes:
-      - cybra-pg:/var/lib/postgresql/data
-    # Порт наружу не публикуем: приложение ходит по внутренней сети compose.
-    # Для отладки добавьте "127.0.0.1:5432:5432" вручную.
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cybra}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-volumes:
-  cybra-data:
-  cybra-pg:
+    image: ${CYBRA_IMAGE:?use infra/compose.yaml instead — see the comment above}
+    profiles: ["legacy"]
+    # Профиль legacy: этот сервис не поднимается по умолчанию даже если
+    # файл попал в команду по ошибке. Явный отказ понятнее, чем стенд,
+    # который «работает», но показывает 502 на всём, кроме /api.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        echo "docker/compose.prod.yaml устарел: приложение разделено на
+        backend и frontend." >&2;
+        echo "Используйте infra/compose.yaml — см. docs/DEPLOYMENT.md." >&2;
+        exit 1

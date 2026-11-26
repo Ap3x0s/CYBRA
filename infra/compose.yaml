@@ -1,0 +1,121 @@
+# CYBRA — два микросервиса и прокси между ними.
+#
+# Файл описывает СОСТАВ приложения, а не способ его развернуть. Ansible
+# рендерит .env из configurations/ и запускает этот compose на целевом хосте
+# (см. infra/ansible/roles/deploy_compose). Локально его можно поднять руками.
+#
+# Ключевое свойство: compose ссылается на образы по DIGEST, а не по
+# `latest`. Тег можно переставить на другой образ, digest — нельзя, поэтому
+# «что сейчас развёрнуто» отвечается однозначно. Именно этого требует
+# releases/*.yml: манифест фиксирует digest каждого сервиса.
+#
+# Переменные с суффиксом `:?` означают «обязательна, без неё не стартуем».
+# Compose в таком случае падает с внятным сообщением, а не подставляет
+# пустую строку и не даёт приложению упасть позже и непонятнее.
+
+services:
+  # ------------------------------------------------------------------
+  # Backend: API, супервизор прогонов, база.
+  # ------------------------------------------------------------------
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required (см. releases/*.yml)}
+    # Всегда тянем: если образа нет локально, без этого compose попытается
+    # собрать его из контекста и упадёт с невнятной ошибкой. Собирает только
+    # CI, сюда приходит проверенный артефакт.
+    #
+    # Переопределяется через CYBRA_PULL_POLICY: локальная проверка стека
+    # работает с образами, собранными `docker build` и ещё не уехавшими в
+    # registry. Без этой возможности smoke-прогон infra-пайплайна требовал
+    # бы публикации до проверки — то есть проверял бы уже опубликованное, а
+    # не то, что собрано здесь и сейчас.
+    pull_policy: ${CYBRA_PULL_POLICY:-always}
+    restart: unless-stopped
+    # Порт НЕ публикуется наружу: единственная точка входа — фронтенд,
+    # который проксирует /api. Так нет второго открытого порта, который
+    # надо не забыть закрыть, и нет обхода прокси.
+    expose:
+      - "8000"
+    env_file:
+      - ./backend.env
+    environment:
+      CYBRA_DATA_DIR: /data
+      CYBRA_HOST: 0.0.0.0
+      CYBRA_PORT: "8000"
+    volumes:
+      - cybra-data:/data
+    networks:
+      - cybra
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ------------------------------------------------------------------
+  # Frontend: nginx со статикой и проксированием /api.
+  # ------------------------------------------------------------------
+  frontend:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required (см. releases/*.yml)}
+    pull_policy: ${CYBRA_PULL_POLICY:-always}
+    restart: unless-stopped
+    # Единственный порт, видимый снаружи.
+    ports:
+      - "${FRONTEND_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        # Ждём именно готовности, а не просто запуска процесса: nginx
+        # стартует мгновенно, а бэкенд создаёт схему БД и печатает пароль.
+        # Без условия фронт поднимается раньше и первые запросы к /api
+        # получают 502.
+        condition: service_healthy
+    networks:
+      - cybra
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ------------------------------------------------------------------
+  # PostgreSQL — отдельный сервис, не встроенная база.
+  # Состояние переживает замену контейнера и бэкапится своим расписанием.
+  # Профиль `db`: по умолчанию не поднимается, чтобы первый запуск не
+  # требовал второго сервиса и пароля к нему.
+  #   docker compose --profile db up -d
+  # ------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    profiles: ["db"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cybra}
+      # Не `:?` — и это осознанно. Профиль `db` выключен по умолчанию, но
+      # compose подставляет переменные ВСЕХ сервисов, включая неактивные:
+      # с обязательной переменной `docker compose up` без базы падал с
+      # «required variable POSTGRES_PASSWORD is missing», хотя база не
+      # нужна вовсе. Проверка перенесена в роль preflight, где она и
+      # должна быть.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_DB: ${POSTGRES_DB:-cybra}
+    volumes:
+      - cybra-pg:/var/lib/postgresql/data
+    networks:
+      - cybra
+    # Порт наружу не публикуем: приложение ходит по внутренней сети compose.
+    # Для отладки добавьте "127.0.0.1:5432:5432" вручную.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cybra}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  cybra:
+    driver: bridge
+
+volumes:
+  cybra-data:
+  cybra-pg:

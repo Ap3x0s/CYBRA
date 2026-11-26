@@ -1,0 +1,21 @@
+# Зависимости collections.
+#
+# Версии закреплены: незакреплённая collection означает, что деплой может
+# измениться без единой правки в репозитории. Роадмап (шаг 6) требует
+# закреплять версии в образе ansible-cd; здесь — тот же принцип для
+# collections.
+#
+# Установка:
+#   ansible-galaxy collection install -r requirements.yml
+
+collections:
+  # community.docker даёт docker_compose_v2 — модуль, который знает про
+  # compose-плагин v2 и умеет state=present без пересоздания неизменённых
+  # контейнеров.
+  - name: community.docker
+    version: ">=3.10.0,<4.0.0"
+
+  # posix — для базовых модулей вроде filesystem и mount, если понадобятся
+  # при расширении роли preflight.
+  - name: ansible.posix
+    version: ">=1.5.0,<2.0.0"

@@ -1,0 +1,33 @@
+# Окружение prod-lab: несекретные параметры.
+#
+# «lab» в имени не случаен: это учебный прод, не связанный с настоящим
+# продакшеном заказчика. Роадмап требует именно такого — иначе отработка
+# отката шла бы на живом контуре.
+#
+# Что здесь отличается по сути, а не по номеру порта:
+#   * cookie только по HTTPS;
+#   * сессия короче;
+#   * логи без подробностей;
+#   * база — PostgreSQL, а не SQLite в томе (в проде состояние не должно
+#     жить в файле, который уходит вместе с контейнером).
+
+cybra_env: prod-lab
+
+backend_upstream: "backend:8000"
+api_base_url: "https://cybra.example.org"
+
+frontend_port: 8082
+
+# Обязательное значение: за TLS-прокси cookie не должна уходить по http.
+cybra_cookie_secure: "1"
+
+# Короче, чем на stage: продовый профиль.
+cybra_session_ttl_hours: "8"
+
+cybra_log_level: warning
+
+# PostgreSQL. Пароль подставляется из секрета, не хранится в git.
+cybra_database_url: "postgresql+psycopg://cybra:{{ lookup('env', 'POSTGRES_PASSWORD') }}@db:5432/cybra"
+
+backend_memory: "2g"
+frontend_memory: "128m"

@@ -1,0 +1,51 @@
+# Манифест состава приложения.
+#
+# Это центральная сущность роадмапа: между окружениями едет ОДИН И ТОТ ЖЕ
+# набор образов, зафиксированный по digest, без повторной сборки.
+#
+# Почему digest, а не тег: тег можно переставить на другой образ, digest —
+# нельзя. «Что сейчас развёрнуто» должно отвечаться однозначно, иначе откат
+# и разбор инцидента превращаются в догадки.
+#
+# digest заполняется автоматически скриптом scripts/update_release.py
+# после сборки образов. Руками не правится: опечатка в digest означает,
+# что на стенд уедет не тот образ, и заметить это будет нечем.
+#
+# Проверка: python scripts/check_release.py
+
+release_id: cybra-0.1.0
+created: "2026-11-24"
+config_ref: "PLACEHOLDER_CONFIG_REF"
+
+services:
+  backend:
+    version: "0.1.0"
+    image: "registry.gitlab.com/ap3x0/cybra/backend@sha256:PLACEHOLDER_BACKEND_DIGEST"
+    health: "/api/v1/health"
+    port: 8000
+
+  frontend:
+    version: "0.1.0"
+    image: "registry.gitlab.com/ap3x0/cybra/frontend@sha256:PLACEHOLDER_FRONTEND_DIGEST"
+    health: "/healthz"
+    port: 8080
+    # Фронт ходит в бэк по имени сервиса в compose-сети.
+    depends_on: [backend]
+
+# Проверки, которые выполняет smoke после деплоя. Держим их рядом с
+# составом, а не в YAML пайплайна: если у сервиса поменяется контракт,
+# правка будет в одном месте.
+smoke:
+  - name: backend health
+    url: "http://localhost:{{ frontend_port }}/api/v1/health"
+    expect_status: 200
+    expect_body: '"status":"ok"'
+  - name: frontend serves SPA
+    url: "http://localhost:{{ frontend_port }}/"
+    expect_status: 200
+    expect_body: '<div id="root">'
+  - name: frontend proxies API to backend
+    # Главная проверка разделения: запрос через nginx должен дойти до
+    # бэкенда. Забытый proxy_pass ловится именно здесь.
+    url: "http://localhost:{{ frontend_port }}/api/v1/capabilities"
+    expect_status: 200

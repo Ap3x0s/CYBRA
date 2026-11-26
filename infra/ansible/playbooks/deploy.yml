@@ -1,0 +1,81 @@
+# Деплой состава CYBRA на целевой хост.
+#
+# Порядок шагов — из роадмапа (шаг 12): валидация входов → рендер конфигов →
+# проверка compose → pull → up → health → запись результата. Нарушать его
+# нельзя: если pull окажется раньше проверки входов, мы скачаем образ и
+# только потом узнаем, что переменная не задана.
+#
+# Запуск:
+#   ansible-playbook -i inventories/dev/hosts.yml playbooks/deploy.yml \
+#     -e release_id=cybra-0.1.0 -e target_env=dev
+#
+# Переменные, которые обязаны прийти снаружи (входы контракта):
+#   release_id   — какой состав разворачиваем; сверяется с releases/*.yml
+#   target_env   — dev | stage | prod-lab; выбирает configurations/environments
+#   backend_image, frontend_image — полные ссылки с digest; обычно берутся
+#                  из manifest, но можно передать явно для отладки
+
+- name: CYBRA — развернуть состав
+  hosts: all
+  gather_facts: true
+
+  vars:
+    # Пути на целевом хосте. Фиксированы: относительные пути зависели бы
+    # от того, откуда запущен ansible, и деплой в dev мог бы перетереть stage.
+    deploy_root: "/opt/cybra/{{ target_env }}"
+    compose_file: "{{ deploy_root }}/compose.yaml"
+    config_dir: "{{ deploy_root }}/config"
+
+  pre_tasks:
+    # --- Валидация входов -------------------------------------------
+    # Делаем до всего остального: дешевле упасть на пустой переменной,
+    # чем скачать два образа и узнать то же самое.
+    - name: Проверить обязательные входы
+      ansible.builtin.assert:
+        that:
+          - release_id is defined and release_id | length > 0
+          - target_env is defined and target_env in ['dev', 'stage', 'prod-lab']
+          - backend_image is defined and '@sha256:' in backend_image
+          - frontend_image is defined and '@sha256:' in frontend_image
+        fail_msg: >-
+          Нужны release_id, target_env (dev|stage|prod-lab) и образы,
+          зафиксированные по digest. Тег вместо digest недопустим: тег
+          можно переставить, и «что развёрнуто» перестанет быть однозначным.
+        quiet: true
+
+    - name: Показать, что разворачиваем
+      ansible.builtin.debug:
+        msg:
+          - "релиз:    {{ release_id }}"
+          - "среда:    {{ target_env }}"
+          - "backend:  {{ backend_image }}"
+          - "frontend: {{ frontend_image }}"
+
+  roles:
+    # Подготовка хоста: docker, compose-плагин, каталоги.
+    - role: preflight
+
+    # Собственно развёртывание: render → pull → up → health.
+    - role: deploy_compose
+
+  post_tasks:
+    # Запись результата. Нужна для того, чтобы «что сейчас развёрнуто»
+    # отвечалось без захода в CI: файл читается на самом хосте.
+    - name: Записать активный состав
+      ansible.builtin.copy:
+        dest: "{{ deploy_root }}/active-release.yml"
+        mode: "0644"
+        content: |
+          # Записано Ansible при деплое. Руками не править.
+          release_id: {{ release_id }}
+          target_env: {{ target_env }}
+          deployed_at: "{{ ansible_date_time.iso8601 }}"
+          backend_image: "{{ backend_image }}"
+          frontend_image: "{{ frontend_image }}"
+          compose_file: "{{ compose_file }}"
+
+    - name: Итог
+      ansible.builtin.debug:
+        msg:
+          - "развёрнут {{ release_id }} в {{ target_env }}"
+          - "активный состав: {{ deploy_root }}/active-release.yml"

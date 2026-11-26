@@ -1,0 +1,203 @@
+# Роль deploy_compose — развернуть состав и проверить его.
+#
+# Порядок жёсткий и продиктован роадмапом (шаг 12):
+#   валидация входов → render .env → проверка compose → pull → up → health
+#
+# Почему именно так:
+#   * render до pull: незаполненная переменная должна упасть до скачивания
+#     двух сотен мегабайт;
+#   * `compose config` до up: синтаксическая ошибка в YAML находится за
+#     секунду здесь, а не через минуту на старте контейнера;
+#   * health после up и до записи результата: «развернули» и «работает» —
+#     разные утверждения, и записывать в active-release второе, не проверив
+#     первое, значит соврать в истории.
+
+- name: Загрузить параметры окружения
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../configurations/environments/{{ target_env }}.yml"
+    name: env_config
+
+- name: Проверить, что параметры окружения прочитаны
+  ansible.builtin.assert:
+    that:
+      - env_config.cybra_env is defined
+      - env_config.backend_upstream is defined
+      - env_config.frontend_port is defined
+    fail_msg: "Не удалось прочитать configurations/environments/{{ target_env }}.yml"
+    quiet: true
+
+# --- Render ---------------------------------------------------------
+# Jinja2 не экранирует .env автоматически, поэтому проверяем значения на
+# отсутствие переводов строк: многострочное значение молча ломает формат
+# (роадмап, шаг 11).
+
+- name: Проверить значения перед рендером
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - "'\n' not in item"
+    fail_msg: "Значение содержит перевод строки и сломает .env: {{ item }}"
+    quiet: true
+  loop:
+    - "{{ env_config.backend_upstream }}"
+    - "{{ env_config.api_base_url }}"
+
+- name: Скопировать compose.yaml на хост
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../compose.yaml"
+    dest: "{{ compose_file }}"
+    mode: "0640"
+
+- name: Сгенерировать backend.env
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../../configurations/templates/backend.env.j2"
+    dest: "{{ config_dir }}/backend.env"
+    # 0600: в файле ключ шифрования и строка подключения к базе.
+    mode: "0600"
+  no_log: true
+
+- name: Сгенерировать frontend.env
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../../configurations/templates/frontend.env.j2"
+    dest: "{{ config_dir }}/frontend.env"
+    mode: "0644"
+  # no_log здесь не нужен: секретов нет, а видеть изменения полезно.
+
+- name: Сгенерировать .env для подстановки в compose
+  ansible.builtin.copy:
+    dest: "{{ deploy_root }}/.env"
+    mode: "0600"
+    content: |
+      # Сгенерировано Ansible. Образы зафиксированы по digest.
+      BACKEND_IMAGE={{ backend_image }}
+      FRONTEND_IMAGE={{ frontend_image }}
+      FRONTEND_PORT={{ env_config.frontend_port }}
+      POSTGRES_PASSWORD={{ postgres_password | default('') }}
+  no_log: true
+
+# --- Проверка compose -----------------------------------------------
+# `config --quiet` не печатает развёрнутый YAML: он содержит секреты из
+# env_file, а логи CI читают люди (роадмап, шаг 11).
+
+- name: Проверить, что compose собирается
+  ansible.builtin.command:
+    # Форма argv, а не строка. Разница не косметическая: со строкой Ansible
+    # передаёт её в shell, и `{{ target_env }}` подставляется туда же —
+    # значит значение переменной, пришедшей снаружи, может изменить команду.
+    # argv передаёт аргументы списком, shell не участвует вовсе.
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "cybra-{{ target_env }}"
+      - --env-file
+      - .env
+      - -f
+      - compose.yaml
+      - config
+      - --quiet
+    chdir: "{{ deploy_root }}"
+  changed_when: false
+
+# --- Применение -----------------------------------------------------
+# Симлинки на актуальный backend.env/frontend.env: compose ищет их рядом с
+# собой (env_file: ./backend.env), а рендерим мы в config/. Симлинк вместо
+# копии — чтобы не было двух версий файла.
+
+- name: Связать .env с рабочим каталогом
+  ansible.builtin.file:
+    src: "{{ config_dir }}/{{ item }}"
+    dest: "{{ deploy_root }}/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - backend.env
+    - frontend.env
+
+- name: Скачать образы состава
+  ansible.builtin.command:
+    # argv вместо строки — по той же причине, что и выше: target_env
+    # приходит снаружи и не должен попадать в shell.
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "cybra-{{ target_env }}"
+      - --env-file
+      - .env
+      - -f
+      - compose.yaml
+      - pull
+    chdir: "{{ deploy_root }}"
+  register: compose_pull
+  changed_when: "'Downloaded' in compose_pull.stdout or 'Pulled' in compose_pull.stdout"
+
+- name: Поднять состав
+  community.docker.docker_compose_v2:
+    project_name: cybra-{{ target_env }}
+    project_src: "{{ deploy_root }}"
+    env_files:
+      - "{{ deploy_root }}/.env"
+    files:
+      - "{{ compose_file }}"
+    # present, а не restarted: health-checks и пересоздание только
+    # изменившихся контейнеров. state=restarted намеренно нарушает
+    # повторяемость без изменений (роадмап, шаг 12).
+    state: present
+    # pull: always — образ уже скачан предыдущим шагом, повторный pull
+    # дешёвый (слои в кеше), но гарантирует, что запускается именно
+    # зафиксированный digest.
+    pull: always
+
+- name: Дождаться готовности бэкенда
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ env_config.frontend_port }}/api/v1/health"
+    status_code: 200
+    return_content: true
+  register: backend_health
+  until: backend_health.status == 200
+  retries: 30
+  delay: 2
+
+- name: Проверить, что фронтенд отдаёт SPA
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ env_config.frontend_port }}/"
+    status_code: 200
+    return_content: true
+  register: frontend_health
+  until: "'<div id=\"root\">' in frontend_health.content"
+  retries: 15
+  delay: 2
+
+- name: Проверить, что nginx проксирует API на бэкенд
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ env_config.frontend_port }}/api/v1/capabilities"
+    status_code: 200
+    # Без авторизации эндпоинт отвечает 401 — и это тоже правильный ответ,
+    # доказывающий, что запрос дошёл до бэкенда через прокси. Проверяем
+    # именно «долетел», а не «пустил».
+    status_code: [200, 401]
+  register: proxy_check
+  until: proxy_check.status in [200, 401]
+  retries: 15
+  delay: 2
+
+- name: Записать состояние контейнеров
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "cybra-{{ target_env }}"
+      - --env-file
+      - .env
+      - -f
+      - compose.yaml
+      - ps
+    chdir: "{{ deploy_root }}"
+  register: compose_ps
+  changed_when: false
+
+- name: Показать состояние
+  ansible.builtin.debug:
+    var: compose_ps.stdout_lines
