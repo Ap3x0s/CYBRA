@@ -345,6 +345,12 @@ jobs:
           else
             publish=0
           fi
+          # digest пишется в $RUNNER_TEMP, а НЕ внутрь контекста. Контекст
+          # монтируется в kaniko как /workspace и читается как tar: файл,
+          # появляющийся в нём посреди сборки, попадает в снапшот
+          # недетерминированно.
+          digest_file="${RUNNER_TEMP}/digest.txt"
+          log_file="${RUNNER_TEMP}/kaniko.log"
           if [ "$publish" = "1" ]; then
             docker run --rm \
               -v "${PWD}/frontend:/workspace" \
@@ -356,17 +362,38 @@ jobs:
               --destination="${{ steps.meta.outputs.image }}:latest" \
               --cache=true \
               --cache-repo="${{ steps.meta.outputs.image }}/cache" \
-              --digest-file=/workspace/digest.txt
-            echo "digest=$(cat frontend/digest.txt)" >> "$GITHUB_OUTPUT"
+              --digest-file="$digest_file" \
+              --verbosity=info 2>&1 | tee "$log_file"
+            status=${PIPESTATUS[0]}
+            echo "digest=$(cat "$digest_file" 2>/dev/null || echo '')" >> "$GITHUB_OUTPUT"
           else
             docker run --rm \
               -v "${PWD}/frontend:/workspace" \
               ghcr.io/osscontainertools/kaniko:v1.29.1-debug \
               --context=/workspace \
               --dockerfile=/workspace/Dockerfile \
-              --no-push
+              --verbosity=info \
+              --no-push 2>&1 | tee "$log_file"
+            status=${PIPESTATUS[0]}
             echo "digest=" >> "$GITHUB_OUTPUT"
           fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error::kaniko завершился с кодом $status"
+            # Хвост лога в аннотацию: без этого причина видна только в
+            # архиве, а он закрыт токеном в API и открывается лишь из UI.
+            tail -40 "$log_file"
+            exit "$status"
+          fi
+      - name: Лог сборки
+        # always(): при падении лог нужен больше, чем при успехе, а по
+        # умолчанию шаг пропускается ровно тогда, когда он нужен.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaniko-frontend-log
+          path: ${{ runner.temp }}/kaniko.log
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Сохранить digest
         if: steps.build.outputs.digest != ''
         run: echo "${{ steps.build.outputs.digest }}" > image-digest.txt

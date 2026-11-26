@@ -281,6 +281,10 @@ jobs:
             publish=0
           fi
           if [ "$publish" = "1" ]; then
+            # digest пишется в $RUNNER_TEMP, а НЕ внутрь контекста:
+            # контекст монтируется в kaniko как /workspace и читается как
+            # tar, поэтому файл, появляющийся в нём посреди сборки, попадает
+            # в снапшот недетерминированно.
             docker run --rm \
               -v "${PWD}:/workspace" \
               -v "$HOME/.docker:/kaniko/.docker" \
@@ -291,8 +295,10 @@ jobs:
               --destination="${{ steps.meta.outputs.image }}:latest" \
               --cache=true \
               --cache-repo="${{ steps.meta.outputs.image }}/cache" \
-              --digest-file=/workspace/digest.txt
-            echo "digest=$(cat digest.txt)" >> "$GITHUB_OUTPUT"
+              --digest-file="${RUNNER_TEMP}/digest.txt" 2>&1 | tee "${RUNNER_TEMP}/kaniko.log"
+            status=${PIPESTATUS[0]}
+            echo "digest=$(cat "${RUNNER_TEMP}/digest.txt" 2>/dev/null || echo '')" >> "$GITHUB_OUTPUT"
+            test "$status" -eq 0 || (tail -40 "${RUNNER_TEMP}/kaniko.log"; exit "$status")
           else
             docker run --rm \
               -v "${PWD}:/workspace" \
