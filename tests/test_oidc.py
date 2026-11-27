@@ -173,11 +173,33 @@ def test_tampered_signature_rejected(client, keypair, pending) -> None:
         client.verify_id_token(forged, pending)
 
 
-def test_unknown_kid_rejected(client, keypair, pending) -> None:
-    """Ключ не из JWKS — подпись проверять нечем."""
+def test_unknown_kid_rejected(client, keypair, pending, monkeypatch) -> None:
+    """Ключ не из JWKS — подпись проверять нечем.
+
+    Ловим исключение по типу из трейсбека, а не по импортированному классу.
+
+    Почему так: pytest держит все тесты в одном процессе, и
+    test_initial_password перезагружает модуль `cybra` со своим sys.path.
+    В результате в памяти оказываются ДВА объекта модуля `cybra.oidc` с
+    двумя разными классами `OidcError`. Класс на уровне файла теста
+    принадлежит одному, а метод клиента выбрасывает другой — и
+    `pytest.raises(OidcError)` не ловит. Тест проходил в одиночку и падал
+    в общем прогоне именно поэтому.
+
+    Сравнение по имени класса убирает зависимость от идентичности объекта.
+    """
+    module = module_oidc()
+    monkeypatch.setattr(module, '_http_json', lambda *a, **k: {'keys': []})
     token = make_token(keypair, base_claims(pending.nonce), kid='чужой-ключ')
-    with pytest.raises(OidcError, match='не найден'):
+
+    try:
         client.verify_id_token(token, pending)
+    except Exception as error:  # noqa: BLE001 - проверяем тип по имени
+        assert type(error).__name__ == 'OidcError', (
+            f'ожидался OidcError, получено {type(error).__name__}: {error}')
+        assert 'не найден' in str(error), f'не то сообщение: {error}'
+    else:
+        raise AssertionError('подпись с чужим kid прошла — проверка не работает')
 
 
 # ----------------------------------------------------------------------
