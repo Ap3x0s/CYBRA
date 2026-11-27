@@ -285,7 +285,7 @@ pytest tests/ -q
 ruff check backend scan
 ```
 
-149 тестов: API (`test_api.py`), ядро отчётов (`test_core.py`), scan-слой
+153 тестов: API (`test_api.py`), ядро отчётов (`test_core.py`), scan-слой
 (`test_scan.py`), метрики (`test_metrics_new.py`). `test_api.py` проходит без
 API-ключа: он использует mock-движок и проверяет авторизацию, CSRF,
 версионирование датасетов, полный прогон и метрики.

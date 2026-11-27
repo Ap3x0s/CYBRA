@@ -248,6 +248,35 @@ def update_user(
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(404, "Пользователь не найден")
+
+    # Систему нельзя оставить без администратора.
+    #
+    # Это та же защита, что в синхронизации с каталогом, но здесь закрыт
+    # второй вход в ту же яму: локальный админ мог понизить или отключить
+    # последнего администратора одним PATCH и потерять доступ к настройкам
+    # навсегда. Восстановить его можно было бы только правкой базы руками —
+    # то есть ровно в тот момент, когда доступа к приложению уже нет.
+    #
+    # Считаем активных админов ЗА ВЫЧЕТОМ изменяемого: если он единственный
+    # и его понижают или отключают — отказ.
+    losing_admin = user.role == "admin" and (
+        (payload.get("role") in ROLE_ORDER and payload["role"] != "admin")
+        or ("is_active" in payload and not payload["is_active"])
+    )
+    if losing_admin:
+        others = db.scalar(
+            select(func.count(User.id)).where(
+                User.role == "admin",
+                User.is_active.is_(True),
+                User.id != user.id,
+            )
+        )
+        if not others:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Это последний администратор: сначала назначьте другого",
+            )
+
     if "role" in payload and payload["role"] in ROLE_ORDER:
         user.role = payload["role"]
     if "is_active" in payload:
