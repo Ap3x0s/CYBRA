@@ -6,7 +6,10 @@ export function Pill({ tone = 'idle', children }) {
   return (
     <span className={`pill ${tone}`}>
       <i />
-      {children}
+      {/* Текст обёрнут: его надо сдвинуть вертикально относительно точки,
+          а флекс выравнивает все элементы разом. Обёртка даёт свой бокс,
+          который можно подвинуть независимо. */}
+      <span className="pill-text">{children}</span>
     </span>
   )
 }
