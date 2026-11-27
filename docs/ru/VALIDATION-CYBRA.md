@@ -13,7 +13,7 @@
 | Ядро отчётов | `pytest tests/test_core.py` | консолидация, экранирование, парные метрики |
 | Scan-слой | `pytest tests/test_scan.py` | контракт артефактов, отмена, capabilities |
 | Метрики | `pytest tests/test_metrics_new.py` | 23 теста на `resilience_gap`, `utility_under_attack`, `agent_false_block_rate` |
-| Весь набор | `pytest tests/ -q` | **159 тестов, все проходят** |
+| Весь набор | `pytest tests/ -q` | **175 тестов, все проходят** |
 | Линт | `ruff check backend scan` | без замечаний |
 | Сборка SPA | `npm run build` | Vite, без ошибок |
 | Запуск приложения | uvicorn + curl | health 200, SPA отдаётся, API 401 без сессии |

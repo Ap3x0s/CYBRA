@@ -153,8 +153,12 @@ def oidc_callback(
         # Диагностика обязательна: без неё непонятно, ЧТО именно пришло.
         # Браузер мог не отдать cookie по пути, мог отдать пустую, мог
         # отдать чужую. Молчаливый 400 здесь стоит часа поиска.
-        import logging
-
+        #
+        # `import logging` здесь НЕ ставить: импорт внутри функции делает
+        # `logging` локальной переменной для всей функции, и любое
+        # обращение к нему ВЫШЕ по коду падает с UnboundLocalError. Именно
+        # так ломался вход через SSO: предупреждение на строке ниже
+        # импорта работало, а то, что выше, — нет.
         logging.getLogger("cybra.oidc").warning(
             "callback без cookie %s; получены: %s; path запроса: %s",
             PENDING_COOKIE,
@@ -334,6 +338,17 @@ def _resolve_user(
             return existing
 
     role_from_ldap = _role_from_groups(groups or [])
+    # Член группы «неприкосновенных» становится админом сразу, при первом же
+    # входе, и роль закрепляется.
+    #
+    # Почему проверяем и здесь, а не только в _sync_role: при первом входе
+    # пользователя ещё нет, поэтому синхронизация не вызывается вовсе —
+    # учётка создаётся с ролью из маппинга и без закрепления. То есть
+    # защита включалась бы только со второго входа, а до него root-админа
+    # мог снять кто угодно.
+    root_group = settings.oidc_root_group.strip()
+    is_root = bool(root_group) and any(str(group).strip() == root_group for group in (groups or []))
+
     user = User(
         email=email or f"{subject}@oidc.local",
         display_name=display[:120],
@@ -345,7 +360,9 @@ def _resolve_user(
         # выпустить токен для нашего клиента, получил бы админку. Группы
         # отличаются тем, что их состав ведёт администратор каталога, а не
         # владелец клиента.
-        role=role_from_ldap or settings.oidc_default_role,
+        role="admin" if is_root else (role_from_ldap or settings.oidc_default_role),
+        # Член root-группы сразу закреплён: каталог не сможет его снять.
+        role_pinned=is_root,
         is_active=True,
         oidc_sub=subject,
         auth_source="oidc",
@@ -389,6 +406,23 @@ def _sync_role(db: OrmSession, user: User, groups: list[str]) -> None:
     if user.auth_source != "oidc":
         return
     if user.role_pinned:
+        return
+
+    # Группа «неприкосновенных» админов: роль из неё закрепляется навсегда.
+    #
+    # Почему автоматически, а не «админ потом нажмёт кнопку»: смысл группы
+    # в том, что она работает, даже когда локального админа снять уже
+    # успели. Если бы требовалось ручное закрепление, защита появлялась бы
+    # ровно тогда, когда её уже некому включить.
+    root_group = settings.oidc_root_group.strip()
+    if root_group and any(str(g).strip() == root_group for g in groups):
+        if user.role != "admin" or not user.role_pinned:
+            logging.getLogger("cybra.oidc").info(
+                "роль %s закреплена: состоит в группе %r", user.email, root_group
+            )
+            user.role = "admin"
+            user.role_pinned = True
+            db.commit()
         return
 
     desired = _role_from_groups(groups)

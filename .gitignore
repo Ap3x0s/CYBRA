@@ -1,5 +1,6 @@
 # CYBRA runtime and local state
 var/
+var-check/
 var-fresh/
 var-test/
 # Временный каталог с базой прогонов для проверки первого пароля. Внутри
