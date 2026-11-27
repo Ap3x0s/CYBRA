@@ -19,6 +19,10 @@ class UserOut(BaseModel):
     role: str
     is_active: bool
     last_login_at: dt.datetime | None = None
+    # Откуда учётка и закреплена ли роль — нужно админке, чтобы показать
+    # «роль задана вручную» и дать вернуть управление каталогу.
+    auth_source: str = "local"
+    role_pinned: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -36,6 +40,8 @@ class MeOut(UserOut):
     # что пароль есть у всех. Ошибка тихая: ни исключения, ни предупреждения.
     auth_source: str = "local"
     has_password: bool = True
+    # Роль закреплена за приложением: каталог её не перезаписывает.
+    role_pinned: bool = False
 
     csrf_token: str = ""
 

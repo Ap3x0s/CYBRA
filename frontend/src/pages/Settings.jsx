@@ -186,6 +186,7 @@ export default function Settings() {
                   <th>Email</th>
                   <th>{t("Имя")}</th>
                   <th>{t("Роль")}</th>
+                  <th>{t("Источник роли")}</th>
                   <th>{t("Активен")}</th>
                   <th>{t("Был вход")}</th>
                   <th />
@@ -210,6 +211,35 @@ export default function Settings() {
                           { value: 'admin', label: 'admin' },
                         ]}
                       />
+                    </td>
+                    <td>
+                      {/* Откуда берётся роль. Это не украшение: без подписи
+                          админ не понимает, почему его правка «не держится».
+                          Каталог перезаписывает роль при каждом входе
+                          сотрудника — пока она не закреплена здесь. */}
+                      {item.auth_source === 'oidc' ? (
+                        item.role_pinned ? (
+                          <span className="dim" title={t('Роль задана вручную и каталог её не меняет')}>
+                            {t('задана вручную')}
+                            <button
+                              className="btn ghost small"
+                              style={{ marginLeft: 6 }}
+                              onClick={async () => {
+                                await api.updateUser(item.id, { role_pinned: false })
+                                users.reload()
+                              }}
+                            >
+                              {t('вернуть каталогу')}
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="dim" title={t('Роль приходит из группы LDAP при каждом входе')}>
+                            {t('из каталога')}
+                          </span>
+                        )
+                      ) : (
+                        <span className="dim">{t('локальная')}</span>
+                      )}
                     </td>
                     <td>
                       <Pill tone={item.is_active ? 'ok' : 'idle'}>

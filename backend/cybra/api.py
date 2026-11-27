@@ -104,6 +104,9 @@ def _public_user(user: User) -> dict:
         "last_login_at": user.last_login_at,
         "auth_source": user.auth_source,
         "has_password": bool(user.password_hash),
+        # Роль закреплена за приложением и каталог её не перезаписывает.
+        # Интерфейсу нужно, чтобы показать состояние и дать снять флаг.
+        "role_pinned": bool(user.role_pinned),
     }
 
 
@@ -278,7 +281,21 @@ def update_user(
             )
 
     if "role" in payload and payload["role"] in ROLE_ORDER:
-        user.role = payload["role"]
+        # Ручная смена роли закрепляет её за приложением.
+        #
+        # Без этого каталог перезаписывал её при следующем входе сотрудника,
+        # и админ видел, что его правка «не применилась». Причём увидел бы
+        # он это не сразу: интерфейс показал успех, роль легла в базу — и
+        # только при чужом входе вернулась прежняя.
+        #
+        # Явный `role_pinned` в запросе позволяет вернуть управление
+        # каталогу: админ снимает флаг, и следующая группа снова решает.
+        if payload["role"] != user.role:
+            user.role = payload["role"]
+            user.role_pinned = True
+
+    if "role_pinned" in payload:
+        user.role_pinned = bool(payload["role_pinned"])
     if "is_active" in payload:
         user.is_active = bool(payload["is_active"])
     if payload.get("password"):

@@ -95,6 +95,15 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str, str], ...] = (
         "VARCHAR(16) NOT NULL DEFAULT 'local'",
         "VARCHAR(16) NOT NULL DEFAULT 'local'",
     ),
+    # Роль зафиксирована вручную и каталог её не перезаписывает.
+    # По умолчанию false: у существующих учёток каталог продолжает
+    # управлять ролью, как и до появления этой колонки.
+    (
+        "users",
+        "role_pinned",
+        "BOOLEAN NOT NULL DEFAULT 0",
+        "BOOLEAN NOT NULL DEFAULT FALSE",
+    ),
 )
 
 
