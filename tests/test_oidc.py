@@ -189,7 +189,16 @@ def test_unknown_kid_rejected(client, keypair, pending, monkeypatch) -> None:
     Сравнение по имени класса убирает зависимость от идентичности объекта.
     """
     module = module_oidc()
-    monkeypatch.setattr(module, '_http_json', lambda *a, **k: {'keys': []})
+    # Патчим экземпляр, а не класс.
+    #
+    # При промахе по kid вызывается jwks(force=True). Патч на классе через
+    # monkeypatch.setattr(module.OidcClient, 'jwks', ...) не срабатывает,
+    # если `module` в sys.modules — ДРУГОЙ объект, чем тот, откуда взят
+    # класс клиента: в общем прогоне test_initial_password перезагружает
+    # модуль cybra. У экземпляра такой неоднозначности нет — атрибут
+    # ставится прямо на объект, который будет вызван.
+    monkeypatch.setattr(client, 'jwks', lambda force=False: {'keys': []})
+
     token = make_token(keypair, base_claims(pending.nonce), kid='чужой-ключ')
 
     try:
