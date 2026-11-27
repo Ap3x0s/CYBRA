@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -70,6 +71,23 @@ class Settings:
         # путь: абсолютный URL был бы открытым редиректом.
         self.oidc_post_login_path = os.environ.get("CYBRA_OIDC_POST_LOGIN", "/")
 
+        # ------------------------------------------------------------------
+        # Роли из каталога.
+        #
+        # Провайдер присылает claim `groups` — список групп LDAP, в которых
+        # состоит человек. Здесь задаётся, какая группа даёт какую роль:
+        #
+        #   CYBRA_OIDC_GROUP_ROLES=cybra-admins=admin,cybra-operators=operator
+        #
+        # Не задано — роли из каталога не применяются, поведение прежнее
+        # (первый вход получает oidc_default_role, дальше решает локальный
+        # админ). Это важно для стендов, где групп ещё нет: включение
+        # маппинга не должно молча понижать всех до viewer.
+        self.oidc_group_roles_raw = os.environ.get("CYBRA_OIDC_GROUP_ROLES", "")
+        # Синхронизировать ли роль при каждом входе. Выключить можно, чтобы
+        # каталог перестал перезаписывать роли, выставленные в приложении.
+        self.oidc_sync_roles = os.environ.get("CYBRA_OIDC_SYNC_ROLES", "1") == "1"
+
         self.root = Path(__file__).resolve().parents[2]
 
     @property
@@ -86,6 +104,42 @@ class Settings:
     def oidc_expected_issuer(self) -> str:
         """Issuer, который ожидается внутри токена."""
         return self.oidc_issuer_override or self.oidc_issuer
+
+    @property
+    def oidc_group_roles(self) -> dict[str, str]:
+        """Разобрать «группа=роль» в словарь.
+
+        Формат — через запятую, пары через `=`. Неразобранные пары
+        пропускаются, а не роняют старт: опечатка в одной группе не должна
+        мешать приложению подняться. Но и молчать нельзя — поэтому
+        предупреждение пишется в лог, см. `log_group_roles`.
+        """
+        result: dict[str, str] = {}
+        for pair in self.oidc_group_roles_raw.split(","):
+            pair = pair.strip()
+            if not pair or "=" not in pair:
+                continue
+            group, _, role = pair.partition("=")
+            group = group.strip()
+            role = role.strip()
+            if group and role:
+                result[group] = role
+        return result
+
+    def log_group_roles(self) -> None:
+        """Предупредить о паре, которая не разберётся.
+
+        Без этого опечатка `cybra-admins:admin` (двоеточие вместо равно)
+        выглядела бы как «маппинг включён, но не работает»: роль молча
+        остаётся прежней, и искать причину никто не станет.
+        """
+        for pair in self.oidc_group_roles_raw.split(","):
+            pair = pair.strip()
+            if pair and "=" not in pair:
+                logging.getLogger("cybra.oidc").warning(
+                    "CYBRA_OIDC_GROUP_ROLES: пара %r пропущена — ожидается формат «группа=роль»",
+                    pair,
+                )
 
     def _secret(self) -> str:
         # Prefer an explicit env key; fall back to a persisted local file.

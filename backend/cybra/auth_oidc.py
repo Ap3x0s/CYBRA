@@ -17,10 +17,11 @@
 from __future__ import annotations
 
 import hmac
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from .config import settings
@@ -187,6 +188,10 @@ def oidc_callback(
         tokens = client.exchange(code, pending)
         claims = client.verify_id_token(tokens["id_token"], pending)
     except OidcError as error:
+        # Логируем причину: без этого отказ выглядит как немой 401, и
+        # искать приходится наугад. В лог попадает только текст ошибки —
+        # ни токенов, ни утверждений, они чувствительны.
+        logging.getLogger("cybra.oidc").warning("callback отклонён: %s", error)
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             f"Проверка токена не прошла: {error}",
@@ -198,7 +203,15 @@ def oidc_callback(
         claims.get("name") or claims.get("preferred_username") or email.split("@")[0] or subject
     )
 
-    user = _resolve_user(db, subject, email, display)
+    # Группы каталога. Keycloak кладёт их в claim `groups`, когда в realm
+    # включён соответствующий маппер. Терпим и к строке через запятую:
+    # некоторые провайдеры отдают так, и падать из-за формата незачем.
+    raw_groups = claims.get("groups") or []
+    if isinstance(raw_groups, str):
+        raw_groups = [part.strip() for part in raw_groups.split(",")]
+    groups = [str(item) for item in raw_groups if str(item).strip()]
+
+    user = _resolve_user(db, subject, email, display, groups)
 
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Учётная запись отключена")
@@ -226,20 +239,82 @@ def oidc_callback(
     return redirect
 
 
-def _resolve_user(db: OrmSession, subject: str, email: str, display: str) -> User:
+def _role_from_groups(groups: list[str]) -> str | None:
+    """Роль по группам из токена. None — групп нет или маппинг не настроен.
+
+    Ищем самую сильную роль из всех совпавших групп, а не первую.
+
+    Почему: человек может состоять в нескольких группах сразу, и порядок
+    групп в токене не определён — Keycloak волен вернуть их как угодно.
+    «Первая совпавшая» давала бы разный результат между входами на одних и
+    тех же данных, то есть роль прыгала бы на ровном месте. Выбор
+    сильнейшей делает результат предсказуемым и совпадает с житейской
+    логикой: если ты в группе админов, ты админ, даже если ещё и в группе
+    наблюдателей.
+    """
+    mapping = settings.oidc_group_roles
+    if not mapping or not groups:
+        return None
+
+    from .security import ROLE_ORDER
+
+    best: str | None = None
+    best_weight = 0
+    for raw in groups:
+        group = str(raw).strip()
+        if not group:
+            continue
+        # Ищем и полный путь LDAP (`cn=cybra-admins,ou=groups,dc=...`), и
+        # короткое имя (`cybra-admins`).
+        #
+        # Зачем оба: Keycloak умеет отдавать группу в двух видах, и какой
+        # выбран, зависит от маппера в realm — настройка вне нашего кода.
+        # Если искать только одно, маппинг тихо не сработает при смене этой
+        # настройки у заказчика, и искать причину будут в приложении.
+        candidates = [group]
+        if group.startswith("cn="):
+            short = group[3:].split(",", 1)[0]
+            if short:
+                candidates.append(short)
+        elif "cn=" in group:
+            short = group.split("cn=", 1)[1].split(",", 1)[0]
+            if short:
+                candidates.append(short)
+
+        role = next((mapping[name] for name in candidates if name in mapping), None)
+        if not role:
+            continue
+        # Неизвестную роль из конфига игнорируем: опечатка не должна
+        # выдавать права, которых нет в системе.
+        weight = ROLE_ORDER.get(role, 0)
+        if weight > best_weight:
+            best, best_weight = role, weight
+    return best
+
+
+def _resolve_user(
+    db: OrmSession,
+    subject: str,
+    email: str,
+    display: str,
+    groups: list[str] | None = None,
+) -> User:
     """Найти или завести пользователя по subject.
 
     Привязка идёт по `sub`, а не по email. Email сотрудник может сменить в
     каталоге (или его переиспользуют после увольнения), и привязка по email
     отдала бы чужой аккаунт вместе с ролями.
+
+    Роли: каталог управляет теми, кто пришёл из каталога. Локальные учётки
+    он не трогает никогда — см. `_sync_role`.
     """
     user = db.scalar(select(User).where(User.oidc_sub == subject))
     if user is not None:
-        # Имя в каталоге могло измениться — подтягиваем, но роли НЕ трогаем:
-        # они наши, а не провайдера.
+        # Имя в каталоге могло измениться — подтягиваем.
         if display and user.display_name != display:
             user.display_name = display[:120]
             db.commit()
+        _sync_role(db, user, groups or [])
         return user
 
     # Первый вход. Если такая почта уже есть в локальной базе — привязываем
@@ -255,17 +330,22 @@ def _resolve_user(db: OrmSession, subject: str, email: str, display: str) -> Use
             existing.oidc_sub = subject
             existing.auth_source = "oidc"
             db.commit()
+            _sync_role(db, existing, groups or [])
             return existing
 
+    role_from_ldap = _role_from_groups(groups or [])
     user = User(
         email=email or f"{subject}@oidc.local",
         display_name=display[:120],
         # Пароля нет вовсе: вход только через провайдера. Пустой хеш argon2
         # не примет, то есть случайно пустить по пустому паролю нельзя.
         password_hash="",
-        # Минимальная роль из настроек. Роли из токена НЕ читаются: кто
-        # может выпустить токен для нашего клиента, получил бы админку.
-        role=settings.oidc_default_role,
+        # Роль из группы каталога, если маппинг настроен; иначе минимальная
+        # из настроек. Роли из claim `roles` НЕ читаются: кто может
+        # выпустить токен для нашего клиента, получил бы админку. Группы
+        # отличаются тем, что их состав ведёт администратор каталога, а не
+        # владелец клиента.
+        role=role_from_ldap or settings.oidc_default_role,
         is_active=True,
         oidc_sub=subject,
         auth_source="oidc",
@@ -274,6 +354,63 @@ def _resolve_user(db: OrmSession, subject: str, email: str, display: str) -> Use
     db.commit()
     db.refresh(user)
     return user
+
+
+def _sync_role(db: OrmSession, user: User, groups: list[str]) -> None:
+    """Привести роль к тому, что говорит каталог. С защитой админа.
+
+    Правила, и каждое существует из-за конкретной поломки:
+
+    1. Локальные учётки не трогаем. У них `auth_source == "local"`, пароль
+       в нашей базе, и каталог про них ничего не знает. Иначе первый же
+       вход сторожа через SSO снёс бы роль, выставленную вручную.
+
+    2. Владельца учётки не понижаем. Если в приложении нет НИ ОДНОГО
+       активного админа, роль поднимается до admin. Это защита от
+       блокировки: каталог — внешняя система, и ошибка в её группах
+       (переименовали, удалили, рассинхронизировали) оставила бы стенд
+       без единого человека, способного войти в настройки.
+
+    3. Синхронизацию можно выключить целиком через CYBRA_OIDC_SYNC_ROLES=0.
+       Тогда каталог перестаёт перезаписывать роли, но вход продолжает
+       работать.
+
+    4. Если маппинг групп не настроен — роль не меняем вовсе. Иначе
+       включение SSO на стенде без групп молча понизило бы всех до viewer,
+       включая того, кто это включил.
+    """
+    if not settings.oidc_sync_roles:
+        return
+    if user.auth_source != "oidc":
+        return
+
+    desired = _role_from_groups(groups)
+    if desired is None or desired == user.role:
+        return
+
+    # Не даём каталогу оставить систему без администратора.
+    if user.role == "admin" and desired != "admin":
+        other_admins = db.scalar(
+            select(func.count(User.id)).where(
+                User.role == "admin",
+                User.is_active.is_(True),
+                User.id != user.id,
+            )
+        )
+        if not other_admins:
+            logging.getLogger("cybra.oidc").warning(
+                "каталог понижает %s до %r, но других админов нет — "
+                "роль оставлена admin, чтобы не заблокировать настройки",
+                user.email,
+                desired,
+            )
+            return
+
+    logging.getLogger("cybra.oidc").info(
+        "роль %s изменена каталогом: %s → %s", user.email, user.role, desired
+    )
+    user.role = desired
+    db.commit()
 
 
 # ----------------------------------------------------------------------

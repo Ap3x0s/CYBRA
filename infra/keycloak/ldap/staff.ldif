@@ -55,16 +55,43 @@ mail: petrova@example.org
 userPassword: password
 title: Аналитик
 
-# --- Группа -----------------------------------------------------------
+# --- Группы ролей ------------------------------------------------------
 #
-# Группа нужна, чтобы показать: роли в Keycloak можно выдавать по членству
-# в группе каталога, а не заводить каждому вручную. Наше приложение роли из
-# токена всё равно не принимает — оно маппит их у себя.
+# Членство в группе каталога управляет ролью в CYBRA. Сопоставление
+# «группа → роль» задаётся в приложении:
+#
+#   CYBRA_OIDC_GROUP_ROLES=cybra-admins=admin,cybra-operators=operator
+#
+# Почему роль не берётся из токена напрямую: роли в токене выпускает
+# провайдер, и кто может выпустить токен для нашего клиента — получил бы
+# админку. Группы отличаются тем, что их состав ведёт администратор
+# каталога, а это ровно тот человек, которому мы и хотим доверить
+# управление ролями.
+#
+# Правило синхронизации: каталог управляет ТОЛЬКО теми, кто пришёл из
+# каталога. Локальные учётки (включая аварийного админа) неприкосновенны,
+# и последнего админа понизить нельзя даже через каталог.
+
+dn: cn=cybra-admins,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+objectClass: top
+cn: cybra-admins
+description: Администраторы консоли CYBRA
+member: uid=petrova,ou=people,dc=example,dc=org
+
+dn: cn=cybra-operators,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+objectClass: top
+cn: cybra-operators
+description: Операторы: запускают прогоны и правят датасеты
+member: uid=ivanov,ou=people,dc=example,dc=org
+
+# Группа «просто пользователи» — наблюдатели. Оставлена для полноты: так
+# видно, что понижение тоже работает, а не только повышение.
 
 dn: cn=cybra-users,ou=groups,dc=example,dc=org
 objectClass: groupOfNames
 objectClass: top
 cn: cybra-users
-description: Пользователи консоли CYBRA
-member: uid=ivanov,ou=people,dc=example,dc=org
+description: Наблюдатели консоли CYBRA
 member: uid=petrova,ou=people,dc=example,dc=org

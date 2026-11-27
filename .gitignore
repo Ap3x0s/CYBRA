@@ -1,5 +1,6 @@
 # CYBRA runtime and local state
 var/
+var-fresh/
 var-test/
 # Временный каталог с базой прогонов для проверки первого пароля. Внутри
 # secret.key — ключ шифрования эндпоинтов этой машины, и initial-password.

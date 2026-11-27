@@ -188,8 +188,7 @@ def change_password(
     if user.auth_source == "oidc" or not user.password_hash:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Пароль этой учётной записи хранится в корпоративном каталоге — "
-            "смените его там",
+            "Пароль этой учётной записи хранится в корпоративном каталоге — смените его там",
         )
 
     if not verify_password(user.password_hash, payload.current_password):
