@@ -320,43 +320,13 @@ table.data th.num { text-align: right; }
 table.data tbody tr.clickable { cursor: pointer; }
 
 /* ---------------------------------------------------------------- pills */
-/* Текст в пилюле визуально сидел ниже точки на 1.67 px.
- *
- * Почему: `align-items: center` у flex выравнивает СТРОЧНЫЕ БОКСЫ, а не
- * рисунок букв. Строчный бокс включает место под выносные элементы
- * (заглавные, «Ё», «Й», хвосты «у» и «р» снизу). У строчных букв этого
- * места сверху больше, чем снизу, поэтому «полно» читается ниже, а точка,
- * у которой выносных нет, стоит ровно по центру.
- *
- * Почему не padding и не line-height: точка и текст — оба элемента flex
- * одного контейнера, и отступ на нём сдвигает их вместе, взаимное
- * положение не меняется. Проверено: padding 3/3 → 2/4 → 1/5 давал
- * одинаковый сдвиг +0.67 px. Сдвигать нужно только текст — для этого он
- * обёрнут в `.pill-text`.
- *
- * Величина измерена по скриншотам в трёхкратном масштабе: центр «чернил»
- * текста против центра точки.
- *
- * Про заглавные: если текст целиком заглавными, буквы становятся выше и
- * оптический центр смещается вверх. Это нормально и ожидаемо — задача
- * была убрать сдвиг у обычного текста, а не выровнять любой шрифт. */
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 3px 9px; border-radius: 999px;
   font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
   border: 1px solid transparent; white-space: nowrap;
 }
-.pill i {
-  width: 5px; height: 5px; border-radius: 50%; background: currentColor;
-  /* Точка не участвует в сдвиге: именно относительно неё меряется текст. */
-  flex: 0 0 auto;
-}
-.pill-text {
-  /* Поднимает текст, чтобы его оптический центр совпал с точкой.
-     translate, а не margin: не влияет на высоту пилюли и на перенос. */
-  transform: translateY(-1.8px);
-  display: inline-block;
-}
+.pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .pill.ok { color: var(--pass); background: var(--pass-surface); border-color: rgba(62, 207, 142, 0.3); }
 .pill.bad { color: var(--danger); background: var(--danger-surface); border-color: rgba(242, 105, 111, 0.3); }
 .pill.warn { color: var(--warn); background: var(--warn-surface); border-color: rgba(226, 163, 63, 0.3); }
