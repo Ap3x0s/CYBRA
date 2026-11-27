@@ -55,14 +55,33 @@ AgentDojo, Security Regression.
 
 ## Quick start
 
-### Docker (single container)
+### Docker (two services)
+
+CYBRA runs as **two services**: `backend` (API) and `frontend` (nginx that
+serves the SPA and proxies `/api`). The backend publishes no port — the only
+way in is through the frontend.
 
 ```bash
-docker build -f docker/Dockerfile -t cybra/cybra .
-docker run -p 8000:8000 -v cybra-data:/data cybra/cybra
+cd infra
+printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\nFRONTEND_PORT=8080\n' \
+  "ap3x0/cybra-backend:latest" "ap3x0/cybra-frontend:latest" > .env
+printf 'FRONTEND_PORT=8080\n' > frontend.env
+printf 'CYBRA_SECRET_KEY=%s\n' "<generate: 32 random bytes, urlsafe base64>" > backend.env
+docker compose --env-file .env -f compose.yaml up -d
 ```
 
-Open http://localhost:8000.
+Every variable is explained in [`infra/.env.example`](infra/.env.example).
+
+Open http://localhost:8080. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+for why the boundary sits there, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+for the Ansible path used on a real stand.
+
+Building the images locally, without a registry:
+
+```bash
+docker build -f docker/Dockerfile -t cybra-backend:local .
+docker build -f frontend/Dockerfile -t cybra-frontend:local frontend
+```
 
 ### Signing in the first time
 
@@ -112,7 +131,7 @@ and `config.root` (`parents[2]` from `cybra/config.py`, i.e. `/app`) keeps
 finding `datasets/` and `var/`.
 
 ```bash
-docker compose -f docker/compose.prod.yaml up -d   # pulls, never builds; needs docker/.env
+cd infra && docker compose --env-file .env -f compose.yaml up -d   # pulls, never builds
 ```
 
 ### From source
@@ -275,25 +294,36 @@ CI runs tests and the linter on every push to `main` and on pull requests:
 
 | Config | Where | What it does |
 |---|---|---|
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | GitHub Actions | lint, tests, image build + smoke |
-| [`.gitlab-ci.yml`](.gitlab-ci.yml) | GitLab CI | lint, tests, image build, **push to registry**, smoke |
+| [`.github/workflows/backend.yml`](.github/workflows/backend.yml) | GitHub Actions | 18 steps for the API service |
+| [`.github/workflows/frontend.yml`](.github/workflows/frontend.yml) | GitHub Actions | 18 steps for the UI service |
+| [`.gitlab-ci.yml`](.gitlab-ci.yml) | GitLab CI | dispatcher: picks which child pipeline runs |
+| [`.gitlab/ci/pipelines/`](.gitlab/ci/pipelines/) | GitLab CI | `backend.yml`, `frontend.yml`, `infra.yml` — 18 steps each |
+
+**When do they run.** On GitLab a pipeline is created for a merge request, a
+tag, a schedule, or a manual/API run — **not** for a direct push to `main`:
+`when: never` is deliberate, so `main` can only be reached through review. On
+GitHub a push to `main` does run, but `paths:` filters decide which workflow:
+an edit under `frontend/**` never runs the backend pipeline.
 
 The GitHub pipeline is the public mirror: it proves the code is sound but
 throws the image away. The GitLab one is the delivery path — it publishes
-`ap3x0/cybra:<commit-sha>` and `:latest`, and its `verify`
-stage pulls that pushed image back and waits for `/api/v1/health`. An image
-counts as delivered only if it actually starts.
+`ap3x0/cybra-backend:<commit-sha>` and `ap3x0/cybra-frontend:<commit-sha>`,
+and `deploy:test` pulls those images back, starts them and waits for
+`/api/v1/health` through nginx. An image counts as delivered only if it
+actually starts and answers.
 
-Deploying that artefact on any machine:
+Deploying those artefacts on any machine — via Ansible, driven by a release
+manifest that pins both images by digest:
 
 ```bash
-docker pull ap3x0/cybra:latest
-docker run -p 8000:8000 -v cybra-data:/data \
-  -e CYBRA_SECRET_KEY="<generate: 32 random bytes, urlsafe base64>" \
-  ap3x0/cybra:latest
+ansible-playbook -i infra/inventories/dev/hosts.yml \
+  infra/ansible/playbooks/deploy.yml \
+  -e release_id=cybra-0.1.0 -e target_env=dev \
+  -e backend_image=ap3x0/cybra-backend@sha256:<digest> \
+  -e frontend_image=ap3x0/cybra-frontend@sha256:<digest>
 ```
 
-Generate the key with:
+Generate the secret key with:
 
 ```bash
 python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"

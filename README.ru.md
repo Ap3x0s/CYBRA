@@ -55,14 +55,33 @@ AgentDojo, Security Regression.
 
 ## Быстрый старт
 
-### Docker (единственный контейнер)
+### Docker (два сервиса)
+
+CYBRA работает как **два сервиса**: `backend` (API) и `frontend` (nginx,
+который раздаёт SPA и проксирует `/api`). Бэкенд порт не публикует —
+единственный вход идёт через фронтенд.
 
 ```bash
-docker build -f docker/Dockerfile -t cybra/cybra .
-docker run -p 8000:8000 -v cybra-data:/data cybra/cybra
+cd infra
+printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\nFRONTEND_PORT=8080\n' \
+  "ap3x0/cybra-backend:latest" "ap3x0/cybra-frontend:latest" > .env
+printf 'FRONTEND_PORT=8080\n' > frontend.env
+printf 'CYBRA_SECRET_KEY=%s\n' "<сгенерируйте: 32 случайных байта в urlsafe base64>" > backend.env
+docker compose --env-file .env -f compose.yaml up -d
 ```
 
-Открыть http://localhost:8000.
+Каждая переменная объяснена в [`infra/.env.example`](infra/.env.example).
+
+Открыть http://localhost:8080. Почему граница проведена именно там — см.
+[docs/ru/ARCHITECTURE.md](docs/ru/ARCHITECTURE.md); путь через Ansible для
+настоящего стенда — [docs/ru/DEPLOYMENT.md](docs/ru/DEPLOYMENT.md).
+
+Собрать образы локально, без registry:
+
+```bash
+docker build -f docker/Dockerfile -t cybra-backend:local .
+docker build -f frontend/Dockerfile -t cybra-frontend:local frontend
+```
 
 ### Первый вход
 
@@ -111,7 +130,7 @@ docker exec cybra cybra reset-password
 находить `datasets/` и `var/`.
 
 ```bash
-docker compose -f docker/compose.prod.yaml up -d   # только тянет, не собирает; нужен docker/.env
+cd infra && docker compose --env-file .env -f compose.yaml up -d   # только тянет, не собирает
 ```
 
 ### Из исходников
@@ -275,22 +294,34 @@ CI прогоняет тесты и линтер на каждый push в `main
 
 | Конфиг | Где | Что делает |
 |---|---|---|
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | GitHub Actions | линт, тесты, сборка образа + smoke |
-| [`.gitlab-ci.yml`](.gitlab-ci.yml) | GitLab CI | линт, тесты, сборка образа, **публикация в registry**, smoke |
+| [`.github/workflows/backend.yml`](.github/workflows/backend.yml) | GitHub Actions | 18 шагов для сервиса API |
+| [`.github/workflows/frontend.yml`](.github/workflows/frontend.yml) | GitHub Actions | 18 шагов для сервиса UI |
+| [`.gitlab-ci.yml`](.gitlab-ci.yml) | GitLab CI | диспетчер: выбирает, какой дочерний пайплайн запустить |
+| [`.gitlab/ci/pipelines/`](.gitlab/ci/pipelines/) | GitLab CI | `backend.yml`, `frontend.yml`, `infra.yml` — по 18 шагов |
+
+**Когда они запускаются.** В GitLab пайплайн создаётся на merge request,
+тег, расписание и ручной/API запуск — и **не** создаётся на прямой push в
+`main`: правило `when: never` стоит намеренно, чтобы в `main` попадали
+только через ревью. На GitHub push в `main` запускает, но фильтр `paths:`
+решает, какой workflow: правка в `frontend/**` не запускает пайплайн
+бэкенда.
 
 GitHub-пайплайн — публичное зеркало: он подтверждает, что код цел, но образ
 выбрасывает. GitLab — путь доставки: он публикует
-`ap3x0/cybra:<commit-sha>` и `:latest`, а стадия `verify`
-стягивает уже запушенный образ обратно и ждёт `/api/v1/health`. Образ
-считается доставленным, только если он реально стартует.
+`ap3x0/cybra-backend:<commit-sha>` и `ap3x0/cybra-frontend:<commit-sha>`,
+а `deploy:test` стягивает эти образы обратно, запускает и ждёт
+`/api/v1/health` **через nginx**. Образ считается доставленным, только если
+он реально стартует и отвечает.
 
-Развернуть этот артефакт на любой машине:
+Развернуть эти артефакты на любой машине — через Ansible, по манифесту
+релиза, где оба образа зафиксированы по digest:
 
 ```bash
-docker pull ap3x0/cybra:latest
-docker run -p 8000:8000 -v cybra-data:/data \
-  -e CYBRA_SECRET_KEY="<сгенерируйте: 32 случайных байта в urlsafe base64>" \
-  ap3x0/cybra:latest
+ansible-playbook -i infra/inventories/dev/hosts.yml \
+  infra/ansible/playbooks/deploy.yml \
+  -e release_id=cybra-0.1.0 -e target_env=dev \
+  -e backend_image=ap3x0/cybra-backend@sha256:<digest> \
+  -e frontend_image=ap3x0/cybra-frontend@sha256:<digest>
 ```
 
 Ключ генерируется так:

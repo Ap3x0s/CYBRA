@@ -23,6 +23,20 @@ nginx, который раздаёт SPA и проксирует `/api`. Дес�
 Оба образа собираются CI из одного коммита и указываются по digest в
 `infra/releases/*.yml`.
 
+### Чего в образе нет
+
+Стоит сказать прямо: это самый частый источник путаницы.
+
+| Нет в образе | Откуда берётся |
+|---|---|
+| **Keycloak, LDAP** | Провайдер идентичности заказчика. Связь — четыре переменные `CYBRA_OIDC_*`, и ничего больше |
+| PostgreSQL | Отдельный сервис: `--profile db` или база заказчика |
+| garak, PyRIT, AgentDojo, promptfoo | `cybra setup` внутри работающего контейнера: они тянут torch и Node-бинарь |
+
+`grep -i keycloak docker/Dockerfile` не находит ничего: провайдер не
+запекается в образ и не будет. Один и тот же `cybra-backend:latest`
+обслуживает и стенд с SSO, и стенд без него — разница только в окружении.
+
 База данных в образ **не входит**: это отдельный сервис.
 
 ### База данных
@@ -39,16 +53,16 @@ CYBRA_DATABASE_URL=postgresql+psycopg://cybra:secret@db:5432/cybra
 Драйвер `psycopg[binary]` входит в образ, поэтому доустанавливать ничего не
 нужно и компилятор с `libpq-dev` не требуются.
 
-В `docker/compose.prod.yaml` сервис PostgreSQL лежит под профилем `db` и по
+В `infra/compose.yaml` сервис PostgreSQL лежит под профилем `db` и по
 умолчанию не поднимается: первый запуск не должен требовать второго сервиса.
 
-```
-# SQLite в томе, без второго сервиса
-docker compose -f docker/compose.prod.yaml up -d
+```bash
+# без базы: приложение на SQLite в томе
+cd infra && docker compose --env-file .env -f compose.yaml up -d
 
 # PostgreSQL: CYBRA_DATABASE_URL указывает на сервис `db`
-printf 'POSTGRES_PASSWORD=...\nCYBRA_DATABASE_URL=postgresql+psycopg://cybra:...@db:5432/cybra\n' >> docker/.env
-docker compose -f docker/compose.prod.yaml --profile db up -d
+printf 'CYBRA_DATABASE_URL=postgresql+psycopg://cybra:...@db:5432/cybra\nPOSTGRES_PASSWORD=...\n' >> infra/.env
+cd infra && docker compose --env-file .env -f compose.yaml --profile db up -d
 ```
 
 Все переменные перечислены в [`docker/.env.example`](../../docker/.env.example).
@@ -107,6 +121,32 @@ python scripts/verify_migration.py /path/to/cybra.sqlite3
 
 `rules: changes` решает, какие дочерние пайплайны запускать: правка в
 `frontend/**` не запускает pytest вовсе.
+
+### Когда пайплайн создаётся
+
+Площадки ведут себя по-разному, и это стоит знать до того, как возникнет
+вопрос «почему push ничего не запустил».
+
+| Событие | GitLab | GitHub |
+|---|---|---|
+| Merge request / pull request | **да** — основной путь | да, по фильтру `paths:` |
+| Тег `v*` | да — релизные стадии | да |
+| Расписание | да — еженедельный обход CVE | да |
+| Ручной / API | да | `workflow_dispatch` |
+| **Прямой push в `main`** | **нет** — `when: never` | **да**, по фильтру `paths:` |
+| Push в другие ветки | да | нужен подходящий `paths:` |
+
+Правило `when: never` на push в `main` — не забывчивость: без него
+пайплайн запускался на прямой push, то есть обходил ревью. Теперь в
+`main` можно попасть только через merge request. Следствие стоит
+называть прямо: после пуша в `main` пайплайн в GitLab надо запускать
+руками (`POST /projects/:id/pipeline`), иначе площадки расходятся.
+
+На GitHub то же разделение сделано фильтром `paths:`. `backend.yml`
+перечисляет `backend/**`, `scan/**`, `security_suite/**`, `tests/**`,
+`datasets/**`, `vendor/**`, `run.py`, `sources.lock.json`,
+`docker/Dockerfile`; `frontend.yml` — `frontend/**`. Коммит, который не
+трогает ни того, ни другого, не запускает ни одного workflow.
 
 По git-тегу добавляется стадия release: `release:artifacts` — подпись cosign
 в режиме keyless над digest образа и над SBOM, — и `release:publish`, который

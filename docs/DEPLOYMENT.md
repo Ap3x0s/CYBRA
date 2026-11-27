@@ -23,6 +23,20 @@ open port and no way around the proxy.
 Both images are built by CI from the same commit and referenced by digest
 in `infra/releases/*.yml`.
 
+### What is not in the image
+
+Worth stating explicitly, because it is the usual source of confusion:
+
+| Not in the image | Where it comes from |
+|---|---|
+| **Keycloak, LDAP** | The customer's own identity provider. Connected by four `CYBRA_OIDC_*` variables, nothing else |
+| PostgreSQL | A separate service: `--profile db` or the customer's own |
+| garak, PyRIT, AgentDojo, promptfoo | `cybra setup` inside a running container: they pull torch and a Node binary |
+
+`grep -i keycloak docker/Dockerfile` returns nothing: the provider is not
+baked in and never will be. The same `cybra-backend:latest` image serves a
+stand with SSO and a stand without it — the difference is environment only.
+
 ### Database
 
 The application talks to PostgreSQL through `CYBRA_DATABASE_URL`, for example:
@@ -37,19 +51,20 @@ needed and no compiler or `libpq-dev` is required.
 The database is **not** part of the image: it is a separate service, so it
 survives container replacement and can be backed up on its own schedule.
 
-`docker/compose.prod.yaml` ships a PostgreSQL service under the `db` profile. It
+`infra/compose.yaml` ships a PostgreSQL service under the `db` profile. It
 is off by default so that a first run needs nothing but one secret:
 
-```
-# SQLite in the volume, no second service
-docker compose -f docker/compose.prod.yaml up -d
+```bash
+# without a database: the app keeps state in the volume (SQLite)
+cd infra && docker compose --env-file .env -f compose.yaml up -d
 
 # PostgreSQL, with CYBRA_DATABASE_URL pointing at the `db` service
-printf 'POSTGRES_PASSWORD=...\nCYBRA_DATABASE_URL=postgresql+psycopg://cybra:...@db:5432/cybra\n' >> docker/.env
-docker compose -f docker/compose.prod.yaml --profile db up -d
+printf 'CYBRA_DATABASE_URL=postgresql+psycopg://cybra:...@db:5432/cybra\nPOSTGRES_PASSWORD=...\n' >> infra/.env
+cd infra && docker compose --env-file .env -f compose.yaml --profile db up -d
 ```
 
-See [`docker/.env.example`](../docker/.env.example) for every variable.
+See [`infra/configurations/templates/`](../infra/configurations/templates/)
+for every variable the deploy renders.
 
 If `CYBRA_DATABASE_URL` is not set, the app falls back to SQLite in
 `/data/cybra.sqlite3`. That mode exists for a local run without Docker and for
@@ -106,6 +121,31 @@ merge request
 
 `rules: changes` decides which child pipelines run: an edit under
 `frontend/**` never runs pytest.
+
+### When a pipeline is created
+
+The two platforms differ deliberately, and it is worth knowing before
+wondering why a push produced nothing.
+
+| Event | GitLab | GitHub |
+|---|---|---|
+| Merge request / pull request | **yes** — the main path | yes, filtered by `paths:` |
+| Tag `v*` | yes — release stages | yes |
+| Schedule | yes — weekly CVE sweep | yes |
+| Manual / API | yes | `workflow_dispatch` |
+| **Direct push to `main`** | **no** — `when: never` | **yes**, filtered by `paths:` |
+| Push to other branches | yes | requires a matching `paths:` |
+
+The `when: never` on a push to `main` is the point: without it the pipeline
+ran on a direct push, which bypasses review. Now `main` can only be reached
+through a merge request. The consequence is worth stating: after a push to
+`main` a GitLab pipeline has to be started by hand (`POST /projects/:id/pipeline`),
+otherwise the two platforms drift apart.
+
+On GitHub the split works by `paths:` instead: `backend.yml` lists
+`backend/**`, `scan/**`, `security_suite/**`, `tests/**`, `datasets/**`,
+`vendor/**`, `run.py`, `sources.lock.json`, `docker/Dockerfile`; `frontend.yml`
+lists `frontend/**`. A commit that touches neither runs no workflow at all.
 
 On a git tag the release stage adds `backend:sign` / `frontend:sign` —
 cosign keyless signature over the image digest and the SBOM — and
@@ -227,11 +267,14 @@ prevent. Only CI builds and publishes.
 stub: it would deploy the backend without the frontend, which is a stand
 where the API answers and there is nothing to open.
 
-Point the file at a specific registry with `CYBRA_IMAGE`:
+Point the images at a specific registry with the two variables the manifest
+fills in — `BACKEND_IMAGE` and `FRONTEND_IMAGE`:
 
 ```bash
-CYBRA_IMAGE=ap3x0/cybra:latest \
-  docker compose -f docker/compose.prod.yaml up -d
+BACKEND_IMAGE=registry.example/cybra-backend@sha256:<digest> \
+FRONTEND_IMAGE=registry.example/cybra-frontend@sha256:<digest> \
+FRONTEND_PORT=8080 \
+  docker compose --env-file .env -f infra/compose.yaml up -d
 ```
 
 `pull_policy` defaults to `always` for the same reason: if the image is

@@ -7,19 +7,26 @@ BIPIA, promptfoo — on such a machine.
 The application itself, its datasets and the dashboard image need no internet.
 Only these five tools do.
 
-The *image* needs no internet, but getting it onto the box does. `docker pull`
-cannot reach Docker Hub from an isolated network, so the image travels as a tar:
+The *images* need no internet, but getting them onto the box does. `docker pull`
+cannot reach Docker Hub from an isolated network, so they travel as tars. There
+are **two** images — backend and frontend:
 
 ```bash
 # on a machine with internet
-docker pull ap3x0/cybra:latest
-docker save ap3x0/cybra:latest -o cybra-image.tar
+docker pull ap3x0/cybra-backend:latest
+docker pull ap3x0/cybra-frontend:latest
+docker save ap3x0/cybra-backend ap3x0/cybra-frontend -o cybra-images.tar
 
 # on the air-gapped host
-docker load -i cybra-image.tar
+docker load -i cybra-images.tar
 ```
 
-Both go on the same medium as the bundle.
+Both tars go on the same medium as the bundle. Keycloak, if the stand uses
+corporate sign-in, is **not** part of this: it is the customer's own service
+and is already running inside their network.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md#what-is-not-in-the-image) for what is and is
+not inside the images.
 
 ## How it works
 

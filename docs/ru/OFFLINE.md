@@ -8,18 +8,25 @@
 только этим пяти инструментам.
 
 Образ интернета не требует, но попасть на машину ему надо. `docker pull` из
-изолированной сети до Docker Hub не достучится, поэтому образ едет файлом:
+изолированной сети до Docker Hub не достучится, поэтому образы едут файлами.
+Их **два** — backend и frontend:
 
 ```bash
 # на машине с интернетом
-docker pull ap3x0/cybra:latest
-docker save ap3x0/cybra:latest -o cybra-image.tar
+docker pull ap3x0/cybra-backend:latest
+docker pull ap3x0/cybra-frontend:latest
+docker save ap3x0/cybra-backend ap3x0/cybra-frontend -o cybra-images.tar
 
 # на изолированном хосте
-docker load -i cybra-image.tar
+docker load -i cybra-images.tar
 ```
 
-Оба файла — и образ, и bundle — едут на одном носителе.
+Оба файла едут на одном носителе вместе с bundle. Keycloak, если стенд
+использует корпоративный вход, в это **не входит**: это сервис заказчика,
+и он уже работает внутри их сети.
+
+Что входит в образы, а что нет — см.
+[DEPLOYMENT.md](DEPLOYMENT.md#чего-в-образе-нет).
 
 ## Как это устроено
 
