@@ -3,7 +3,7 @@ import { api } from '../api'
 import { ErrorBox, Meter, StatusPill, formatRelative, pct } from '../components'
 import { PageSkeleton } from '../components/Skeletons'
 import { useApi } from '../hooks'
-import { useAuth } from '../auth'
+import { useAuth, can } from '../auth'
 import AppIcon from '../components/AppIcon'
 import {
   ArrowsLeftRight, BracketsCurly, ClockCounterClockwise, Play, Warning,
@@ -108,12 +108,21 @@ export default function Dashboard() {
             {t("Оценка устойчивости моделей по наборам бенчмарков. Числа относятся к конкретным профилям — сравнивать инструменты между собой нельзя.")}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Link className="btn primary" to="/runs/new">
-            <Play size={15} weight="fill" />
-            {t("Новый прогон")}
-          </Link>
-        </div>
+        {/* Кнопка «Новый прогон» — только operator и выше.
+        
+            Раньше стояла без проверки, и наблюдатель видел приглашение
+            запустить прогон. Нажатие приводило на мастер, где сервер
+            отвечал 403: интерфейс обещал действие, которого нет.
+            В меню профиля та же кнопка была закрыта правильно — здесь
+            про неё забыли. */}
+        {can(user, 'operator') ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Link className="btn primary" to="/runs/new">
+              <Play size={15} weight="fill" />
+              {t("Новый прогон")}
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       {missing.length ? (
@@ -214,11 +223,21 @@ export default function Dashboard() {
               // Each icon mirrors the destination, so the list is scannable
               // without reading the labels. Оптические сдвиги (Play,
               // ClockCounterClockwise) живут в AppIcon.
-              { to: '/runs/new', Icon: Play, title: t('Запустить прогон'), sub: t('выбрать модели и наборы') },
+              //
+              // «Запустить прогон» и «Править датасеты» — только operator+:
+              // это действия, а не просмотр. Наблюдателю остаются «Сравнить
+              // модели» и «История прогонов» — он видит результаты, но
+              // ничего не меняет. Раньше список был одинаковым для всех и
+              // вёл наблюдателя на экраны, где сервер отказывал.
+              can(user, 'operator')
+                ? { to: '/runs/new', Icon: Play, title: t('Запустить прогон'), sub: t('выбрать модели и наборы') }
+                : null,
               { to: '/models', Icon: ArrowsLeftRight, title: t('Сравнить модели'), sub: t('эндпоинты и группы') },
-              { to: '/datasets', Icon: BracketsCurly, title: t('Править датасеты'), sub: t('кейсы и версии') },
+              can(user, 'operator')
+                ? { to: '/datasets', Icon: BracketsCurly, title: t('Править датасеты'), sub: t('кейсы и версии') }
+                : null,
               { to: '/runs', Icon: ClockCounterClockwise, title: t('История прогонов'), sub: t('все результаты') },
-            ].map(({ to, Icon, title, sub }) => (
+            ].filter(Boolean).map(({ to, Icon, title, sub }) => (
               <Link className="quick-item" to={to} key={to}>
                 <span className="qi-icon">
                   <AppIcon icon={Icon} size={20} />

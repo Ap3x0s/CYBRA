@@ -58,13 +58,19 @@ export default function Settings() {
       {notice ? <Banner>{notice}</Banner> : null}
 
       <div className="grid grid-2">
-        <div className="card">
-          <h2 style={{ marginBottom: 14 }}>{t("Сменить свой пароль")}</h2>
-          <form onSubmit={changePassword}>
-            <Field label={t("Текущий пароль")}>
-              <input
-                className="input"
-                type="password"
+        {/* Форма смены пароля — только если пароль у человека есть.
+        
+            У учётки из Keycloak его нет: он в корпоративном каталоге, и
+            менять его надо там. Показывать форму, которая гарантированно
+            откажет, — обещать действие, которого не будет. */}
+        {user?.has_password ? (
+          <div className="card">
+            <h2 style={{ marginBottom: 14 }}>{t("Сменить свой пароль")}</h2>
+            <form onSubmit={changePassword}>
+              <Field label={t("Текущий пароль")}>
+                <input
+                  className="input"
+                  type="password"
                 value={pwd.current_password}
                 onChange={(event) => setPwd((c) => ({ ...c, current_password: event.target.value }))}
                 required
@@ -82,7 +88,15 @@ export default function Settings() {
             </Field>
             <button className="btn primary">{t("Изменить пароль")}</button>
           </form>
-        </div>
+          </div>
+        ) : (
+          <div className="card">
+            <h2 style={{ marginBottom: 14 }}>{t("Пароль")}</h2>
+            <p style={{ color: 'var(--dim)', lineHeight: 1.55, margin: 0 }}>
+              {t("Пароль этой учётной записи хранится в корпоративном каталоге. Чтобы сменить его, обратитесь к администратору каталога — в приложении он не меняется.")}
+            </p>
+          </div>
+        )}
 
         <div className="card">
           <h2 style={{ marginBottom: 14 }}>{t("Окружение")}</h2>

@@ -29,6 +29,22 @@ function Admin({ children }) {
   return children
 }
 
+/** Кому вообще есть что делать в «Настройках».
+ *
+ * Два случая: админ (управление пользователями) и любой, у кого есть
+ * локальный пароль (смена своего). У учётки из Keycloak пароля в нашей
+ * базе нет — ей там нечего делать, и форма только вводила бы в
+ * заблуждение.
+ *
+ * Проверка не про безопасность — сервер откажет и без неё. Она про
+ * честность интерфейса: не показывать дверь, которая не открывается.
+ */
+function CanSeeSettings({ children }) {
+  const { user } = useAuth()
+  if (can(user, 'admin') || user?.has_password) return children
+  return <Navigate to="/" replace />
+}
+
 export default function App() {
   const { user, ready } = useAuth()
   const { t } = useI18n()
@@ -66,12 +82,24 @@ export default function App() {
                     <Route path="/datasets" element={<Datasets />} />
                     <Route path="/models" element={<Models />} />
                     <Route path="/metrics" element={<Metrics />} />
-                                  <Route
+                    {/* «Настройки» — не админский маршрут.
+                    
+                        Здесь смена СВОЕГО пароля и список инструментов
+                        окружения. Это нужно каждому, у кого есть локальный
+                        пароль, — включая оператора. Управление
+                        пользователями внутри страницы закрыто отдельно
+                        (`can(user, 'admin')`), его видит только админ.
+                    
+                        Раньше маршрут был обёрнут в <Admin>, и оператор,
+                        у которого пароль есть, не мог его сменить: пункт
+                        меню вёл на страницу, а та молча возвращала на
+                        главную. */}
+                    <Route
                       path="/settings"
                       element={
-                        <Admin>
+                        <CanSeeSettings>
                           <Settings />
-                        </Admin>
+                        </CanSeeSettings>
                       }
                     />
                     <Route path="*" element={<Navigate to="/" replace />} />

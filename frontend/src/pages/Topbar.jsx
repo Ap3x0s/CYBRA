@@ -227,18 +227,35 @@ export default function Topbar() {
                 </span>
               </div>
               <div className="popover-sep" />
-              <button
-                className="popover-item"
-                onClick={() => {
-                  setPanel(null)
-                  navigate('/settings')
-                }}
-              >
-                <span className="popover-row">
-                  <UserCircle size={14} weight="bold" />
-                  {t('Настройки')} и {t('пароль')}
-                </span>
-              </button>
+              {/* «Настройки и пароль» показываем только тем, кому там есть
+                  что делать.
+   
+                  Раньше пункт был безусловным, и его видели все — включая
+                  наблюдателя и учётку из Keycloak. Первому нечего менять
+                  (пользователи и создание закрыты ролью admin), второй не
+                  имеет пароля в нашей базе вовсе: он лежит в корпоративном
+                  каталоге. Человек открывал страницу, вводил пароль и
+                  получал отказ — то есть интерфейс обещал действие,
+                  которого сервер не разрешает.
+   
+                  Условие: есть локальный пароль (значит, его можно менять)
+                  ИЛИ роль admin (значит, есть управление пользователями). */}
+              {user?.has_password || can(user, 'admin') ? (
+                <button
+                  className="popover-item"
+                  onClick={() => {
+                    setPanel(null)
+                    navigate('/settings')
+                  }}
+                >
+                  <span className="popover-row">
+                    <UserCircle size={14} weight="bold" />
+                    {user?.has_password
+                      ? `${t('Настройки')} и ${t('пароль')}`
+                      : t('Настройки')}
+                  </span>
+                </button>
+              ) : null}
               {can(user, 'operator') ? (
                 <button
                   className="popover-item"

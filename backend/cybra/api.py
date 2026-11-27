@@ -86,6 +86,15 @@ TOOL_LIST = (
 
 # ---------------------------------------------------------------- auth
 def _public_user(user: User) -> dict:
+    # `auth_source` и `has_password` нужны интерфейсу, чтобы не показывать
+    # то, чего человек не может.
+    #
+    # Зачем: у учётки, пришедшей через OIDC, пароля нет и не будет — он
+    # лежит в каталоге заказчика, и менять его надо там. Без этого флага
+    # фронтенд показывал «Настройки и пароль» всем подряд, и SSO-пользователь
+    # видел форму, которая на сервере гарантированно откажет.
+    #
+    # Сам хеш наружу не отдаём никогда — только факт его наличия.
     return {
         "id": user.id,
         "email": user.email,
@@ -93,6 +102,8 @@ def _public_user(user: User) -> dict:
         "role": user.role,
         "is_active": user.is_active,
         "last_login_at": user.last_login_at,
+        "auth_source": user.auth_source,
+        "has_password": bool(user.password_hash),
     }
 
 
@@ -164,6 +175,23 @@ def change_password(
     db: OrmSession = Depends(get_db),
 ):
     check_csrf(request, request.state.session)
+
+    # У учётки из OIDC пароля в нашей базе нет и быть не должно: он лежит в
+    # каталоге заказчика, и менять его нужно там. Раньше это «работало»
+    # случайно — пустой хеш не совпадал с введённым паролем, и человек
+    # получал невнятное «Текущий пароль неверен», хотя пароля у него нет
+    # вовсе.
+    #
+    # Явная проверка важна именно потому, что прежняя защита была побочным
+    # следствием: любая правка в хранении хеша могла её снять, и никто бы
+    # не заметил.
+    if user.auth_source == "oidc" or not user.password_hash:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Пароль этой учётной записи хранится в корпоративном каталоге — "
+            "смените его там",
+        )
+
     if not verify_password(user.password_hash, payload.current_password):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Текущий пароль неверен")
     user.password_hash = hash_password(payload.new_password)
