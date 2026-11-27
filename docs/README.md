@@ -18,6 +18,7 @@ maintained in parallel.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Two microservices: boundary, nginx proxy, two pipelines, infra |
 | [SSO.md](SSO.md) | Corporate sign-in via OpenID Connect: Keycloak, LDAP, what is verified |
 | [OFFLINE.md](OFFLINE.md) | Installing the heavy benchmarks on a machine with no internet: bundle, transfer, verification |
+| [specs/2026-11-09-cybra-design.md](specs/2026-11-09-cybra-design.md) | **Historical**: the product design as approved on 09.11.2026, before the split |
 
 Project README: [README.md](../README.md) · Russian: [README.ru.md](../README.ru.md).
 

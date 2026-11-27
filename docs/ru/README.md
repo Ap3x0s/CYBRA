@@ -18,6 +18,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Два микросервиса: граница, прокси nginx, два пайплайна, инфра |
 | [SSO.md](SSO.md) | Корпоративный вход через OpenID Connect: Keycloak, LDAP, что проверяется |
 | [OFFLINE.md](OFFLINE.md) | Установка тяжёлых бенчмарков на машине без интернета: bundle, перенос, проверка |
+| [specs/2026-11-09-cybra-design.md](../specs/2026-11-09-cybra-design.md) | **Историческое**: дизайн продукта на 09.11.2026, до разделения на два сервиса |
 
 Русский README проекта: [README.ru.md](../../README.ru.md).
 
