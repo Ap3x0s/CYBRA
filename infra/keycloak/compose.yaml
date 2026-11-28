@@ -69,17 +69,21 @@ services:
     container_name: cybra-phpldapadmin
     environment:
       PHPLDAPADMIN_HTTPS: "false"
-      # Базовый DN: без него PLA не знает, откуда рисовать дерево, и
-      # показывает «This base cannot be created with PLA» — корень виден,
-      # а людей под ним нет.
+      # Адрес LDAP-сервера внутри сети compose.
       #
-      # Формат osixia: JSON-список хостов с base. Значение должно совпадать
-      # с базой каталога (LDAP_BASE_DN у сервиса ldap), иначе дерево
-      # открывается пустым при живом каталоге.
-      PHPLDAPADMIN_LDAP_HOSTS: >-
-        [{"ldap":{"server":[{"host":"ldap","port":389,
-        "base":[{"dn":"dc=example,dc=org"}],
-        "tls":false}]}}]
+      # ВАЖНО: этот образ понимает только строку «хост» — никакого JSON и
+      # никакого `base`. Проверено: значение
+      #   [{"ldap":{"server":[{"host":"ldap",...}]}}]
+      # не разбирается, а ПОЛНОСТЬЮ подставляется как имя хоста:
+      #   $servers->setValue('server','host','[{"ldap":...}]');
+      # Отсюда ошибка «Could not create session handle: Bad parameter to
+      # an ldap routine» — PLA пытается соединиться с хостом, который
+      # является строкой JSON.
+      #
+      # Базовый DN задаётся не здесь, а уже в интерфейсе PLA при первом
+      # входе: «Could not determine the root of your LDAP tree» — это не
+      # ошибка, а приглашение указать базу. Она запоминается в куке.
+      PHPLDAPADMIN_LDAP_HOSTS: ldap
     ports:
       - "8081:80"
     depends_on:
