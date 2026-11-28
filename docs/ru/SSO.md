@@ -164,7 +164,7 @@ realm), получил бы админку в приложении.
 
 ## Что входит в образ, а что нет
 
-**Keycloak, LDAP и phpLDAPadmin не входят в наши образы.** Ни сейчас, ни в
+**Keycloak, LDAP и LAM не входят в наши образы.** Ни сейчас, ни в
 будущих версиях. Проверить это можно одной командой:
 
 ```bash
@@ -214,7 +214,7 @@ cd infra/keycloak
 docker compose up -d          # ~60 секунд на импорт realm
 
 # Keycloak:      http://localhost:8080/admin   (admin / admin)
-# LDAP-дерево:   http://localhost:8081         (cn=admin,dc=example,dc=org / admin)
+# Люди и группы: http://localhost:8081         (cn=admin,dc=example,dc=org / admin)
 ```
 
 Тестовые сотрудники приходят из LDAP (`infra/keycloak/ldap/staff.ldif`):
